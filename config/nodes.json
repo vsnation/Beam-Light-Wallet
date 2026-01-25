@@ -1,0 +1,53 @@
+{
+    "mainnet": {
+        "name": "Mainnet",
+        "nodes": [
+            {
+                "name": "EU Node 1",
+                "address": "eu-node01.mainnet.beam.mw:8100",
+                "region": "Europe"
+            },
+            {
+                "name": "US Node 1",
+                "address": "us-node01.mainnet.beam.mw:8100",
+                "region": "North America"
+            },
+            {
+                "name": "AP Node 1",
+                "address": "ap-node01.mainnet.beam.mw:8100",
+                "region": "Asia Pacific"
+            }
+        ],
+        "explorer": "https://explorer.0xmx.net/api",
+        "dexContract": "729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf"
+    },
+    "testnet": {
+        "name": "Testnet",
+        "nodes": [
+            {
+                "name": "EU Testnet",
+                "address": "eu-node01.testnet.beam.mw:8200",
+                "region": "Europe"
+            },
+            {
+                "name": "US Testnet",
+                "address": "us-node01.testnet.beam.mw:8200",
+                "region": "North America"
+            }
+        ],
+        "explorer": "https://testnet-explorer.beam.mw/api",
+        "dexContract": "729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf"
+    },
+    "masternet": {
+        "name": "Masternet",
+        "nodes": [
+            {
+                "name": "EU Masternet",
+                "address": "eu-node01.masternet.beam.mw:8300",
+                "region": "Europe"
+            }
+        ],
+        "explorer": "https://masternet-explorer.beam.mw/api",
+        "dexContract": ""
+    }
+}

@@ -1,0 +1,229 @@
+/* BEAM Wallet - Welcome/Lock Screen Styles */
+
+.locked-overlay {
+    position: fixed;
+    inset: 0;
+    background: #050a0f;
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.welcome-container {
+    width: 100%;
+    max-width: 400px;
+    padding: 40px 32px;
+    text-align: center;
+}
+
+.welcome-logo {
+    margin-bottom: 24px;
+}
+
+.welcome-logo svg {
+    filter: drop-shadow(0 0 20px rgba(37, 194, 160, 0.3));
+}
+
+.welcome-title {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.welcome-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+}
+
+.welcome-message {
+    font-size: 14px;
+    color: var(--beam-cyan);
+    margin-bottom: 24px;
+    padding: 12px;
+    background: var(--beam-cyan-dim);
+    border-radius: 8px;
+}
+
+.welcome-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.welcome-field {
+    text-align: left;
+}
+
+.welcome-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.welcome-input,
+.welcome-select,
+.welcome-textarea {
+    width: 100%;
+    padding: 14px 16px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 15px;
+    transition: all 0.2s ease;
+}
+
+.welcome-input:focus,
+.welcome-select:focus,
+.welcome-textarea:focus {
+    outline: none;
+    border-color: var(--beam-cyan);
+    background: var(--glass-hover);
+}
+
+.welcome-select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    padding-right: 40px;
+}
+
+.welcome-select option {
+    background: var(--void-lighter);
+    color: var(--text-primary);
+}
+
+.welcome-textarea {
+    resize: vertical;
+    min-height: 80px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+}
+
+.welcome-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--beam-cyan), #1a9f80);
+    border: none;
+    border-radius: 12px;
+    color: #000;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 8px;
+}
+
+.welcome-btn:hover {
+    background: linear-gradient(135deg, #2dd4b6, var(--beam-cyan));
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(37, 194, 160, 0.3);
+}
+
+.welcome-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.welcome-btn-secondary {
+    width: 100%;
+    padding: 14px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.welcome-btn-secondary:hover {
+    background: var(--glass-hover);
+    color: var(--text-primary);
+}
+
+.welcome-links {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+    font-size: 14px;
+}
+
+.welcome-link {
+    color: var(--beam-cyan);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.welcome-link:hover {
+    color: var(--text-primary);
+}
+
+.welcome-divider {
+    color: var(--text-muted);
+}
+
+.welcome-version {
+    margin-top: 32px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* Seed Phrase Display */
+.seed-warning {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--warning-dim);
+    border: 1px solid var(--warning);
+    border-radius: 12px;
+    color: var(--warning);
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+.seed-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.seed-word {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+}
+
+.seed-num {
+    color: var(--text-muted);
+    font-size: 11px;
+    min-width: 20px;
+}
+
+.seed-text {
+    color: var(--text-primary);
+}

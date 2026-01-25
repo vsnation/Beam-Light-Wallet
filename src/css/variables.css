@@ -1,0 +1,62 @@
+/* BEAM Wallet - CSS Variables */
+/* Design System: Dark theme with cyan/pink accents */
+
+:root {
+    /* Core Colors */
+    --void: #050a0f;
+    --void-light: #0a1019;
+    --void-lighter: #0f1923;
+    --beam-cyan: #25c2a0;
+    --beam-cyan-dim: rgba(37, 194, 160, 0.15);
+    --beam-cyan-glow: rgba(37, 194, 160, 0.4);
+    --beam-pink: #da70d6;
+    --beam-pink-dim: rgba(218, 112, 214, 0.15);
+    --warning: #f59e0b;
+    --warning-dim: rgba(245, 158, 11, 0.15);
+    --error: #ef4444;
+    --error-dim: rgba(239, 68, 68, 0.15);
+    --success: #10b981;
+    --success-dim: rgba(16, 185, 129, 0.15);
+    --info: #3b82f6;
+
+    /* Glass Effects */
+    --glass: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-hover: rgba(255, 255, 255, 0.06);
+
+    /* Text Colors */
+    --text-primary: #f0f4f8;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    /* Layout Sizing */
+    --sidebar-width: 72px;
+    --header-height: 64px;
+    --content-max-width: 1400px;
+    --content-padding: 32px;
+
+    /* Shadows */
+    --shadow-glow: 0 0 40px rgba(37, 194, 160, 0.15);
+    --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+    --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+
+    /* Border Radius */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 9999px;
+
+    /* Transitions */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.2s ease;
+    --transition-slow: 0.3s ease;
+
+    /* Z-Index Scale */
+    --z-sidebar: 100;
+    --z-header: 90;
+    --z-dropdown: 200;
+    --z-modal: 1000;
+    --z-toast: 2000;
+    --z-overlay: 5000;
+}

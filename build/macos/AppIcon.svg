@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="50%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <!-- BEAM cyan gradient -->
+    <linearGradient id="beamGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#25c2a0"/>
+      <stop offset="100%" stop-color="#00d4ff"/>
+    </linearGradient>
+
+    <!-- FOMO blue gradient -->
+    <linearGradient id="fomoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+
+    <!-- Glow effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Shadow -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bgGrad)"/>
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.05">
+    <line x1="128" y1="0" x2="128" y2="512" stroke="#fff" stroke-width="1"/>
+    <line x1="256" y1="0" x2="256" y2="512" stroke="#fff" stroke-width="1"/>
+    <line x1="384" y1="0" x2="384" y2="512" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="128" x2="512" y2="128" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="256" x2="512" y2="256" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="384" x2="512" y2="384" stroke="#fff" stroke-width="1"/>
+  </g>
+
+  <!-- BEAM Logo - Stylized -->
+  <g transform="translate(256, 200)" filter="url(#glow)">
+    <!-- Main BEAM shape -->
+    <path d="M0 100 L60 0 L60 80 L0 100 L-60 80 L-60 0 Z"
+          fill="url(#beamGrad)"
+          transform="scale(1.5)"/>
+
+    <!-- Center accent -->
+    <path d="M0 50 L30 0 L30 40 L0 50 L-30 40 L-30 0 Z"
+          fill="#fff"
+          opacity="0.3"
+          transform="scale(1.5)"/>
+  </g>
+
+  <!-- Wallet Icon -->
+  <g transform="translate(256, 340)" filter="url(#shadow)">
+    <rect x="-70" y="-40" width="140" height="80" rx="12"
+          fill="url(#fomoGrad)" opacity="0.9"/>
+    <rect x="-60" y="-30" width="120" height="60" rx="8"
+          fill="none" stroke="#fff" stroke-width="2" opacity="0.5"/>
+    <!-- Wallet clasp -->
+    <rect x="40" y="-15" width="25" height="30" rx="6"
+          fill="#fff" opacity="0.8"/>
+    <!-- Card slots -->
+    <line x1="-45" y1="-15" x2="25" y2="-15" stroke="#fff" stroke-width="2" opacity="0.3"/>
+    <line x1="-45" y1="0" x2="25" y2="0" stroke="#fff" stroke-width="2" opacity="0.3"/>
+    <line x1="-45" y1="15" x2="25" y2="15" stroke="#fff" stroke-width="2" opacity="0.3"/>
+  </g>
+
+  <!-- "FOMO" badge -->
+  <g transform="translate(400, 120)">
+    <circle cx="0" cy="0" r="45" fill="url(#fomoGrad)" filter="url(#shadow)"/>
+    <text x="0" y="8" text-anchor="middle"
+          font-family="Arial, sans-serif" font-size="24" font-weight="bold"
+          fill="#fff">$F</text>
+  </g>
+
+  <!-- Privacy shield indicator -->
+  <g transform="translate(112, 120)" opacity="0.8">
+    <path d="M0 -35 L30 -20 L30 15 C30 35 0 50 0 50 C0 50 -30 35 -30 15 L-30 -20 Z"
+          fill="url(#beamGrad)" filter="url(#shadow)"/>
+    <path d="M-10 5 L-3 12 L12 -3"
+          stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+
+  <!-- Bottom text -->
+  <text x="256" y="460" text-anchor="middle"
+        font-family="Arial, sans-serif" font-size="28" font-weight="bold"
+        fill="#fff" opacity="0.9">LIGHT WALLET</text>
+
+  <!-- Decorative corner accents -->
+  <path d="M40 40 L80 40 L80 44 L44 44 L44 80 L40 80 Z" fill="url(#beamGrad)" opacity="0.5"/>
+  <path d="M472 40 L432 40 L432 44 L468 44 L468 80 L472 80 Z" fill="url(#beamGrad)" opacity="0.5"/>
+  <path d="M40 472 L80 472 L80 468 L44 468 L44 432 L40 432 Z" fill="url(#beamGrad)" opacity="0.5"/>
+  <path d="M472 472 L432 472 L432 468 L468 468 L468 432 L472 432 Z" fill="url(#beamGrad)" opacity="0.5"/>
+</svg>

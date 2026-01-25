@@ -1,0 +1,61 @@
+{
+    "0": {
+        "id": 0,
+        "name": "BEAM",
+        "symbol": "BEAM",
+        "decimals": 8,
+        "icon": "https://beam.mw/svg/logo.svg",
+        "color": "#25c2a0",
+        "website": "https://beam.mw",
+        "description": "Native BEAM cryptocurrency",
+        "verified": true
+    },
+    "174": {
+        "id": 174,
+        "name": "FOMO",
+        "symbol": "FOMO",
+        "decimals": 8,
+        "icon": "https://arweave.net/cKN3lVSL17sDNj0F9P3j7i1K89yLu4fWjfnbHcOl9Kw",
+        "color": "#f59e0b",
+        "description": "FOMO Token",
+        "verified": true
+    },
+    "7": {
+        "id": 7,
+        "name": "BeamX",
+        "symbol": "BEAMX",
+        "decimals": 8,
+        "icon": "https://raw.githubusercontent.com/niclaswue/beamicons/main/beamx.png",
+        "color": "#a855f7",
+        "description": "BEAM governance token",
+        "verified": true
+    },
+    "4": {
+        "id": 4,
+        "name": "Crown",
+        "symbol": "CRN",
+        "decimals": 8,
+        "icon": "https://raw.githubusercontent.com/niclaswue/beamicons/main/crown.ico",
+        "color": "#fbbf24",
+        "description": "Crown token",
+        "verified": true
+    },
+    "9": {
+        "id": 9,
+        "name": "Tico",
+        "symbol": "TICO",
+        "decimals": 8,
+        "icon": "https://raw.githubusercontent.com/niclaswue/beamicons/main/tico.ico",
+        "color": "#ef4444",
+        "verified": true
+    },
+    "47": {
+        "id": 47,
+        "name": "Nephrite",
+        "symbol": "NPH",
+        "decimals": 8,
+        "icon": "https://raw.githubusercontent.com/niclaswue/beamicons/main/47_nph.svg",
+        "color": "#10b981",
+        "verified": true
+    }
+}
