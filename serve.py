@@ -66,25 +66,9 @@ beam_beam_node_process = None
 active_wallet = None
 node_mode = "public"  # "public" or "local"
 
-# Heartbeat tracking for auto-shutdown when browser closes
+# Threading for background operations
 import threading
-last_heartbeat = time.time()
-heartbeat_timeout = 300  # Shutdown if no heartbeat for 5 minutes (was 60s - too aggressive)
-heartbeat_enabled = False  # Only enable after first heartbeat received
-auto_shutdown_enabled = True  # Set to False to disable auto-shutdown entirely
 server_instance = None
-
-def heartbeat_monitor():
-    """Background thread that monitors heartbeat and shuts down if stale"""
-    global heartbeat_enabled
-    while True:
-        time.sleep(30)  # Check every 30 seconds instead of 10
-        if heartbeat_enabled and auto_shutdown_enabled:
-            elapsed = time.time() - last_heartbeat
-            if elapsed > heartbeat_timeout:
-                print(f"\n[AUTO-SHUTDOWN] No heartbeat for {int(elapsed)}s - browser closed")
-                shutdown_all()
-                os._exit(0)
 
 def shutdown_all():
     """Shutdown all processes gracefully"""
@@ -851,11 +835,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         })
 
     def handle_heartbeat(self):
-        """Handle heartbeat from browser - resets auto-shutdown timer"""
-        global last_heartbeat, heartbeat_enabled
-        last_heartbeat = time.time()
-        heartbeat_enabled = True
-        self.send_json({"status": "ok", "timestamp": last_heartbeat})
+        """Handle heartbeat from browser - kept for compatibility"""
+        self.send_json({"status": "ok", "timestamp": time.time()})
 
     def handle_shutdown(self):
         """Handle shutdown request from browser (on page close)"""
@@ -1167,11 +1148,6 @@ def main():
 """)
 
     server = HTTPServer(("127.0.0.1", PORT), WalletProxyHandler)
-
-    # Start heartbeat monitor thread for auto-shutdown when browser closes
-    monitor_thread = threading.Thread(target=heartbeat_monitor, daemon=True)
-    monitor_thread.start()
-    print("[AUTO-SHUTDOWN] Enabled - wallet will shutdown when browser closes")
 
     try:
         server.serve_forever()

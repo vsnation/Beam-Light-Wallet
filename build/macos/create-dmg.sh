@@ -5,8 +5,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BUILD_DIR="$PROJECT_DIR/build"
+BUILD_DIR="$SCRIPT_DIR"
+PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 APP_NAME="BEAM Light Wallet"
 DMG_NAME="BEAM-LightWallet"
 VERSION="1.0.0"
