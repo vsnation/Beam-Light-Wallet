@@ -1,7 +1,7 @@
 # BEAM Light Wallet
 
 <p align="center">
-  <img src="build/AppIcon.svg" width="128" height="128" alt="BEAM Light Wallet">
+  <img src="build/macos/AppIcon.svg" width="128" height="128" alt="BEAM Light Wallet">
 </p>
 
 <p align="center">
