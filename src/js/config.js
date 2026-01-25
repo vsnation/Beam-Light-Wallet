@@ -39,7 +39,7 @@ export const DEX_CID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcf
 export const POOL_KINDS = {
     0: { name: 'Volatile', fee: '0.3%' },
     1: { name: 'Stable', fee: '0.05%' },
-    2: { name: 'Standard', fee: '0.3%' }
+    2: { name: 'Standard', fee: '1%' }
 };
 
 // Transaction status codes
