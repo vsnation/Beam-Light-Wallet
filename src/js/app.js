@@ -1,42 +1,6 @@
 // ============================================
-// AUTO-SHUTDOWN: Heartbeat & Browser Close
+// Server runs until Ctrl+C - no auto-shutdown
 // ============================================
-// Send heartbeat every 10 seconds to keep server alive
-// Server auto-shuts down if no heartbeat for 60 seconds
-let heartbeatInterval = null;
-
-function startHeartbeat() {
-    if (heartbeatInterval) return;
-
-    // Send initial heartbeat
-    sendHeartbeat();
-
-    // Send heartbeat every 10 seconds
-    heartbeatInterval = setInterval(sendHeartbeat, 10000);
-
-    // Also send shutdown signal when page is closed
-    window.addEventListener('beforeunload', sendShutdown);
-    window.addEventListener('unload', sendShutdown);
-}
-
-function sendHeartbeat() {
-    fetch('/api/heartbeat').catch(() => {});
-}
-
-function sendShutdown() {
-    // Use sendBeacon for reliable delivery on page close
-    if (navigator.sendBeacon) {
-        navigator.sendBeacon('/api/shutdown', '');
-    } else {
-        // Fallback to sync XHR (may not complete)
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/shutdown', false);
-        try { xhr.send(); } catch(e) {}
-    }
-}
-
-// Start heartbeat when page loads
-document.addEventListener('DOMContentLoaded', startHeartbeat);
 
 // ============================================
 // Asset data for UI

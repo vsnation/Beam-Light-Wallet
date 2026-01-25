@@ -26,7 +26,7 @@
 
 ## Quick Install
 
-### 🍎 macOS
+### 🍎 macOS / 🐧 Linux
 
 ```bash
 git clone https://github.com/vsnation/Beam-Light-Wallet.git
@@ -34,20 +34,9 @@ cd Beam-Light-Wallet
 ./install.sh
 ```
 
-Or download DMG from [Releases](https://github.com/vsnation/Beam-Light-Wallet/releases).
+**To run again later:** Just run `./install.sh` again - it skips downloads if binaries exist.
 
-### 🐧 Linux (Ubuntu/Debian)
-
-```bash
-git clone https://github.com/vsnation/Beam-Light-Wallet.git
-cd Beam-Light-Wallet
-./install.sh
-```
-
-Or one-liner:
-```bash
-curl -fsSL https://raw.githubusercontent.com/vsnation/Beam-Light-Wallet/main/install.sh | bash
-```
+Or download DMG from [Releases](https://github.com/vsnation/Beam-Light-Wallet/releases) (macOS).
 
 ### 🪟 Windows
 
@@ -116,13 +105,13 @@ cd ..\..
 ### 3. Start the Wallet
 
 ```bash
-python3 serve.py 8080
+python3 serve.py 9080
 ```
 
 ### 4. Open in Browser
 
 ```
-http://127.0.0.1:8080
+http://127.0.0.1:9080
 ```
 
 ---
@@ -216,7 +205,7 @@ Beam-Light-Wallet/
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Web UI | 8080 | Wallet web interface |
+| Web UI | 9080 | Wallet web interface |
 | wallet-api | 10000 | JSON-RPC API |
 | beam-node | 10005 | Local node (optional) |
 
@@ -228,16 +217,16 @@ Beam-Light-Wallet/
 
 ```bash
 # From your remote machine
-ssh -L 8080:127.0.0.1:8080 user@your-server
+ssh -L 9080:127.0.0.1:9080 user@your-server
 
 # Then open in browser
-http://127.0.0.1:8080
+http://127.0.0.1:9080
 ```
 
 ### Tailscale VPN
 
 1. Install Tailscale on your server and device
-2. Access via Tailscale IP: `http://100.x.x.x:8080`
+2. Access via Tailscale IP: `http://100.x.x.x:9080`
 
 ---
 
@@ -247,7 +236,7 @@ http://127.0.0.1:8080
 
 ```bash
 # Check if port is in use
-lsof -i :8080
+lsof -i :9080
 
 # Kill existing process
 pkill -f serve.py
