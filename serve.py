@@ -30,6 +30,7 @@ BASE_DIR = Path(__file__).parent.absolute()
 WALLETS_DIR = BASE_DIR / "wallets"
 BINARIES_DIR = BASE_DIR / "binaries"
 LOGS_DIR = BASE_DIR / "logs"
+NODE_DATA_DIR = BASE_DIR / "node_data"
 
 # Detect platform
 import platform
@@ -292,6 +293,7 @@ def start_beam_node(owner_key=None, password=None):
     # Stop existing node first
     stop_beam_node()
     LOGS_DIR.mkdir(exist_ok=True)
+    NODE_DATA_DIR.mkdir(exist_ok=True)
 
     log_file = LOGS_DIR / "beam-node.log"
 
@@ -319,7 +321,7 @@ def start_beam_node(owner_key=None, password=None):
                 cmd,
                 stdout=lf,
                 stderr=subprocess.STDOUT,
-                cwd=str(BASE_DIR)
+                cwd=str(NODE_DATA_DIR)  # Store node.db in node_data directory
             )
 
         # Wait a moment and check if started
@@ -703,12 +705,13 @@ def rescan_wallet(wallet_name, password):
     ]
 
     try:
+        NODE_DATA_DIR.mkdir(exist_ok=True)
         with open(node_log, "w") as lf:
             beam_beam_node_process = subprocess.Popen(
                 node_cmd,
                 stdout=lf,
                 stderr=subprocess.STDOUT,
-                cwd=str(BASE_DIR)
+                cwd=str(NODE_DATA_DIR)  # Store node.db in node_data directory
             )
 
         # Wait for node to start
