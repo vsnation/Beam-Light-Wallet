@@ -66,6 +66,10 @@ beam_beam_node_process = None
 active_wallet = None
 node_mode = "public"  # "public" or "local"
 
+# Price cache (CoinGecko)
+price_cache = {"beam_usd": 0, "last_update": 0}
+PRICE_CACHE_TTL = 60  # Cache for 60 seconds
+
 # Threading for background operations
 import threading
 server_instance = None
@@ -756,10 +760,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.handle_heartbeat()
         elif self.path == "/api/node/status":
             self.handle_node_status()
-        elif self.path == "/" or self.path == "/index.html":
-            # Serve modular version from src/
-            self.path = "/src/index.html"
-            super().do_GET()
+        elif self.path == "/api/price":
+            self.handle_price()
         elif self.path.startswith("/css/") or self.path.startswith("/js/"):
             # Redirect CSS/JS requests to src/ directory
             self.path = "/src" + self.path
@@ -767,8 +769,85 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         elif self.path.startswith("/src/"):
             # Serve src files directly
             super().do_GET()
+        elif self.path.startswith("/config/"):
+            # Serve config files
+            super().do_GET()
+        elif self.path.startswith("/explorer") or self.path in ["/", "/dashboard", "/assets", "/transactions", "/addresses", "/dex", "/settings", "/donate"]:
+            # Handle all frontend routes - serve index.html with route info
+            self.serve_with_route()
+        elif self.path == "/index.html":
+            # Serve modular version from src/
+            self.path = "/src/index.html"
+            super().do_GET()
         else:
             super().do_GET()
+
+    def serve_with_route(self):
+        """Serve index.html with route info injected for frontend routing"""
+        # Parse the path to determine page and sub-route
+        path = self.path.split("?")[0]  # Remove query string
+        route_parts = path.split("/")
+        # Examples:
+        # / -> ['', '']
+        # /dashboard -> ['', 'dashboard']
+        # /explorer -> ['', 'explorer']
+        # /explorer/block/123 -> ['', 'explorer', 'block', '123']
+
+        app_route = {
+            "page": "dashboard",  # Default page
+            "subType": None,
+            "subId": None
+        }
+
+        # Map path to page
+        if len(route_parts) >= 2:
+            page = route_parts[1] if route_parts[1] else "dashboard"
+
+            # Map routes to page IDs
+            page_map = {
+                "": "dashboard",
+                "dashboard": "dashboard",
+                "assets": "assets",
+                "transactions": "transactions",
+                "addresses": "addresses",
+                "dex": "dex",
+                "explorer": "explorer",
+                "settings": "settings",
+                "donate": "donate"
+            }
+
+            app_route["page"] = page_map.get(page, "dashboard")
+
+            # Handle sub-routes for explorer
+            if page == "explorer" and len(route_parts) >= 3:
+                app_route["subType"] = route_parts[2] if len(route_parts) > 2 else None
+                app_route["subId"] = route_parts[3] if len(route_parts) > 3 else None
+
+        # Read index.html
+        index_path = BASE_DIR / "src" / "index.html"
+        if not index_path.exists():
+            self.send_error(404, "index.html not found")
+            return
+
+        with open(index_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+
+        # Inject the route info as a JavaScript variable
+        route_script = f"""<script>
+window.APP_ROUTE = {json.dumps(app_route)};
+</script>
+"""
+        # Insert before </head>
+        html_content = html_content.replace("</head>", route_script + "</head>")
+
+        # Send the modified HTML
+        encoded_content = html_content.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", len(encoded_content))
+        self.send_cors_headers()
+        self.end_headers()
+        self.wfile.write(encoded_content)
 
     def do_POST(self):
         if self.path == "/api/wallet/unlock":
@@ -791,6 +870,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.handle_node_switch()
         elif self.path == "/api/shutdown":
             self.handle_shutdown()
+        elif self.path == "/api/update":
+            self.handle_update()
         elif self.path.startswith("/api/wallet"):
             self.proxy_to_wallet_api()
         else:
@@ -821,6 +902,16 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         # Get node info
         node_status = get_node_sync_status()
 
+        # Detect installation type
+        install_type = "unknown"
+        git_dir = BASE_DIR / ".git"
+        if git_dir.exists():
+            install_type = "git"
+        elif "/Applications/" in str(BASE_DIR) or ".app/Contents" in str(BASE_DIR):
+            install_type = "dmg"
+        elif (BASE_DIR / "install.sh").exists():
+            install_type = "git"  # install.sh script method
+
         self.send_json({
             "status": "ok",
             "port": PORT,
@@ -831,7 +922,9 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             "node_running": node_status.get("running", False),
             "node_synced": node_status.get("synced", False),
             "node_progress": node_status.get("progress", 0),
-            "node_height": node_status.get("height", 0)
+            "node_height": node_status.get("height", 0),
+            "install_type": install_type,
+            "version": "1.0.2"
         })
 
     def handle_heartbeat(self):
@@ -853,6 +946,44 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         """Get detailed node sync status"""
         status = get_node_sync_status()
         self.send_json(status)
+
+    def handle_price(self):
+        """Get BEAM price from CoinGecko (cached for 60 seconds)"""
+        global price_cache
+        current_time = time.time()
+
+        # Return cached price if still valid
+        if current_time - price_cache["last_update"] < PRICE_CACHE_TTL:
+            self.send_json({
+                "beam_usd": price_cache["beam_usd"],
+                "cached": True,
+                "cache_age": int(current_time - price_cache["last_update"])
+            })
+            return
+
+        # Fetch fresh price from CoinGecko
+        try:
+            url = "https://api.coingecko.com/api/v3/simple/price?ids=beam&vs_currencies=usd"
+            req = urllib.request.Request(url, headers={"User-Agent": "BEAM-LightWallet/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read().decode())
+                beam_usd = data.get("beam", {}).get("usd", 0)
+
+                # Update cache
+                price_cache["beam_usd"] = beam_usd
+                price_cache["last_update"] = current_time
+
+                self.send_json({
+                    "beam_usd": beam_usd,
+                    "cached": False
+                })
+        except Exception as e:
+            # Return cached value on error, or 0 if no cache
+            self.send_json({
+                "beam_usd": price_cache["beam_usd"],
+                "cached": True,
+                "error": str(e)
+            })
 
     def handle_node_start(self):
         """Start local beam-node"""
@@ -1020,6 +1151,64 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.send_json(result, 200 if "success" in result else 400)
 
         except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_update(self):
+        """Perform automatic update via git pull and restart server"""
+        try:
+            # Check if this is a git installation
+            git_dir = BASE_DIR / ".git"
+            if not git_dir.exists():
+                self.send_json({"error": "Not a git installation. Please download update manually."}, 400)
+                return
+
+            print("\n[UPDATE] Starting automatic update...")
+
+            # Run git pull
+            import subprocess
+            result = subprocess.run(
+                ["git", "pull", "origin", "main"],
+                cwd=str(BASE_DIR),
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or "Git pull failed"
+                print(f"[UPDATE] Git pull failed: {error_msg}")
+                self.send_json({"error": f"Git pull failed: {error_msg}"}, 500)
+                return
+
+            print(f"[UPDATE] Git pull output: {result.stdout}")
+
+            # Check if there were actual updates
+            if "Already up to date" in result.stdout:
+                self.send_json({"success": True, "message": "Already up to date", "updated": False})
+                return
+
+            # Send success response before restarting
+            self.send_json({"success": True, "message": "Update downloaded. Restarting...", "updated": True})
+
+            # Schedule server restart
+            def restart_server():
+                time.sleep(1)  # Give time for response to be sent
+                print("[UPDATE] Restarting server...")
+
+                # Stop wallet-api and node gracefully
+                shutdown_all()
+
+                # Restart the server using exec to replace current process
+                import sys
+                python = sys.executable
+                os.execl(python, python, *sys.argv)
+
+            threading.Thread(target=restart_server, daemon=True).start()
+
+        except subprocess.TimeoutExpired:
+            self.send_json({"error": "Git pull timed out"}, 500)
+        except Exception as e:
+            print(f"[UPDATE] Error: {e}")
             self.send_json({"error": str(e)}, 500)
 
     def handle_export_owner_key(self):

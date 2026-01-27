@@ -18,6 +18,20 @@
                 "region": "Asia Pacific"
             }
         ],
+        "explorerNodes": [
+            {
+                "name": "explorer.0xmx.net (Primary)",
+                "url": "https://explorer.0xmx.net/api"
+            },
+            {
+                "name": "beamprivacy.com",
+                "url": "https://explorer-api.beamprivacy.com"
+            },
+            {
+                "name": "BeamSmart.net",
+                "url": "https://BeamSmart.net:8000"
+            }
+        ],
         "explorer": "https://explorer.0xmx.net/api",
         "dexContract": "729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf"
     },

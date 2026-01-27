@@ -9,15 +9,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
     <!-- Stylesheets -->
-    <link rel="stylesheet" href="css/variables.css">
-    <link rel="stylesheet" href="css/base.css">
-    <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/welcome.css">
+    <link rel="stylesheet" href="/css/variables.css">
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/welcome.css">
 
     <!-- External Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <!-- DEX Shader (loads window.DEX_SHADER for contract calls) -->
-    <script src="./js/dex-shader.js"></script>
+    <script src="/js/dex-shader.js"></script>
 </head>
 <body>
     <!-- Background Effects -->
@@ -71,6 +71,12 @@
                 <div class="nav-item" data-page="dex" data-tooltip="DEX Trading">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+                    </svg>
+                </div>
+                <div class="nav-item" data-page="explorer" data-tooltip="Explorer">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
                     </svg>
                 </div>
                 <div class="nav-item" data-page="donate" data-tooltip="Support Development">
@@ -266,9 +272,17 @@
                             <div class="balances-header" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
                                 <input type="text" class="search-input" id="all-assets-search" placeholder="Search all assets on BEAM..." style="flex:1;min-width:200px;">
                                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-secondary);">
+                                    <input type="checkbox" id="show-my-assets" onchange="toggleMyAssets()">
+                                    My Created Assets
+                                </label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-secondary);">
                                     <input type="checkbox" id="show-hidden-assets" onchange="toggleShowHidden()">
                                     Show hidden assets
                                 </label>
+                                <button class="quick-btn quick-btn-primary" onclick="openCreateTokenModal()" style="font-size:13px;padding:8px 16px;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="vertical-align:middle;margin-right:6px;"><path d="M12 5v14M5 12h14"/></svg>
+                                    Create Token
+                                </button>
                             </div>
                             <table class="balances-table">
                                 <thead>
@@ -411,6 +425,17 @@
                                 <button class="quick-btn quick-btn-primary" id="dex-swap-btn" onclick="executeSwap()" style="width:100%;padding:16px;font-size:16px;" disabled>
                                     Select tokens
                                 </button>
+
+                                <!-- Recent Activity Feed -->
+                                <div style="margin-top:24px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                        <span style="font-size:13px;color:var(--text-muted);font-weight:500;">Recent Activity</span>
+                                        <span id="activity-status" style="font-size:11px;color:var(--text-muted);">Loading...</span>
+                                    </div>
+                                    <div id="dex-activity-feed" style="max-height:320px;overflow-y:auto;">
+                                        <div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">Loading recent activity...</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -551,12 +576,461 @@
                                             <div id="withdraw-amounts" style="font-weight:500;">-</div>
                                         </div>
 
-                                        <button class="quick-btn quick-btn-primary" id="withdraw-liq-btn" onclick="showWithdrawConfirmation()" style="width:100%;padding:16px;">
+                                        <button class="quick-btn quick-btn-danger" id="withdraw-liq-btn" onclick="showWithdrawConfirmation()" style="width:100%;padding:16px;">
                                             Withdraw Liquidity
                                         </button>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                    </section>
+                </div>
+
+                <!-- Explorer Page -->
+                <div class="page" id="page-explorer">
+                    <!-- Explorer Header Banner -->
+                    <div class="explorer-banner">
+                        <h2>Explore the BEAM Blockchain</h2>
+                        <p>BEAM is a privacy-focused cryptocurrency using Mimblewimble technology. All transactions are private by default.</p>
+                    </div>
+
+                    <!-- Explorer Sub-Navigation -->
+                    <div class="explorer-tabs">
+                        <button class="explorer-tab active" data-explorer-tab="overview" onclick="showExplorerTab('overview')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 6v6l4 2"/>
+                            </svg>
+                            Home
+                        </button>
+                        <button class="explorer-tab" data-explorer-tab="blocks" onclick="showExplorerTab('blocks')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <rect x="3" y="3" width="7" height="7"/>
+                                <rect x="14" y="3" width="7" height="7"/>
+                                <rect x="14" y="14" width="7" height="7"/>
+                                <rect x="3" y="14" width="7" height="7"/>
+                            </svg>
+                            Blocks
+                        </button>
+                        <button class="explorer-tab" data-explorer-tab="assets" onclick="showExplorerTab('assets')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 6v12M6 12h12"/>
+                            </svg>
+                            Assets
+                        </button>
+                        <button class="explorer-tab" data-explorer-tab="dex" onclick="showExplorerTab('dex')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M16 3h5v5M4 20L21 3M21 16v5h-5"/>
+                            </svg>
+                            DEX
+                        </button>
+                        <button class="explorer-tab" data-explorer-tab="contracts" onclick="showExplorerTab('contracts')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+                            </svg>
+                            Contracts
+                        </button>
+                        <button class="explorer-tab" data-explorer-tab="swaps" onclick="showExplorerTab('swaps')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M8 12h8M12 8v8"/>
+                            </svg>
+                            Atomic Swaps
+                        </button>
+                        <div class="explorer-api-badge" id="explorer-api-badge">
+                            <span class="connection-dot"></span>
+                            <span id="explorer-api-name">Not connected</span>
+                        </div>
+                    </div>
+
+                    <!-- Explorer Content Area -->
+                    <div class="explorer-content-area">
+                        <!-- Overview Tab -->
+                        <div class="explorer-tab-content active" id="explorer-tab-overview">
+                            <!-- Stats Pills Row -->
+                            <div class="explorer-stats-row">
+                                <div class="explorer-stat-pill">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                                    </svg>
+                                    <div class="stat-pill-content">
+                                        <span class="stat-pill-label">Block Height</span>
+                                        <span class="stat-pill-value" id="explorer-height">--</span>
+                                    </div>
+                                </div>
+                                <div class="explorer-stat-pill">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+                                    </svg>
+                                    <div class="stat-pill-content">
+                                        <span class="stat-pill-label">Peers Connected</span>
+                                        <span class="stat-pill-value" id="explorer-peers">--</span>
+                                    </div>
+                                </div>
+                                <div class="explorer-stat-pill">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                    </svg>
+                                    <div class="stat-pill-content">
+                                        <span class="stat-pill-label">Chainwork</span>
+                                        <span class="stat-pill-value" id="explorer-chainwork">--</span>
+                                    </div>
+                                </div>
+                                <div class="explorer-stat-pill">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                    </svg>
+                                    <div class="stat-pill-content">
+                                        <span class="stat-pill-label">Shielded Outs (24h)</span>
+                                        <span class="stat-pill-value" id="explorer-shielded-24h">--</span>
+                                    </div>
+                                </div>
+                                <div class="explorer-stat-pill">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                    </svg>
+                                    <div class="stat-pill-content">
+                                        <span class="stat-pill-label">Total Shielded Outs</span>
+                                        <span class="stat-pill-value" id="explorer-shielded-total">--</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Stats Pills Row 2 -->
+                            <div class="explorer-stats-row" style="margin-top: 12px;">
+                                <div class="explorer-stat-pill">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                                    </svg>
+                                    <div class="stat-pill-content">
+                                        <span class="stat-pill-label">Shielded Ready (hrs)</span>
+                                        <span class="stat-pill-value" id="explorer-shielded-ready">--</span>
+                                    </div>
+                                </div>
+                                <div class="explorer-stat-pill">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                                    </svg>
+                                    <div class="stat-pill-content">
+                                        <span class="stat-pill-label">Last Block</span>
+                                        <span class="stat-pill-value" id="explorer-last-block">--</span>
+                                    </div>
+                                </div>
+                                <div class="explorer-stat-pill wide">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/>
+                                    </svg>
+                                    <div class="stat-pill-content">
+                                        <span class="stat-pill-label">Block Hash</span>
+                                        <span class="stat-pill-value mono-text" id="explorer-block-hash" style="font-size: 11px;">--</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Main Search Box -->
+                            <div class="explorer-search-box" style="margin-top: 24px;">
+                                <div class="search-input-wrapper">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                                    </svg>
+                                    <input type="text" id="explorer-main-search" placeholder="Search by block height, block hash, or kernel ID..." onkeydown="if(event.key==='Enter') searchExplorerMain()">
+                                    <button class="search-btn" onclick="searchExplorerMain()">Search</button>
+                                </div>
+                            </div>
+
+                            <!-- Recent Blocks Section -->
+                            <section class="section" style="margin-top: 32px;">
+                                <div class="section-header">
+                                    <div class="section-title">Recent Blocks</div>
+                                    <button class="quick-btn" onclick="showExplorerTab('blocks')">View All Blocks →</button>
+                                </div>
+                                <!-- Blocks Table -->
+                                <div class="explorer-table-wrapper">
+                                    <table class="explorer-table" id="explorer-recent-blocks-table">
+                                        <thead>
+                                            <tr>
+                                                <th>HEIGHT</th>
+                                                <th>TIME</th>
+                                                <th>TXS</th>
+                                                <th>MW IN</th>
+                                                <th>MW OUT</th>
+                                                <th>FEE (BEAM)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="explorer-recent-blocks">
+                                            <tr><td colspan="6" class="loading-state">Loading blocks...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- Blocks Tab -->
+                        <div class="explorer-tab-content" id="explorer-tab-blocks">
+                            <section class="section">
+                                <div class="section-header">
+                                    <div class="section-title">All Blocks</div>
+                                    <button class="quick-btn" onclick="loadExplorerBlocks()" id="blocks-refresh-btn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                                        </svg>
+                                        Refresh
+                                    </button>
+                                </div>
+
+                                <!-- Column Filters -->
+                                <div class="column-filters" id="block-column-filters">
+                                    <span class="filter-label">Columns:</span>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="Height" checked disabled> Height</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="Timestamp" checked onchange="updateBlockColumns()"> Time</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="Txs" checked onchange="updateBlockColumns()"> Txs</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="MW.Inputs" checked onchange="updateBlockColumns()"> MW In</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="MW.Outputs" checked onchange="updateBlockColumns()"> MW Out</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="Fee" checked onchange="updateBlockColumns()"> Fee</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="SH.Inputs" onchange="updateBlockColumns()"> SH In</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="SH.Outputs" onchange="updateBlockColumns()"> SH Out</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="Difficulty" onchange="updateBlockColumns()"> Difficulty</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="Chainwork" onchange="updateBlockColumns()"> Chainwork</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="Contracts" onchange="updateBlockColumns()"> Contracts</label>
+                                    <label class="filter-checkbox"><input type="checkbox" data-col="ContractCalls" onchange="updateBlockColumns()"> Calls</label>
+                                </div>
+
+                                <div class="explorer-table-wrapper">
+                                    <table class="explorer-table" id="explorer-blocks-table">
+                                        <thead id="blocks-table-header">
+                                            <tr>
+                                                <th>HEIGHT</th>
+                                                <th>TIME</th>
+                                                <th>TXS</th>
+                                                <th>MW IN</th>
+                                                <th>MW OUT</th>
+                                                <th>FEE (BEAM)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="explorer-blocks-list">
+                                            <tr><td colspan="6" class="loading-state">Loading blocks...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="explorer-pagination" id="blocks-pagination" style="display: none;">
+                                    <button class="quick-btn" onclick="loadMoreBlocks()">Load More Blocks</button>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- Assets Tab -->
+                        <div class="explorer-tab-content" id="explorer-tab-assets">
+                            <section class="section">
+                                <div class="section-header">
+                                    <div class="section-title">Confidential Assets</div>
+                                    <div style="display: flex; gap: 12px; align-items: center;">
+                                        <input type="text" id="explorer-asset-search" class="search-input" placeholder="Search by name or ID..." style="width: 200px;" oninput="filterExplorerAssets()">
+                                        <button class="quick-btn" onclick="loadExplorerAssets(true)">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                                <path d="M23 4v6h-6M1 20v-6h6"/>
+                                                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                                            </svg>
+                                            Refresh
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="explorer-assets-grid" id="explorer-assets-grid">
+                                    <div class="loading-state">Loading assets...</div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- DEX Tab -->
+                        <div class="explorer-tab-content" id="explorer-tab-dex">
+                            <section class="section">
+                                <div class="section-header">
+                                    <div class="section-title">Liquidity Pools</div>
+                                    <button class="quick-btn" onclick="loadExplorerDexPools(true)">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                                        </svg>
+                                        Refresh
+                                    </button>
+                                </div>
+                                <div class="explorer-table-wrapper">
+                                    <table class="explorer-table dex-pools-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Pool Pair</th>
+                                                <th>Reserve 1</th>
+                                                <th>Reserve 2</th>
+                                                <th>Exchange Rate</th>
+                                                <th>Volatility</th>
+                                                <th>LP Token</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="explorer-dex-pools">
+                                            <tr><td colspan="6" class="loading-state">Loading pools...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+
+                            <section class="section" style="margin-top: 24px;">
+                                <div class="section-header">
+                                    <div class="section-title">Recent Trades</div>
+                                </div>
+                                <div class="explorer-table-wrapper">
+                                    <table class="explorer-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Block</th>
+                                                <th>Type</th>
+                                                <th>From</th>
+                                                <th>To</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="explorer-dex-trades">
+                                            <tr><td colspan="4" class="loading-state">Loading trades...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- Atomic Swaps Tab -->
+                        <div class="explorer-tab-content" id="explorer-tab-swaps">
+                            <section class="section">
+                                <div class="section-header">
+                                    <div class="section-title">Atomic Swap Totals</div>
+                                    <button class="quick-btn" onclick="loadExplorerAtomicSwaps()">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                                        </svg>
+                                        Refresh
+                                    </button>
+                                </div>
+                                <div class="swap-totals-grid" id="swap-totals-grid">
+                                    <div class="loading-state">Loading swap data...</div>
+                                </div>
+                            </section>
+
+                            <section class="section" style="margin-top: 24px;">
+                                <div class="section-header">
+                                    <div class="section-title">Active Swap Offers</div>
+                                </div>
+                                <div class="explorer-table-wrapper">
+                                    <table class="explorer-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Offer</th>
+                                                <th>Offering</th>
+                                                <th>Receiving</th>
+                                                <th>Rate</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="explorer-swap-offers">
+                                            <tr><td colspan="5" class="loading-state">Loading offers...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- Contracts Tab -->
+                        <div class="explorer-tab-content" id="explorer-tab-contracts">
+                            <section class="section">
+                                <div class="section-header">
+                                    <div class="section-title">Smart Contracts</div>
+                                    <button class="quick-btn" onclick="loadExplorerContracts(true)">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                                        </svg>
+                                        Refresh
+                                    </button>
+                                </div>
+                                <div class="explorer-search-box">
+                                    <input type="text" class="search-input" id="explorer-contract-search" placeholder="Search by contract ID or type (e.g. Nephrite, Minter, DEX)..." oninput="filterExplorerContracts()">
+                                </div>
+                                <div class="explorer-table-wrapper">
+                                    <table class="explorer-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Contract ID</th>
+                                                <th>Kind</th>
+                                                <th>Deploy Height</th>
+                                                <th>Locked Funds</th>
+                                                <th>Owned Assets</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="explorer-contracts-list">
+                                            <tr><td colspan="5" class="loading-state">Loading contracts...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+
+                    <!-- Not Connected Message -->
+                    <div class="explorer-not-connected" id="explorer-not-connected" style="display: none;">
+                        <div class="not-connected-content">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="1.5" width="64" height="64">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 8v4M12 16h.01"/>
+                            </svg>
+                            <h3>Explorer Not Connected</h3>
+                            <p>Configure your Explorer API in Settings to view blockchain data.</p>
+                            <button class="quick-btn quick-btn-primary" onclick="App.showPage('settings')">
+                                Go to Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Explorer Asset Detail Page -->
+                <div class="page" id="page-explorer-asset-detail">
+                    <section class="section">
+                        <a href="#" class="back-link" onclick="showExplorerTab('assets'); App.showPage('explorer'); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M19 12H5M12 19l-7-7 7-7"/>
+                            </svg>
+                            Back to Assets
+                        </a>
+                        <div id="asset-detail-content">
+                            <div class="loading-state">Loading asset...</div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Explorer Contract Detail Page -->
+                <div class="page" id="page-explorer-contract-detail">
+                    <section class="section">
+                        <a href="#" class="back-link" onclick="showExplorerTab('contracts'); App.showPage('explorer'); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M19 12H5M12 19l-7-7 7-7"/>
+                            </svg>
+                            Back to Contracts
+                        </a>
+                        <div id="contract-detail-content">
+                            <div class="loading-state">Loading contract...</div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Explorer Block Detail Page -->
+                <div class="page" id="page-explorer-block-detail">
+                    <section class="section">
+                        <a href="#" class="back-link" onclick="showExplorerTab('blocks'); App.showPage('explorer'); return false;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <path d="M19 12H5M12 19l-7-7 7-7"/>
+                            </svg>
+                            Back to Blocks
+                        </a>
+                        <div id="block-detail-content">
+                            <div class="loading-state">Loading block...</div>
                         </div>
                     </section>
                 </div>
@@ -805,6 +1279,34 @@
                             </div>
                         </div>
 
+                        <!-- Explorer Node Configuration -->
+                        <div class="balances-card" style="padding: 24px; margin-top: 20px;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                                <h3>Explorer API</h3>
+                                <span id="explorer-connection-status" style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                                    <span class="status-dot status-checking"></span>
+                                    Checking...
+                                </span>
+                            </div>
+                            <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 16px 0;">
+                                Configure the Explorer API for viewing blockchain data, recent blocks, and network statistics.
+                            </p>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Explorer Node</label>
+                                <select id="explorer-node-selector" class="search-input" style="width: 100%; cursor: pointer;" onchange="changeExplorerNode()">
+                                    <option value="https://explorer.0xmx.net/api">explorer.0xmx.net (Primary)</option>
+                                    <option value="https://explorer-api.beamprivacy.com">beamprivacy.com</option>
+                                    <option value="https://BeamSmart.net:8000">BeamSmart.net</option>
+                                </select>
+                            </div>
+                            <button class="quick-btn quick-btn-secondary" style="width: 100%;" onclick="testExplorerConnection()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                                </svg>
+                                Test Connection
+                            </button>
+                        </div>
+
                         <!-- Wallet Maintenance -->
                         <div class="balances-card" style="padding: 24px; margin-top: 20px;">
                             <h3 style="margin-bottom: 16px;">Wallet Maintenance</h3>
@@ -818,6 +1320,33 @@
                                 </svg>
                                 Rescan Wallet
                             </button>
+                        </div>
+
+                        <!-- App Updates -->
+                        <div class="balances-card" style="padding: 24px; margin-top: 20px;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                                <h3>App Updates</h3>
+                                <span id="app-version" style="font-size: 12px; color: var(--text-muted); background: var(--glass); padding: 4px 8px; border-radius: 4px;"></span>
+                            </div>
+                            <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 16px 0;">
+                                Check for new versions and update the wallet application.
+                            </p>
+                            <div style="display: flex; gap: 12px;">
+                                <button class="quick-btn" onclick="checkForUpdates(true)" style="flex: 1;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg>
+                                    Check for Updates
+                                </button>
+                                <a href="https://github.com/vsnation/Beam-Light-Wallet/releases" target="_blank" class="quick-btn quick-btn-secondary" style="flex: 1; text-decoration: none; text-align: center;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/>
+                                    </svg>
+                                    GitHub Releases
+                                </a>
+                            </div>
                         </div>
                     </section>
                 </div>
@@ -1129,7 +1658,7 @@
                         <button class="quick-btn" onclick="setRemovePercent(75)" style="flex:1;">75%</button>
                         <button class="quick-btn" onclick="setRemovePercent(100)" style="flex:1;">MAX</button>
                     </div>
-                    <button class="quick-btn quick-btn-primary" id="liq-remove-btn" onclick="removeLiquidity()" style="width:100%;padding:14px;background:var(--error);" disabled>
+                    <button class="quick-btn quick-btn-danger" id="liq-remove-btn" onclick="removeLiquidity()" style="width:100%;padding:14px;" disabled>
                         Enter amount
                     </button>
                 </div>
@@ -1304,9 +1833,181 @@
                 </div>
 
                 <!-- Withdraw Button -->
-                <button id="qw-withdraw-btn" class="quick-btn quick-btn-primary" style="width: 100%; padding: 16px; font-size: 16px; background: linear-gradient(135deg, #f59e0b, #ef4444);" onclick="executeQuickWithdrawLP()">
+                <button id="qw-withdraw-btn" class="quick-btn quick-btn-danger" style="width: 100%; padding: 16px; font-size: 16px;" onclick="executeQuickWithdrawLP()">
                     Withdraw Liquidity
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Token Modal -->
+    <div class="modal-overlay" id="create-token-modal">
+        <div class="modal" style="max-width: 520px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Create New Token</h2>
+                <button class="modal-close" onclick="closeModal('create-token-modal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px; max-height: 70vh; overflow-y: auto;">
+                <!-- Token Info Section -->
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Token Name *</div>
+                    <input type="text" id="ct-name" placeholder="e.g., My Awesome Token" maxlength="64"
+                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Symbol *</div>
+                        <input type="text" id="ct-symbol" placeholder="e.g., MAT" maxlength="8"
+                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; text-transform: uppercase;">
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Short Name</div>
+                        <input type="text" id="ct-short-name" placeholder="e.g., MAT" maxlength="16"
+                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Max Supply *</div>
+                        <input type="number" id="ct-supply" placeholder="e.g., 1000000" min="1"
+                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Decimals</div>
+                        <select id="ct-decimals" style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                            <option value="8" selected>8 (like BEAM)</option>
+                            <option value="6">6 (like USDC)</option>
+                            <option value="2">2 (cents)</option>
+                            <option value="0">0 (whole numbers)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Smallest Unit Name</div>
+                    <input type="text" id="ct-unit-name" placeholder="e.g., groth (optional)" maxlength="16"
+                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Logo URL</div>
+                    <input type="url" id="ct-logo-url" placeholder="https://example.com/logo.png (optional)"
+                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Direct link to token logo image (PNG, SVG, or ICO recommended)</div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Short Description</div>
+                    <input type="text" id="ct-short-desc" placeholder="Brief description (max 128 chars)" maxlength="128"
+                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Long Description</div>
+                    <textarea id="ct-long-desc" placeholder="Detailed description (optional, max 1024 chars)" maxlength="1024" rows="3"
+                              style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; resize: vertical;"></textarea>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Token Color</div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="color" id="ct-color" value="#25c2a0" style="width: 50px; height: 40px; border: none; border-radius: 8px; cursor: pointer;">
+                        <input type="text" id="ct-color-hex" value="#25c2a0" maxlength="7" placeholder="#RRGGBB"
+                               style="width: 100px; padding: 10px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; font-family: 'JetBrains Mono', monospace;"
+                               oninput="syncColorFromHex()">
+                        <div id="ct-color-preview" style="flex: 1; height: 40px; border-radius: 8px; background: #25c2a0;"></div>
+                    </div>
+                </div>
+
+                <!-- Fee Info -->
+                <div style="background: var(--void); border-radius: 10px; padding: 16px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="color: var(--text-muted); font-size: 13px;">Creation Fee</span>
+                        <span style="color: var(--warning); font-weight: 600;">60 BEAM</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted);">
+                        This fee is paid to the BEAM network for registering your new Confidential Asset.
+                    </div>
+                </div>
+
+                <!-- Create Button -->
+                <button id="ct-create-btn" class="quick-btn quick-btn-primary" style="width: 100%; padding: 16px; font-size: 16px;" onclick="createToken()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="vertical-align: middle; margin-right: 8px;"><path d="M12 5v14M5 12h14"/></svg>
+                    Create Token (60 BEAM)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mint Token Modal -->
+    <div class="modal-overlay" id="mint-token-modal">
+        <div class="modal" style="max-width: 440px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Mint Tokens</h2>
+                <button class="modal-close" onclick="closeModal('mint-token-modal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <!-- Token Info -->
+                <div style="background: var(--bg-tertiary); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div id="mint-token-icon" style="width: 44px; height: 44px; border-radius: 50%; background: var(--beam-cyan); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; color: white;">TK</div>
+                        <div style="flex: 1;">
+                            <div id="mint-token-name" style="font-weight: 600; font-size: 16px;">Token Name</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">
+                                Remaining: <span id="mint-remaining" style="color: var(--beam-cyan);">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Amount Input -->
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Amount to Mint</div>
+                    <input type="number" id="mint-amount" placeholder="Enter amount" min="0" step="any"
+                           style="width: 100%; padding: 14px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px;">
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button class="quick-amount-btn" onclick="setMintPercent(25)">25%</button>
+                        <button class="quick-amount-btn" onclick="setMintPercent(50)">50%</button>
+                        <button class="quick-amount-btn" onclick="setMintPercent(75)">75%</button>
+                        <button class="quick-amount-btn" onclick="setMintPercent(100)">MAX</button>
+                    </div>
+                </div>
+
+                <!-- Mint Button -->
+                <button id="mint-btn" class="quick-btn quick-btn-primary" style="width: 100%; padding: 16px; font-size: 16px;" onclick="executeMintToken()">
+                    Mint Tokens
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Address Type Info Modal -->
+    <div class="modal-overlay" id="address-info-modal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title" id="address-info-title">Address Information</h2>
+                <button class="modal-close" onclick="closeModal('address-info-modal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="address-info-content">
+                <!-- Dynamic content -->
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-secondary" onclick="closeModal('address-info-modal')">Cancel</button>
+                <button class="modal-btn modal-btn-primary" onclick="closeModal('address-info-modal'); generateAddress()">Create Address</button>
             </div>
         </div>
     </div>
@@ -1338,6 +2039,9 @@
     <!-- wallet-app.js has different HTML structure, don't include it -->
     <!-- <script src="js/wallet-app.js"></script> -->
     <!-- JavaScript -->
-    <script src="js/app.js"></script>
+    <script src="/js/app.js"></script>
+
+    <!-- Modal Container -->
+    <div id="modal-container"></div>
 </body>
 </html>

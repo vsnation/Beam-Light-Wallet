@@ -3,6 +3,418 @@
 // ============================================
 
 // ============================================
+// Version and Auto-Update
+// ============================================
+const APP_VERSION = '1.0.2';
+const GITHUB_REPO = 'vsnation/Beam-Light-Wallet';
+const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+
+// Check for updates on startup
+async function checkForUpdates(showNoUpdateMsg = false) {
+    try {
+        const response = await fetch(GITHUB_API_URL);
+        if (!response.ok) {
+            console.log('Could not check for updates');
+            return null;
+        }
+
+        const release = await response.json();
+        const latestVersion = release.tag_name.replace(/^v/, '');
+
+        console.log(`Current version: ${APP_VERSION}, Latest: ${latestVersion}`);
+
+        if (compareVersions(latestVersion, APP_VERSION) > 0) {
+            showUpdateNotification(latestVersion, release.html_url, release.body);
+            return { updateAvailable: true, version: latestVersion, url: release.html_url };
+        } else if (showNoUpdateMsg) {
+            showToast('You are running the latest version!', 'success');
+        }
+
+        return { updateAvailable: false, version: APP_VERSION };
+    } catch (e) {
+        console.error('Update check failed:', e);
+        return null;
+    }
+}
+
+// Compare semantic versions (returns 1 if a > b, -1 if a < b, 0 if equal)
+function compareVersions(a, b) {
+    const partsA = a.split('.').map(Number);
+    const partsB = b.split('.').map(Number);
+
+    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+        const numA = partsA[i] || 0;
+        const numB = partsB[i] || 0;
+        if (numA > numB) return 1;
+        if (numA < numB) return -1;
+    }
+    return 0;
+}
+
+// Show update notification banner
+async function showUpdateNotification(version, url, releaseNotes) {
+    // Remove any existing update banner
+    const existing = document.getElementById('update-banner');
+    if (existing) existing.remove();
+
+    // Detect installation type
+    let installType = 'unknown';
+    try {
+        const response = await fetch('/api/status');
+        const status = await response.json();
+        installType = status.install_type || 'unknown';
+    } catch (e) {}
+
+    const banner = document.createElement('div');
+    banner.id = 'update-banner';
+    banner.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(135deg, var(--beam-green), var(--beam-cyan));
+        color: var(--bg-dark);
+        padding: 12px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 10000;
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    `;
+
+    // For git installs, show direct update button
+    // For DMG, show download link
+    const actionButton = installType === 'git'
+        ? `<button onclick="bannerAutoUpdate('${version}')" id="banner-update-btn" style="
+                background: var(--bg-dark);
+                color: var(--text-primary);
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 600;
+            ">Update Now</button>`
+        : `<a href="https://github.com/${GITHUB_REPO}/releases/download/v${version}/BEAM-LightWallet-${version}.dmg" style="
+                background: var(--bg-dark);
+                color: var(--text-primary);
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 600;
+                text-decoration: none;
+            ">Download v${version}</a>`;
+
+    banner.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span id="banner-text">New version <strong>v${version}</strong> available!</span>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            ${actionButton}
+            <button onclick="dismissUpdateBanner()" style="
+                background: transparent;
+                color: var(--bg-dark);
+                border: 1px solid var(--bg-dark);
+                padding: 8px 16px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 13px;
+            ">Later</button>
+        </div>
+    `;
+
+    document.body.prepend(banner);
+
+    // Adjust body padding to account for banner
+    document.body.style.paddingTop = '56px';
+}
+
+// Update directly from banner
+async function bannerAutoUpdate(version) {
+    const btn = document.getElementById('banner-update-btn');
+    const text = document.getElementById('banner-text');
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span style="display: flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="animation: spin 1s linear infinite;">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            Updating...
+        </span>`;
+    }
+    if (text) text.innerHTML = 'Downloading update...';
+
+    try {
+        const response = await fetch('/api/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            if (text) text.innerHTML = result.updated ? 'Update complete! Restarting...' : 'Already up to date!';
+
+            if (result.updated) {
+                // Wait for server restart
+                setTimeout(() => {
+                    if (text) text.innerHTML = 'Refreshing page...';
+                    waitForServerAndReload();
+                }, 2000);
+            } else {
+                // No update needed
+                setTimeout(() => dismissUpdateBanner(), 2000);
+            }
+        } else {
+            throw new Error(result.error || 'Update failed');
+        }
+    } catch (e) {
+        if (text) text.innerHTML = `Update failed: ${e.message}`;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Retry';
+        }
+    }
+}
+
+function dismissUpdateBanner() {
+    const banner = document.getElementById('update-banner');
+    if (banner) {
+        banner.remove();
+        document.body.style.paddingTop = '0';
+    }
+}
+
+// Perform automatic update
+async function performAutoUpdate(version) {
+    const modal = document.getElementById('update-modal');
+    const contentEl = modal?.querySelector('.modal-body');
+
+    if (contentEl) {
+        contentEl.innerHTML = `
+            <div style="text-align: center; padding: 40px 20px;">
+                <div style="margin-bottom: 20px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--beam-cyan)" stroke-width="2" width="48" height="48" style="animation: spin 1s linear infinite;">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                </div>
+                <h3 style="margin-bottom: 8px;">Updating to v${version}...</h3>
+                <p id="update-status" style="color: var(--text-muted);">Downloading updates...</p>
+            </div>
+        `;
+    }
+
+    try {
+        // Call server to perform update
+        const response = await fetch('/api/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Update successful - server will restart
+            if (contentEl) {
+                document.getElementById('update-status').textContent = 'Update complete! Restarting server...';
+            }
+
+            // Wait for server to restart, then reload
+            setTimeout(() => {
+                document.getElementById('update-status').textContent = 'Refreshing page...';
+                waitForServerAndReload();
+            }, 2000);
+        } else {
+            throw new Error(result.error || 'Update failed');
+        }
+    } catch (e) {
+        console.error('Update failed:', e);
+        if (contentEl) {
+            contentEl.innerHTML = `
+                <div class="info-section warning">
+                    <h4>⚠️ Update Failed</h4>
+                    <p>${e.message}</p>
+                </div>
+                <div class="info-section" style="margin-top: 16px;">
+                    <h4>Manual Update</h4>
+                    <p>Run this command in your terminal:</p>
+                    <code style="display: block; background: var(--bg-dark); padding: 12px; border-radius: 6px; margin-top: 8px; font-family: var(--font-mono); font-size: 13px;">
+                        cd ~/Desktop/Beam/LightWallet && git pull origin main
+                    </code>
+                </div>
+            `;
+        }
+    }
+}
+
+// Wait for server to come back online and reload page
+async function waitForServerAndReload(attempts = 0) {
+    if (attempts > 30) {
+        // Give up after 30 seconds
+        document.getElementById('update-status').textContent = 'Server taking too long. Please refresh manually.';
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/status', { cache: 'no-store' });
+        if (response.ok) {
+            // Server is back - reload page
+            window.location.reload();
+        } else {
+            throw new Error('Server not ready');
+        }
+    } catch (e) {
+        // Server not ready yet, try again
+        setTimeout(() => waitForServerAndReload(attempts + 1), 1000);
+    }
+}
+
+async function showUpdateModal(version, url) {
+    // Detect installation type from server
+    let installType = 'unknown';
+    try {
+        const response = await fetch('/api/status');
+        const status = await response.json();
+        installType = status.install_type || 'unknown';
+    } catch (e) {
+        console.log('Could not detect install type');
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'update-modal';
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+
+    // Different content based on installation type
+    let modalContent = '';
+
+    if (installType === 'git') {
+        // Git installation - fully automatic update
+        modalContent = `
+            <div class="modal" style="max-width: 450px;">
+                <div class="modal-header">
+                    <h2 class="modal-title">Update Available</h2>
+                    <button class="modal-close" onclick="closeUpdateModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div style="text-align: center; padding: 20px 0;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">🚀</div>
+                        <h3 style="margin-bottom: 8px;">Version ${version} is available!</h3>
+                        <p style="color: var(--text-muted); margin-bottom: 24px;">
+                            Click the button below to automatically download and install the update.
+                            The app will restart automatically.
+                        </p>
+                        <button onclick="performAutoUpdate('${version}')" class="quick-btn quick-btn-primary" style="padding: 14px 32px; font-size: 15px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="margin-right: 8px;">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Update Now
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn modal-btn-secondary" onclick="closeUpdateModal()">Later</button>
+                </div>
+            </div>
+        `;
+    } else if (installType === 'dmg') {
+        // DMG installation - download new DMG
+        const dmgUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/BEAM-LightWallet-${version}.dmg`;
+        modalContent = `
+            <div class="modal" style="max-width: 450px;">
+                <div class="modal-header">
+                    <h2 class="modal-title">Update Available</h2>
+                    <button class="modal-close" onclick="closeUpdateModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div style="text-align: center; padding: 20px 0;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📦</div>
+                        <h3 style="margin-bottom: 8px;">Version ${version} is available!</h3>
+                        <p style="color: var(--text-muted); margin-bottom: 24px;">
+                            Download the new version and install it to update.
+                        </p>
+                        <a href="${dmgUrl}" class="quick-btn quick-btn-primary" style="display: inline-block; padding: 14px 32px; font-size: 15px; text-decoration: none;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="margin-right: 8px;">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Download DMG
+                        </a>
+                        <p style="margin-top: 16px; font-size: 12px; color: var(--text-muted);">
+                            After downloading, quit this app and open the new DMG to install.
+                        </p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn modal-btn-secondary" onclick="closeUpdateModal()">Later</button>
+                </div>
+            </div>
+        `;
+    } else {
+        // Unknown installation - show both options
+        modalContent = `
+            <div class="modal" style="max-width: 480px;">
+                <div class="modal-header">
+                    <h2 class="modal-title">Update Available: v${version}</h2>
+                    <button class="modal-close" onclick="closeUpdateModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="info-section">
+                        <h4>🔄 Automatic Update (Git Installation)</h4>
+                        <p>If you installed via <code>./install.sh</code> or git clone:</p>
+                        <button onclick="performAutoUpdate('${version}')" class="quick-btn quick-btn-primary" style="width: 100%; margin-top: 12px;">
+                            Update Automatically
+                        </button>
+                    </div>
+
+                    <div class="info-section" style="margin-top: 16px;">
+                        <h4>📦 Manual Download (DMG Installation)</h4>
+                        <p>If you installed from DMG:</p>
+                        <a href="${url}" target="_blank" class="quick-btn" style="display: block; text-align: center; margin-top: 12px; text-decoration: none;">
+                            Go to GitHub Releases
+                        </a>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn modal-btn-secondary" onclick="closeUpdateModal()">Later</button>
+                </div>
+            </div>
+        `;
+    }
+
+    modal.innerHTML = modalContent;
+    document.body.appendChild(modal);
+}
+
+function closeUpdateModal() {
+    const modal = document.getElementById('update-modal');
+    if (modal) modal.remove();
+}
+
+function copyUpdateCommand(cmd) {
+    navigator.clipboard.writeText(cmd).then(() => {
+        showToast('Command copied to clipboard!', 'success');
+    });
+}
+
+// ============================================
 // Asset data for UI
 // ============================================
 // Priority token icons from ca_assets_updates.json
@@ -31,12 +443,92 @@ const ASSET_CONFIG = {
     174: { name: 'FOMO', symbol: 'FOMO', color: '#60a5fa', class: 'fomo', icon: ASSET_ICONS[174], decimals: 8 }
 };
 
+// DEX Contract ID
+const DEX_CONTRACT_ID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
+
 // Wallet data - will be fetched from API
 let walletData = {
     assets: [],
     utxos: [],
     isConnected: false
 };
+
+// BEAM price in USD (fetched from CoinGecko via server)
+let beamPriceUsd = 0;
+let priceUpdateInterval = null;
+
+// Fetch BEAM price from server
+async function fetchBeamPrice() {
+    try {
+        const response = await fetch('/api/price');
+        const data = await response.json();
+        if (data.beam_usd) {
+            beamPriceUsd = data.beam_usd;
+            updateUsdDisplays();
+        }
+    } catch (e) {
+        console.log('Price fetch error:', e);
+    }
+}
+
+// Start price updates (every 60 seconds)
+function startPriceUpdates() {
+    fetchBeamPrice(); // Initial fetch
+    if (priceUpdateInterval) clearInterval(priceUpdateInterval);
+    priceUpdateInterval = setInterval(fetchBeamPrice, 60000);
+}
+
+// Update all USD displays on the page
+function updateUsdDisplays() {
+    // Re-render asset cards and balances to show USD values
+    if (document.getElementById('asset-cards')) {
+        renderAssetCards();
+    }
+    if (document.getElementById('balances-tbody')) {
+        renderBalancesTable();
+    }
+}
+
+// Format USD value
+function formatUsd(value) {
+    if (value === 0 || !beamPriceUsd) return '';
+    if (value < 0.01) return '< $0.01';
+    if (value < 1) return '$' + value.toFixed(4);
+    if (value < 100) return '$' + value.toFixed(2);
+    return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Calculate USD value for any asset (using DEX pool rates)
+function getAssetUsdValue(assetId, amount) {
+    if (!beamPriceUsd || amount <= 0) return 0;
+
+    // BEAM direct conversion
+    if (assetId === 0) {
+        return (amount / GROTH) * beamPriceUsd;
+    }
+
+    // For other assets, find BEAM pool and calculate rate
+    const pool = dexPools.find(p =>
+        (p.aid1 === 0 && p.aid2 === assetId) ||
+        (p.aid1 === assetId && p.aid2 === 0)
+    );
+
+    if (pool && pool.tok1 > 0 && pool.tok2 > 0) {
+        // Calculate price in BEAM terms
+        let priceInBeam;
+        if (pool.aid1 === 0) {
+            // BEAM is aid1, asset is aid2
+            priceInBeam = pool.tok1 / pool.tok2; // 1 asset = X BEAM
+        } else {
+            // asset is aid1, BEAM is aid2
+            priceInBeam = pool.tok2 / pool.tok1; // 1 asset = X BEAM
+        }
+        const assetBalance = amount / GROTH; // Assuming same decimals
+        return assetBalance * priceInBeam * beamPriceUsd;
+    }
+
+    return 0; // No BEAM pool found
+}
 
 // Hidden assets (stored in localStorage)
 let hiddenAssets = new Set(JSON.parse(localStorage.getItem('hiddenAssets') || '[]'));
@@ -279,6 +771,12 @@ async function loadWalletData() {
             console.log('Assets list not available:', e);
         }
 
+        // Load DEX pools for rate calculations (needed for USD values)
+        loadDexPools().catch(e => console.log('DEX pools not available:', e));
+
+        // Start price updates for USD display
+        startPriceUpdates();
+
         return true;
     } catch (e) {
         console.error('Failed to load wallet data:', e);
@@ -361,7 +859,7 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
     });
 });
 
-function showPage(pageId) {
+function showPage(pageId, updateUrl = true) {
     // Update nav
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.querySelector(`[data-page="${pageId}"]`)?.classList.add('active');
@@ -384,10 +882,27 @@ function showPage(pageId) {
         transactions: 'Transactions',
         addresses: 'Addresses',
         dex: 'DEX Trading',
+        explorer: 'Explorer',
         donate: 'Support Development',
         settings: 'Settings'
     };
     document.getElementById('page-title').textContent = titles[pageId] || pageId;
+
+    // Update URL
+    if (updateUrl) {
+        const urlMap = {
+            dashboard: '/',
+            assets: '/assets',
+            transactions: '/transactions',
+            addresses: '/addresses',
+            dex: '/dex',
+            explorer: '/explorer',
+            donate: '/donate',
+            settings: '/settings'
+        };
+        const url = urlMap[pageId] || '/';
+        history.pushState({ page: pageId }, '', url);
+    }
 
     // Load page-specific data
     if (pageId === 'dashboard') {
@@ -405,8 +920,96 @@ function showPage(pageId) {
     } else if (pageId === 'dex') {
         loadDexPools();
         initializeDexDefaults();
+        loadDexActivity(); // Load recent activity feed
+    } else if (pageId === 'explorer') {
+        initExplorerPage();
     } else if (pageId === 'settings') {
         loadSettings();
+    }
+}
+
+// Handle browser back/forward navigation
+window.addEventListener('popstate', (event) => {
+    if (event.state?.page) {
+        showPage(event.state.page, false);
+
+        // Handle explorer sub-routes
+        if (event.state.page === 'explorer' && event.state.tab) {
+            showExplorerTab(event.state.tab);
+        }
+    } else {
+        // Parse URL path
+        const path = window.location.pathname;
+        const pageFromUrl = parseUrlToPage(path);
+        if (pageFromUrl) {
+            showPage(pageFromUrl, false);
+        }
+    }
+});
+
+// Parse URL path to page ID
+function parseUrlToPage(path) {
+    if (path === '/' || path === '/index.html') return 'dashboard';
+    if (path.startsWith('/explorer')) return 'explorer';
+    if (path.startsWith('/assets')) return 'assets';
+    if (path.startsWith('/transactions')) return 'transactions';
+    if (path.startsWith('/addresses')) return 'addresses';
+    if (path.startsWith('/dex')) return 'dex';
+    if (path.startsWith('/settings')) return 'settings';
+    if (path.startsWith('/donate')) return 'donate';
+    return 'dashboard';
+}
+
+// Initialize page from URL on load
+function initPageFromUrl() {
+    // Check for route injected by server
+    const appRoute = window.APP_ROUTE;
+
+    if (appRoute && appRoute.page) {
+        // Handle explorer sub-routes that should go directly to detail pages
+        if (appRoute.page === 'explorer' && appRoute.subType && appRoute.subId) {
+            if (appRoute.subType === 'asset') {
+                // Go directly to asset detail page
+                showAssetDetail(parseInt(appRoute.subId));
+                return;
+            } else if (appRoute.subType === 'contract') {
+                // Go directly to contract detail page
+                showContractDetail(appRoute.subId);
+                return;
+            } else {
+                // Other explorer routes - show explorer page and set route for handling
+                showPage(appRoute.page, false);
+                window.EXPLORER_ROUTE = { type: appRoute.subType, id: appRoute.subId };
+            }
+        } else {
+            // Use server-injected route
+            showPage(appRoute.page, false);
+        }
+    } else {
+        // Fallback: parse URL manually
+        const path = window.location.pathname;
+        const pageId = parseUrlToPage(path);
+
+        // Handle explorer sub-routes
+        if (pageId === 'explorer' && path.includes('/explorer/')) {
+            const parts = path.split('/');
+            if (parts.length >= 4) {
+                const type = parts[2];
+                const id = parts[3];
+                if (type === 'asset' && id) {
+                    // Go directly to asset detail page
+                    showAssetDetail(parseInt(id));
+                    return;
+                } else if (type === 'contract' && id) {
+                    // Go directly to contract detail page
+                    showContractDetail(id);
+                    return;
+                } else if (type && id) {
+                    window.EXPLORER_ROUTE = { type, id };
+                }
+            }
+        }
+        showPage(pageId, false);
     }
 }
 
@@ -450,17 +1053,26 @@ function renderAssetCards() {
         const balance = formatAmount(asset.balance);
         const [whole, decimal] = balance.includes('.') ? balance.split('.') : [balance, '00000000'];
 
+        // Calculate USD value for this asset
+        const totalBalance = asset.balance + asset.locked;
+        const usdValue = getAssetUsdValue(asset.id, totalBalance);
+        const usdDisplay = usdValue > 0 ? formatUsd(usdValue) : '';
+
         return `
             <div class="asset-card asset-card-${config.class || ''}${isLpToken ? ' lp-token-card' : ''}" onclick="selectAsset(${asset.id})">
                 <div class="asset-card-header">
-                    <div class="asset-icon asset-icon-${config.class || ''}" style="${displayIcon ? '' : `background: ${displayColor}`}">
-                        ${displayIcon ? `<img src="${displayIcon}" style="width:28px;height:28px;" onerror="this.style.display='none';this.parentNode.style.background='${displayColor}';this.parentNode.textContent='${displaySymbol.substring(0,2)}'">` : (isLpToken ? 'LP' : displaySymbol.substring(0, 2))}
-                    </div>
+                    ${isLpToken
+                        ? renderLpDualIcon(asset.id, 28)
+                        : `<div class="asset-icon asset-icon-${config.class || ''}" style="${displayIcon ? '' : `background: ${displayColor}`}">
+                            ${displayIcon ? `<img src="${displayIcon}" style="width:28px;height:28px;" onerror="this.style.display='none';this.parentNode.style.background='${displayColor}';this.parentNode.textContent='${displaySymbol.substring(0,2)}'">` : displaySymbol.substring(0, 2)}
+                          </div>`
+                    }
                     <span class="asset-id">${isLpToken ? '<span style="font-size:9px;padding:1px 4px;background:linear-gradient(135deg, #25c2a0, #60a5fa);border-radius:3px;">LP</span>' : '#' + asset.id}</span>
                 </div>
                 <div class="asset-balance">
                     ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}<span class="asset-balance-decimal">.${decimal.substring(0,4) || '0000'}</span>
                 </div>
+                ${usdDisplay ? `<div class="asset-usd-below">${usdDisplay}</div>` : ''}
                 <div class="asset-name">
                     ${displayName}
                     ${asset.locked > 0 ? `<span class="annotation" style="margin-left:8px;">+${formatAmount(asset.locked)} locked</span>` : ''}
@@ -520,22 +1132,30 @@ function renderBalancesTable() {
         const textColor = ['warning', 'success'].includes(config.class) ? '#000' : '#fff';
         const isLpToken = info.isLpToken;
 
+        // Calculate USD value
+        const totalBalance = asset.balance + asset.locked;
+        const usdValue = getAssetUsdValue(asset.id, totalBalance);
+        const usdDisplay = usdValue > 0 ? formatUsd(usdValue) : '-';
+
         // LP Token special display
         const lpBadge = isLpToken ? '<span style="font-size:9px;padding:2px 6px;background:linear-gradient(135deg, #25c2a0, #60a5fa);color:#fff;border-radius:4px;margin-left:6px;vertical-align:middle;">LP</span>' : '';
         const lpTooltip = isLpToken ? `title="Liquidity Provider Token - Represents your share in the ${info.lpPair ? info.name.replace(' LP Token', '') : 'DEX'} pool. Withdraw to get back your tokens + earned fees."` : '';
 
         // Action button for LP tokens vs regular assets - opens popup modals
         const actionButton = isLpToken
-            ? `<button class="action-btn trade-btn" onclick="event.stopPropagation(); openQuickWithdrawLPModal(${asset.id})" style="background:linear-gradient(135deg, #25c2a0, #60a5fa);">Withdraw LP</button>`
+            ? `<button class="action-btn trade-btn" onclick="event.stopPropagation(); openQuickWithdrawLPModal(${asset.id})" style="background:linear-gradient(135deg, #f59e0b, #ef4444);color:#fff;">Withdraw LP</button>`
             : `<button class="action-btn trade-btn" onclick="event.stopPropagation(); openQuickTradeModal(${asset.id})">Trade</button>`;
 
         return `
             <tr onclick="selectAsset(${asset.id})" style="cursor:pointer;" ${lpTooltip}>
                 <td>
                     <div class="asset-cell">
-                        <div class="asset-cell-icon" style="${config.icon ? '' : `background: ${isLpToken ? 'linear-gradient(135deg, #25c2a0, #60a5fa)' : config.color}; color: ${textColor}`}">
-                            ${config.icon ? `<img src="${config.icon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color}';this.parentNode.style.color='${textColor}';this.parentNode.textContent='${config.symbol.substring(0,2)}'">` : (isLpToken ? 'LP' : config.symbol.substring(0, 2))}
-                        </div>
+                        ${isLpToken
+                            ? renderLpDualIcon(asset.id, 32)
+                            : `<div class="asset-cell-icon" style="${config.icon ? '' : `background: ${config.color}; color: ${textColor}`}">
+                                ${config.icon ? `<img src="${config.icon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color}';this.parentNode.style.color='${textColor}';this.parentNode.textContent='${config.symbol.substring(0,2)}'">` : config.symbol.substring(0, 2)}
+                              </div>`
+                        }
                         <div class="asset-cell-info">
                             <span class="asset-cell-name">${info.name || config.name}${lpBadge}</span>
                             <span class="asset-cell-symbol">${info.symbol || config.symbol} <span style="color:var(--text-muted);font-size:10px;">#${asset.id}</span></span>
@@ -544,6 +1164,7 @@ function renderBalancesTable() {
                 </td>
                 <td>
                     <div class="balance-cell">${balance}</div>
+                    ${usdDisplay !== '-' ? `<div style="font-size:11px;opacity:0.5;margin-top:2px;">${usdDisplay}</div>` : ''}
                 </td>
                 <td>
                     <div class="balance-locked">${locked}</div>
@@ -842,6 +1463,9 @@ async function openQuickWithdrawLPModal(lpAssetId) {
     const balance = walletData.assets.find(a => a.id === lpAssetId);
     document.getElementById('qw-lp-balance').textContent = balance ? formatAmount(balance.balance) : '0';
 
+    // Render dual LP icon
+    document.getElementById('qw-lp-icon').innerHTML = renderLpDualIcon(lpAssetId, 44);
+
     const asset1 = getAssetInfo(qwPool.aid1);
     const asset2 = getAssetInfo(qwPool.aid2);
     document.getElementById('qw-asset1-symbol').textContent = asset1.symbol;
@@ -1096,9 +1720,11 @@ async function generateAddress() {
         }
     } catch (e) {
         console.error('Generate address error:', e);
+        console.error('Address type was:', currentReceiveType);
+        console.error('Full error object:', JSON.stringify(e, Object.getOwnPropertyNames(e)));
 
         // Show meaningful error message instead of demo addresses
-        const errorMsg = e.message || 'Failed to create address';
+        const errorMsg = e.message || String(e) || 'Failed to create address';
         let userMessage = 'Unable to generate address';
         let userHint = '';
 
@@ -1108,16 +1734,20 @@ async function generateAddress() {
         } else if (errorMsg.includes('connect') || errorMsg.includes('network') || errorMsg.includes('fetch')) {
             userMessage = 'Wallet not connected';
             userHint = 'Please start wallet-api and refresh';
-        } else if (currentReceiveType === 'offline' || currentReceiveType === 'max_privacy' || currentReceiveType === 'public_offline') {
-            const typeNames = {
-                'offline': 'Offline',
-                'max_privacy': 'Max Privacy',
-                'public_offline': 'Donation'
-            };
-            userMessage = `${typeNames[currentReceiveType]} address unavailable`;
-            userHint = 'This address type requires connection to your own node';
+        } else if (errorMsg.includes('not supported') || errorMsg.includes('Invalid address type')) {
+            userMessage = `${currentReceiveType} addresses not supported`;
+            userHint = 'Your wallet version may not support this address type';
+        } else if (errorMsg.includes('shielded') || errorMsg.includes('lelantus')) {
+            userMessage = 'Shielded pool not available';
+            userHint = 'Please wait for wallet to sync shielded UTXOs';
+        } else if (currentReceiveType === 'max_privacy') {
+            userMessage = 'Max Privacy address unavailable';
+            userHint = 'Requires connection to your own node with owner key';
+        } else if (currentReceiveType === 'offline' || currentReceiveType === 'public_offline') {
+            userMessage = `${currentReceiveType === 'offline' ? 'Offline' : 'Donation'} address error`;
+            userHint = errorMsg.length < 100 ? errorMsg : 'Check console for details';
         } else {
-            userHint = errorMsg;
+            userHint = errorMsg.length < 100 ? errorMsg : 'Check console for details';
         }
 
         addressEl.innerHTML = `<span style="color: var(--error);">${userMessage}</span>`;
@@ -1176,6 +1806,65 @@ const ADDRESS_TYPE_INFO = {
     }
 };
 
+// Address info popup content for special address types
+const ADDRESS_INFO_POPUPS = {
+    offline: {
+        title: 'Offline Address (Lelantus)',
+        content: `
+            <div class="info-section">
+                <h4>Enhanced Privacy</h4>
+                <p>Uses Lelantus shielded pool for improved transaction privacy. Your funds go through a privacy layer that breaks the link between sender and receiver.</p>
+            </div>
+            <div class="info-section">
+                <h4>Sender Convenience</h4>
+                <p>The sender doesn't need you to be online. They can send anytime, and you'll receive the funds when you sync.</p>
+            </div>
+            <div class="info-section">
+                <h4>Reusable Address</h4>
+                <p>Can receive multiple payments to the same address. Great for invoices or recurring payments.</p>
+            </div>
+            <div class="info-section warning">
+                <h4>Note</h4>
+                <p>Transactions may take slightly longer to confirm due to Lelantus processing. The address can receive up to 30 payments by default.</p>
+            </div>
+        `
+    },
+    max_privacy: {
+        title: 'Maximum Privacy Address',
+        content: `
+            <div class="info-section">
+                <h4>Maximum Privacy</h4>
+                <p>Provides the highest level of transaction privacy available on BEAM. Uses multiple layers of encryption and anonymization.</p>
+            </div>
+            <div class="info-section">
+                <h4>One-Time Use</h4>
+                <p>This address can only be used <strong>ONCE</strong>. After receiving a payment, you must generate a new address for additional transactions.</p>
+            </div>
+            <div class="info-section">
+                <h4>Best For</h4>
+                <p>High-value transactions where maximum privacy is essential. Also useful when you don't want any transactions to be linkable.</p>
+            </div>
+            <div class="info-section warning">
+                <h4>Requires Own Node</h4>
+                <p>Max Privacy addresses require connection to your own BEAM node for full functionality. Using a public node may result in reduced privacy or connection errors.</p>
+            </div>
+        `
+    }
+};
+
+// Show address info popup
+function showAddressInfoPopup(type) {
+    const info = ADDRESS_INFO_POPUPS[type];
+    if (!info) return;
+
+    document.getElementById('address-info-title').textContent = info.title;
+    document.getElementById('address-info-content').innerHTML = info.content;
+    openModal('address-info-modal');
+}
+
+// Track if user has seen address info popups
+let addressInfoShown = {};
+
 // Receive type tabs
 function setReceiveType(type, evt) {
     currentReceiveType = type;
@@ -1226,6 +1915,13 @@ function setReceiveType(type, evt) {
         }
     }
 
+    // Show info popup for special address types (first time only per session)
+    if ((type === 'offline' || type === 'max_privacy') && !addressInfoShown[type]) {
+        addressInfoShown[type] = true;
+        showAddressInfoPopup(type);
+        return; // Don't generate yet - user clicks "Create Address" in popup
+    }
+
     generateAddress();
 }
 
@@ -1257,6 +1953,12 @@ let ownerKey = null;
 
 // Load settings
 async function loadSettings() {
+    // Display app version
+    const versionEl = document.getElementById('app-version');
+    if (versionEl) {
+        versionEl.textContent = `v${APP_VERSION}`;
+    }
+
     const statusEl = document.getElementById('settings-status');
     const heightEl = document.getElementById('settings-height');
     const lastUpdateEl = document.getElementById('settings-last-update');
@@ -1469,7 +2171,155 @@ let rescanInProgress = false;
 async function triggerRescan() {
     if (rescanInProgress) return;
 
-    // Get password from stored value or session
+    // Check current node type
+    const serverStatus = await checkServerStatus();
+    const isPublicNode = !serverStatus?.node_mode || serverStatus.node_mode === 'public';
+
+    if (isPublicNode) {
+        // Show warning modal for public node
+        showRescanWarningModal();
+        return;
+    }
+
+    // Proceed with rescan on local node
+    await performRescan();
+}
+
+// Show warning that rescan requires local node
+function showRescanWarningModal() {
+    const modal = document.createElement('div');
+    modal.id = 'rescan-warning-modal';
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Rescan Requires Local Node</h2>
+                <button class="modal-close" onclick="closeRescanWarningModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="info-section warning">
+                    <h4>⚠️ Public Node Limitation</h4>
+                    <p>You're connected to a public node. Full balance recovery requires a local node with your owner key.</p>
+                </div>
+
+                <div class="info-section">
+                    <h4>Option 1: Switch to Local Node (Recommended)</h4>
+                    <p>Start a local node which will automatically scan for your transactions. This provides full balance recovery.</p>
+                    <button class="quick-btn quick-btn-primary" onclick="closeRescanWarningModal(); switchToLocalAndRescan();" style="width: 100%; margin-top: 12px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                            <rect x="2" y="3" width="20" height="14" rx="2"/>
+                            <path d="M8 21h8M12 17v4"/>
+                        </svg>
+                        Switch to Local Node & Rescan
+                    </button>
+                </div>
+
+                <div class="info-section">
+                    <h4>Option 2: Quick Rescan (Limited)</h4>
+                    <p>Rescan known addresses only. This may not find all historical transactions but works with public nodes.</p>
+                    <button class="quick-btn" onclick="closeRescanWarningModal(); performQuickRescan();" style="width: 100%; margin-top: 12px;">
+                        Quick Rescan
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-secondary" onclick="closeRescanWarningModal()">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+}
+
+function closeRescanWarningModal() {
+    const modal = document.getElementById('rescan-warning-modal');
+    if (modal) modal.remove();
+}
+
+// Switch to local node and perform rescan
+async function switchToLocalAndRescan() {
+    const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+    if (!password) {
+        showToastAdvanced('Error', 'No password available. Please re-unlock your wallet.', 'error');
+        return;
+    }
+
+    showToast('Starting local node...', 'info');
+
+    try {
+        // Switch to local node (this exports owner key and starts node)
+        const response = await fetch('/api/node/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'local', password })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showToastAdvanced('Local Node Started', 'Rescan will begin automatically as node syncs', 'success');
+            // Update UI
+            currentNodeType = 'local';
+            selectNodeType('local');
+            // Start monitoring sync progress
+            startNodeSyncMonitoring();
+        } else {
+            throw new Error(result.error || 'Failed to switch to local node');
+        }
+    } catch (e) {
+        showToastAdvanced('Switch Failed', e.message, 'error');
+    }
+}
+
+// Quick rescan using wallet-api (works with public nodes but limited)
+async function performQuickRescan() {
+    const btn = document.getElementById('rescan-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="animation: spin 1s linear infinite;">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            Rescanning...
+        `;
+    }
+
+    showToastAdvanced('Quick Rescan', 'Scanning known addresses...', 'pending');
+
+    try {
+        // Use wallet-api's rescan method (scans known UTXOs)
+        const result = await apiCall('rescan', {});
+
+        showToastAdvanced('Quick Rescan Complete', 'Check your balances', 'success');
+        await loadWalletData();
+    } catch (e) {
+        // If rescan method not supported, try refreshing wallet status
+        try {
+            await apiCall('wallet_status');
+            showToastAdvanced('Refresh Complete', 'Wallet data updated', 'success');
+            await loadWalletData();
+        } catch (e2) {
+            showToastAdvanced('Rescan Failed', e2.message, 'error');
+        }
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            Rescan Wallet
+        `;
+    }
+}
+
+// Full rescan with local node
+async function performRescan() {
     const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
     if (!password) {
         showToastAdvanced('Rescan Failed', 'No password available. Please re-unlock your wallet.', 'error');
@@ -1502,7 +2352,6 @@ async function triggerRescan() {
 
         if (result.success) {
             showToastAdvanced('Rescan Complete', 'Wallet balances updated', 'success');
-            // Refresh wallet data
             await loadWalletData();
         } else {
             throw new Error(result.error || 'Rescan failed');
@@ -2596,6 +3445,8 @@ async function welcomeUnlock() {
                     renderBalancesTable();
                     renderUtxos();
                     showToastAdvanced('Wallet Unlocked', 'Connected to local node (DEX ready)', 'success');
+                    // Load DEX pools in background for LP dual icons
+                    loadDexPools().catch(e => console.log('DEX pools not available:', e.message));
                 }
             } else {
                 // Check if it's a password error - don't fallback, show error directly
@@ -2668,6 +3519,8 @@ async function unlockWithPublicNode(password) {
                 renderBalancesTable();
                 renderUtxos();
                 showToast('Wallet unlocked (public node)', 'success');
+                // Try to load DEX pools in background (may not work on public nodes)
+                loadDexPools().catch(e => console.log('DEX pools not available on public node:', e.message));
             }
         } else {
             showWelcomeError('', result.error || 'Invalid password');
@@ -2952,9 +3805,16 @@ async function welcomeRestoreWallet() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+    // Check for updates (async, non-blocking)
+    checkForUpdates().catch(e => console.log('Update check skipped:', e.message));
+
     // Show loading state
     document.getElementById('asset-cards').innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading...</div>';
     document.getElementById('balances-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">Loading...</td></tr>';
+
+    // Check if we're on an explorer route - explorer works without wallet API
+    const appRoute = window.APP_ROUTE;
+    const isExplorerRoute = appRoute && appRoute.page === 'explorer';
 
     // Check server status first
     const serverStatus = await checkServerStatus();
@@ -2963,6 +3823,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Server status:', serverStatus);
 
         if (!serverStatus.wallet_api_running) {
+            // Explorer routes can work without wallet API
+            if (isExplorerRoute) {
+                initExplorerSettings();
+                initPageFromUrl();
+                return;
+            }
             showLockedOverlay('Wallet API is not running. Please unlock your wallet first.');
             return;
         }
@@ -2974,6 +3840,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!connected) {
         // Check if it's because wallet is locked
         if (serverStatus && !serverStatus.wallet_api_running) {
+            // Explorer routes can work without wallet API
+            if (isExplorerRoute) {
+                initExplorerSettings();
+                initPageFromUrl();
+                return;
+            }
             showLockedOverlay('Please unlock your wallet to continue.');
             return;
         }
@@ -2988,8 +3860,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     hideLockedOverlay();
     renderAssetCards();
+
+    // Initialize Explorer settings
+    initExplorerSettings();
     renderBalancesTable();
     renderUtxos();
+
+    // Initialize page from URL route (e.g., /explorer/block/123, /dex, /settings)
+    initPageFromUrl();
 
     // Auto-start local node in background for DEX support
     autoStartLocalNode();
@@ -3381,8 +4259,16 @@ function toggleHideAsset(assetId) {
 function renderAllAssets(assets) {
     const tbody = document.getElementById('all-assets-tbody');
     const search = document.getElementById('all-assets-search')?.value.toLowerCase() || '';
+    const showMyAssets = document.getElementById('show-my-assets')?.checked || false;
 
-    const filtered = assets.filter(a => {
+    // Apply "My Created Assets" filter first
+    let baseAssets = assets;
+    if (showMyAssets && ownedAssets.length > 0) {
+        const ownedIds = ownedAssets.map(a => a.aid);
+        baseAssets = assets.filter(a => ownedIds.includes(a.asset_id));
+    }
+
+    const filtered = baseAssets.filter(a => {
         const aid = a.asset_id;
 
         // Hide hidden assets unless show hidden is checked
@@ -3433,6 +4319,11 @@ function renderAllAssets(assets) {
         const userBalance = userAsset ? formatAmount(userAsset.balance) : '0';
         const hasBalance = userAsset && (userAsset.balance + userAsset.locked) > 0;
 
+        // Calculate USD value for this asset
+        const totalBalance = userAsset ? (userAsset.balance + userAsset.locked) : 0;
+        const usdValue = totalBalance > 0 ? getAssetUsdValue(aid, totalBalance) : 0;
+        const usdDisplay = usdValue > 0 ? formatUsd(usdValue) : '';
+
         // Format supply (emission value)
         const supply = a.value ? formatAmount(a.value) : '-';
 
@@ -3441,26 +4332,41 @@ function renderAllAssets(assets) {
         // LP Token badge
         const lpBadge = isLpToken ? '<span style="font-size:9px;padding:2px 6px;background:linear-gradient(135deg, #25c2a0, #60a5fa);color:#fff;border-radius:4px;margin-left:6px;">LP</span>' : '';
 
+        // Check if this asset is owned (created by user)
+        const isOwned = ownedAssets.some(oa => oa.aid === aid);
+
         // Action button - Withdraw LP for LP tokens, Trade for regular - opens popup modals
         const actionButton = isLpToken
-            ? `<button class="action-btn trade-btn" onclick="event.stopPropagation();openQuickWithdrawLPModal(${aid})" style="background:linear-gradient(135deg, #25c2a0, #60a5fa);">Withdraw LP</button>`
+            ? `<button class="action-btn trade-btn" onclick="event.stopPropagation();openQuickWithdrawLPModal(${aid})" style="background:linear-gradient(135deg, #f59e0b, #ef4444);color:#fff;">Withdraw LP</button>`
             : `<button class="action-btn trade-btn" onclick="event.stopPropagation();openQuickTradeModal(${aid})">Trade</button>`;
+
+        // Mint button for owned assets
+        const mintButton = isOwned
+            ? `<button class="action-btn" onclick="event.stopPropagation();openMintModal(${aid})" style="background:linear-gradient(135deg, #8b5cf6, #6366f1);color:#fff;">Mint</button>`
+            : '';
+
+        // Owned badge
+        const ownedBadge = isOwned ? '<span style="font-size:9px;padding:2px 6px;background:linear-gradient(135deg, #8b5cf6, #6366f1);color:#fff;border-radius:4px;margin-left:6px;">OWNER</span>' : '';
 
         return `
             <tr style="${hasBalance ? 'background:var(--beam-cyan-dim);' : ''}${isHidden ? 'opacity:0.5;' : ''}" ${isLpToken ? 'title="Liquidity Provider Token - Represents your share in a DEX pool"' : ''}>
                 <td>
                     <div class="asset-cell">
-                        <div class="asset-cell-icon" style="${icon ? '' : `background: ${isLpToken ? 'linear-gradient(135deg, #25c2a0, #60a5fa)' : color}; color: #fff`}">
-                            ${icon ? `<img src="${icon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${color}';this.parentNode.style.color='#fff';this.parentNode.textContent='${symbol.substring(0,2)}'">` : (isLpToken ? 'LP' : symbol.substring(0, 2).toUpperCase())}
-                        </div>
+                        ${isLpToken
+                            ? renderLpDualIcon(aid, 32)
+                            : `<div class="asset-cell-icon" style="${icon ? '' : `background: ${color}; color: #fff`}">
+                                ${icon ? `<img src="${icon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${color}';this.parentNode.style.color='#fff';this.parentNode.textContent='${symbol.substring(0,2)}'">` : symbol.substring(0, 2).toUpperCase()}
+                              </div>`
+                        }
                         <div class="asset-cell-info">
-                            <span class="asset-cell-name">${name}${lpBadge}${isHidden ? ' <span style="color:var(--text-muted);font-size:11px;">(hidden)</span>' : ''}</span>
+                            <span class="asset-cell-name">${name}${lpBadge}${ownedBadge}${isHidden ? ' <span style="color:var(--text-muted);font-size:11px;">(hidden)</span>' : ''}</span>
                             <span class="asset-cell-symbol">${symbol}</span>
                         </div>
                     </div>
                 </td>
                 <td>
                     <div class="balance-cell" style="${hasBalance ? 'color:var(--beam-cyan);font-weight:600;' : ''}">${userBalance} ${symbol}</div>
+                    ${usdDisplay ? `<div style="font-size:11px;opacity:0.5;margin-top:2px;">${usdDisplay}</div>` : ''}
                 </td>
                 <td>
                     <span class="asset-id-cell">#${aid}</span>
@@ -3473,6 +4379,7 @@ function renderAllAssets(assets) {
                         <button class="action-btn" onclick="event.stopPropagation();openSendModal(${aid})">Send</button>
                         <button class="action-btn" onclick="event.stopPropagation();openReceiveModal()">Receive</button>
                         ${actionButton}
+                        ${mintButton}
                         <button class="action-btn" onclick="event.stopPropagation();toggleHideAsset(${aid})" title="${isHidden ? 'Unhide' : 'Hide'}">
                             ${isHidden ? '👁' : '🙈'}
                         </button>
@@ -3713,20 +4620,31 @@ async function renderTransactions(txs) {
                     '<div class="tx-amount" style="color:var(--success);font-size:11px;">+' + liquidityDetails.asset2.amount + ' ' + liquidityDetails.asset2.symbol + '</div>';
             }
         } else if (swapDetails) {
+            // Calculate USD values for swap
+            const paidRaw = tx.invoke_data[0].amounts.find(a => a.amount > 0)?.amount || 0;
+            const swapPaidUsd = getAssetUsdValue(swapDetails.paidAssetId, paidRaw);
+            const swapPaidUsdDisplay = swapPaidUsd > 0 ? formatUsd(swapPaidUsd) : '';
+
             detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:4px;">' +
                 '<span style="color:var(--warning);">' + swapDetails.paidSymbol + '</span>' +
                 '<span>→</span>' +
                 '<span style="color:var(--success);">' + swapDetails.receivedSymbol + '</span>' +
             '</div>';
             amountHtml = '<div class="tx-amount" style="color:var(--warning);font-size:12px;">-' + swapDetails.paidAmount + ' ' + swapDetails.paidSymbol + '</div>' +
+                (swapPaidUsdDisplay ? '<div style="font-size:10px;opacity:0.5;">' + swapPaidUsdDisplay + '</div>' : '') +
                 '<div class="tx-amount" style="color:var(--success);font-size:12px;">+' + swapDetails.receivedAmount + ' ' + swapDetails.receivedSymbol + '</div>';
         } else {
+            // Calculate USD value for this transaction
+            const txUsdValue = getAssetUsdValue(aid, tx.value || 0);
+            const txUsdDisplay = txUsdValue > 0 ? formatUsd(txUsdValue) : '';
+
             detailHtml = '<div class="tx-asset">' +
                 '<span class="tx-asset-icon" style="background:' + iconBg + '">' + iconHtml + '</span>' +
                 '<span>' + config.symbol + '</span>' +
                 '<span class="tx-asset-id">#' + aid + '</span>' +
             '</div>';
             amountHtml = '<div class="tx-amount" style="color:' + (isReceive ? 'var(--success)' : 'var(--warning)') + '">' + (isReceive ? '+' : '-') + amount + '</div>' +
+                (txUsdDisplay ? '<div style="font-size:10px;opacity:0.5;">' + txUsdDisplay + '</div>' : '') +
                 '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
         }
 
@@ -3932,6 +4850,7 @@ function copyToClipboard(text) {
 // DEX FUNCTIONALITY
 // =============================================
 const DEX_CID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
+const MINTER_CID = '295fe749dc12c55213d1bd16ced174dc8780c020f59cb17749e900bb0c15d868';
 let dexPools = [];
 // Default pair: BEAM → FOMO
 let dexFromAsset = { aid: 0, symbol: 'BEAM', name: 'BEAM', color: '#25c2a0', icon: ASSET_ICONS[0] };
@@ -3953,12 +4872,258 @@ async function showDexTab(tab) {
     }
 }
 
+// Load activity feed when showing swap tab
+function loadActivityOnSwap() {
+    if (document.getElementById('dex-activity-feed')) {
+        loadDexActivity();
+    }
+}
+
+// =============================================
+// DEX ACTIVITY FEED
+// =============================================
+let dexActivity = [];
+let activityUpdateInterval = null;
+
+async function loadDexActivity() {
+    const feed = document.getElementById('dex-activity-feed');
+    const status = document.getElementById('activity-status');
+    if (!feed) return;
+
+    try {
+        // Fetch DEX contract calls history from explorer
+        const url = `${EXPLORER_API}/contract?id=${DEX_CID}&state=0&nMaxTxs=20`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Explorer API error');
+
+        const data = await response.json();
+        const callsHistory = data['Calls history'];
+
+        if (!callsHistory || !callsHistory.value) {
+            feed.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No activity found</div>';
+            return;
+        }
+
+        dexActivity = parseActivityFromHistory(callsHistory);
+        renderActivityFeed();
+
+        if (status) status.textContent = `${dexActivity.length} recent`;
+
+        // Auto-update every 30 seconds
+        if (!activityUpdateInterval) {
+            activityUpdateInterval = setInterval(loadDexActivity, 30000);
+        }
+    } catch (error) {
+        console.error('Failed to load activity:', error);
+        feed.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">Failed to load activity</div>`;
+    }
+}
+
+function parseActivityFromHistory(callsHistory) {
+    const activities = [];
+    const rows = callsHistory.value || [];
+
+    // Skip header row
+    for (let i = 1; i < rows.length && activities.length < 15; i++) {
+        const row = rows[i];
+
+        // Handle grouped items
+        if (row.type === 'group') {
+            for (const item of (row.value || [])) {
+                const activity = parseActivityRow(item);
+                if (activity) activities.push(activity);
+            }
+        } else if (Array.isArray(row)) {
+            const activity = parseActivityRow(row);
+            if (activity) activities.push(activity);
+        }
+    }
+
+    return activities;
+}
+
+function parseActivityRow(row) {
+    if (!Array.isArray(row) || row.length < 5) return null;
+
+    // Row structure: [Height, Cid, Kind, Action, Args, Funds]
+    const height = row[0]?.value !== undefined ? row[0].value : row[0];
+    const action = row[3]?.value !== undefined ? row[3].value : row[3];
+    const fundsTable = row[5];
+
+    // Include Trade, AddLiquidity, Withdraw
+    if (!action || !['Trade', 'AddLiquidity', 'Withdraw'].includes(action)) {
+        return null;
+    }
+
+    // Parse funds: +value = user spent (sent to LP), -value = user received (from LP)
+    const funds = [];
+    if (fundsTable && fundsTable.value) {
+        for (const fundRow of fundsTable.value) {
+            if (!Array.isArray(fundRow) || fundRow.length < 2) continue;
+            const assetId = fundRow[0]?.value !== undefined ? fundRow[0].value : fundRow[0];
+            const amount = fundRow[1]?.value !== undefined ? fundRow[1].value : fundRow[1];
+            funds.push({ assetId, amount });
+        }
+    }
+
+    return { height, action, funds };
+}
+
+function renderActivityFeed() {
+    const feed = document.getElementById('dex-activity-feed');
+    if (!feed || dexActivity.length === 0) {
+        if (feed) feed.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">No activity found</div>';
+        return;
+    }
+
+    feed.innerHTML = dexActivity.map(act => {
+        // Determine activity type and styling
+        let icon, bgColor, label;
+
+        if (act.action === 'Trade') {
+            // Find spent and received
+            const spent = act.funds.find(f => f.amount > 0);  // +value = user sent
+            const received = act.funds.find(f => f.amount < 0);  // -value = user got
+
+            if (!spent || !received) return '';
+
+            const spentInfo = getAssetInfo(spent.assetId);
+            const recvInfo = getAssetInfo(Math.abs(received.assetId));
+            const spentAmt = Math.abs(spent.amount);
+            const recvAmt = Math.abs(received.amount);
+
+            // Is this a buy (receiving BEAM) or sell (spending BEAM)?
+            const isBuy = received.assetId === 0;
+            bgColor = isBuy ? 'var(--success)' : 'var(--error)';
+            label = isBuy ? 'BUY' : 'SELL';
+            icon = '<path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>';
+
+            // USD values
+            const spentUsd = getAssetUsdValue(spent.assetId, spentAmt);
+            const recvUsd = getAssetUsdValue(Math.abs(received.assetId), recvAmt);
+
+            return `
+                <div class="activity-item" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--void);border-radius:10px;margin-bottom:8px;">
+                    <div style="width:32px;height:32px;border-radius:8px;background:${bgColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="16" height="16">${icon}</svg>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                            <span style="font-size:11px;font-weight:600;color:${bgColor};text-transform:uppercase;">${label}</span>
+                            <span style="font-size:11px;color:var(--text-muted);">#${act.height}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:4px;font-size:12px;">
+                            ${renderTokenIcon(spentInfo, 16)}
+                            <span style="color:var(--error);">-${formatAmount(spentAmt, 4)}</span>
+                            <span style="color:var(--text-muted);">${spentInfo.symbol}</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" width="12" height="12" style="margin:0 2px;"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                            ${renderTokenIcon(recvInfo, 16)}
+                            <span style="color:var(--success);">+${formatAmount(recvAmt, 4)}</span>
+                            <span style="color:var(--text-muted);">${recvInfo.symbol}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right;font-size:11px;color:var(--text-muted);">
+                        ${spentUsd > 0 ? formatUsd(spentUsd) : ''}
+                    </div>
+                </div>
+            `;
+
+        } else if (act.action === 'AddLiquidity') {
+            bgColor = 'var(--beam-cyan)';
+            label = 'ADD LIQ';
+            icon = '<path d="M12 5v14M5 12h14"/>';
+
+            // Find the two assets sent (both positive)
+            const sent = act.funds.filter(f => f.amount > 0);
+            if (sent.length < 2) return '';
+
+            const asset1 = getAssetInfo(sent[0].assetId);
+            const asset2 = getAssetInfo(sent[1].assetId);
+            const amt1 = sent[0].amount;
+            const amt2 = sent[1].amount;
+            const usd1 = getAssetUsdValue(sent[0].assetId, amt1);
+
+            return `
+                <div class="activity-item" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--void);border-radius:10px;margin-bottom:8px;">
+                    <div style="width:32px;height:32px;border-radius:8px;background:${bgColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="16" height="16">${icon}</svg>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                            <span style="font-size:11px;font-weight:600;color:${bgColor};">${label}</span>
+                            <span style="font-size:11px;color:var(--text-muted);">#${act.height}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:4px;font-size:12px;flex-wrap:wrap;">
+                            ${renderTokenIcon(asset1, 16)}
+                            <span style="color:var(--warning);">-${formatAmount(amt1, 4)} ${asset1.symbol}</span>
+                            <span style="color:var(--text-muted);">+</span>
+                            ${renderTokenIcon(asset2, 16)}
+                            <span style="color:var(--warning);">-${formatAmount(amt2, 4)} ${asset2.symbol}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right;font-size:11px;color:var(--text-muted);">
+                        ${usd1 > 0 ? formatUsd(usd1 * 2) : ''}
+                    </div>
+                </div>
+            `;
+
+        } else if (act.action === 'Withdraw') {
+            bgColor = 'var(--warning)';
+            label = 'WITHDRAW';
+            icon = '<path d="M5 12h14"/>';
+
+            // Find received assets (negative = user got)
+            const received = act.funds.filter(f => f.amount < 0);
+            if (received.length < 2) return '';
+
+            const asset1 = getAssetInfo(Math.abs(received[0].assetId));
+            const asset2 = getAssetInfo(Math.abs(received[1].assetId));
+            const amt1 = Math.abs(received[0].amount);
+            const amt2 = Math.abs(received[1].amount);
+            const usd1 = getAssetUsdValue(Math.abs(received[0].assetId), amt1);
+
+            return `
+                <div class="activity-item" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--void);border-radius:10px;margin-bottom:8px;">
+                    <div style="width:32px;height:32px;border-radius:8px;background:${bgColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="16" height="16">${icon}</svg>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                            <span style="font-size:11px;font-weight:600;color:${bgColor};">${label}</span>
+                            <span style="font-size:11px;color:var(--text-muted);">#${act.height}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:4px;font-size:12px;flex-wrap:wrap;">
+                            ${renderTokenIcon(asset1, 16)}
+                            <span style="color:var(--success);">+${formatAmount(amt1, 4)} ${asset1.symbol}</span>
+                            <span style="color:var(--text-muted);">+</span>
+                            ${renderTokenIcon(asset2, 16)}
+                            <span style="color:var(--success);">+${formatAmount(amt2, 4)} ${asset2.symbol}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right;font-size:11px;color:var(--text-muted);">
+                        ${usd1 > 0 ? formatUsd(usd1 * 2) : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        return '';
+    }).join('');
+}
+
+// Load activity when DEX page loads
+function startActivityUpdates() {
+    loadDexActivity();
+}
+
 // Load DEX pools
 let dexAvailable = false;
 
 async function loadDexPools() {
     const container = document.getElementById('pools-list');
-    container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted);">Loading pools...</div>';
+    if (container) {
+        container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted);">Loading pools...</div>';
+    }
 
     try {
         const result = await apiCall('invoke_contract', {
@@ -3994,6 +5159,15 @@ async function loadDexPools() {
 
         dexAvailable = true;
         renderDexPools();
+
+        // Re-render asset cards to show LP dual icons (if on dashboard)
+        if (document.getElementById('asset-cards')) {
+            renderAssetCards();
+        }
+        // Also re-render balances table for LP icons
+        if (document.getElementById('balances-tbody')) {
+            renderBalancesTable();
+        }
     } catch (e) {
         console.error('Load pools error:', e);
         dexAvailable = false;
@@ -4033,6 +5207,47 @@ function renderTokenIcon(asset, size = 32) {
         </div>`;
     }
     return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${asset.color || '#333'};display:flex;align-items:center;justify-content:center;font-size:${size * 0.4}px;font-weight:600;">${initials}</div>`;
+}
+
+// Render dual LP token icons (shows both assets in the pool)
+function renderLpDualIcon(lpTokenId, size = 28) {
+    // Get LP token info which includes lpPair with aid1/aid2
+    const lpInfo = getAssetInfo(lpTokenId);
+
+    // If we have lpPair info from metadata, use it
+    if (lpInfo.lpPair && lpInfo.lpPair.aid1 !== undefined && lpInfo.lpPair.aid2 !== undefined) {
+        const a1 = getAssetInfo(lpInfo.lpPair.aid1);
+        const a2 = getAssetInfo(lpInfo.lpPair.aid2);
+
+        // Render overlapping dual icons
+        const iconSize = Math.floor(size * 0.75);
+        const overlap = Math.floor(size * 0.25);
+
+        return `<div class="lp-dual-icon" style="display:flex;align-items:center;width:${size + iconSize - overlap}px;height:${size}px;">
+            ${renderTokenIcon(a1, iconSize)}
+            <div style="margin-left:-${overlap}px;border:2px solid var(--bg-secondary);border-radius:50%;">${renderTokenIcon(a2, iconSize)}</div>
+        </div>`;
+    }
+
+    // Fallback: try to find pool in dexPools
+    const pool = dexPools.find(p => p['lp-token'] === lpTokenId);
+    if (!pool) {
+        // Final fallback to LP text
+        return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg, #25c2a0, #60a5fa);display:flex;align-items:center;justify-content:center;font-size:${size * 0.35}px;font-weight:600;">LP</div>`;
+    }
+
+    // Get asset info for both pool assets
+    const a1 = getAssetInfo(pool.aid1);
+    const a2 = getAssetInfo(pool.aid2);
+
+    // Render overlapping dual icons
+    const iconSize = Math.floor(size * 0.75);
+    const overlap = Math.floor(size * 0.25);
+
+    return `<div class="lp-dual-icon" style="display:flex;align-items:center;width:${size + iconSize - overlap}px;height:${size}px;">
+        ${renderTokenIcon(a1, iconSize)}
+        <div style="margin-left:-${overlap}px;border:2px solid var(--bg-secondary);border-radius:50%;">${renderTokenIcon(a2, iconSize)}</div>
+    </div>`;
 }
 
 function renderDexPools() {
@@ -4819,12 +6034,18 @@ async function getDexQuote() {
         // Update output amount - always use dot as decimal separator
         toAmountEl.value = formatForInput(buyFormatted, 6);
 
-        // Update swap info display - matching AllDapps format
+        // Calculate USD values for swap amounts
+        const payUsd = getAssetUsdValue(dexFromAsset.aid, payAmount);
+        const receiveUsd = getAssetUsdValue(dexToAsset.aid, buyAmount);
+        const payUsdDisplay = payUsd > 0 ? ` (${formatUsd(payUsd)})` : '';
+        const receiveUsdDisplay = receiveUsd > 0 ? ` (${formatUsd(receiveUsd)})` : '';
+
+        // Update swap info display - matching AllDapps format with USD
         document.getElementById('dex-rate').textContent = buyAmount > 0
             ? `1 ${dexToAsset.symbol} = ${formatForInput(payFormatted / buyFormatted, 6)} ${dexFromAsset.symbol}`
             : '-';
-        document.getElementById('dex-pay').textContent = `${formatForInput(payFormatted, 6)} ${dexFromAsset.symbol}`;
-        document.getElementById('dex-receive').textContent = `${formatForInput(buyFormatted, 6)} ${dexToAsset.symbol}`;
+        document.getElementById('dex-pay').innerHTML = `${formatForInput(payFormatted, 6)} ${dexFromAsset.symbol}${payUsdDisplay ? `<span style="opacity:0.5;font-size:11px;margin-left:4px;">${payUsdDisplay}</span>` : ''}`;
+        document.getElementById('dex-receive').innerHTML = `${formatForInput(buyFormatted, 6)} ${dexToAsset.symbol}${receiveUsdDisplay ? `<span style="opacity:0.5;font-size:11px;margin-left:4px;">${receiveUsdDisplay}</span>` : ''}`;
         document.getElementById('dex-fee').textContent = `${formatForInput(feeFormatted, 6)} ${dexToAsset.symbol}`;
         document.getElementById('dex-min-receive').textContent = `${formatForInput(minReceive, 6)} ${dexToAsset.symbol}`;
         infoEl.style.display = 'block';
@@ -7020,3 +8241,2446 @@ async function sendDonationAmount(amount) {
         showToastAdvanced('Donation Failed', e.message, 'error');
     }
 }
+
+// ============================================
+// TOKEN MINTER (CONFIDENTIAL ASSETS)
+// ============================================
+let ownedAssets = []; // User's created assets
+let currentMintAsset = null; // Currently selected asset for minting
+
+// Open Create Token modal
+function openCreateTokenModal() {
+    // Reset form
+    document.getElementById('ct-name').value = '';
+    document.getElementById('ct-symbol').value = '';
+    document.getElementById('ct-short-name').value = '';
+    document.getElementById('ct-supply').value = '';
+    document.getElementById('ct-decimals').value = '8';
+    document.getElementById('ct-unit-name').value = '';
+    document.getElementById('ct-logo-url').value = '';
+    document.getElementById('ct-short-desc').value = '';
+    document.getElementById('ct-long-desc').value = '';
+    document.getElementById('ct-color').value = '#25c2a0';
+    document.getElementById('ct-color-hex').value = '#25c2a0';
+    document.getElementById('ct-color-preview').style.background = '#25c2a0';
+
+    // Reset button
+    const btn = document.getElementById('ct-create-btn');
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="vertical-align: middle; margin-right: 8px;"><path d="M12 5v14M5 12h14"/></svg> Create Token (60 BEAM)`;
+
+    openModal('create-token-modal');
+}
+
+// Sync color from hex input
+function syncColorFromHex() {
+    const hexInput = document.getElementById('ct-color-hex');
+    const colorPicker = document.getElementById('ct-color');
+    const preview = document.getElementById('ct-color-preview');
+
+    let hex = hexInput.value.trim();
+    if (!hex.startsWith('#')) hex = '#' + hex;
+
+    // Validate hex
+    if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+        colorPicker.value = hex;
+        preview.style.background = hex;
+    }
+}
+
+// Sync color picker to hex input
+function syncColorToHex() {
+    const colorPicker = document.getElementById('ct-color');
+    const hexInput = document.getElementById('ct-color-hex');
+    const preview = document.getElementById('ct-color-preview');
+
+    hexInput.value = colorPicker.value;
+    preview.style.background = colorPicker.value;
+}
+
+// Create new token
+async function createToken() {
+    const name = document.getElementById('ct-name').value.trim();
+    const symbol = document.getElementById('ct-symbol').value.trim().toUpperCase();
+    const shortName = document.getElementById('ct-short-name').value.trim() || symbol;
+    const supply = document.getElementById('ct-supply').value;
+    const decimals = parseInt(document.getElementById('ct-decimals').value);
+    const unitName = document.getElementById('ct-unit-name').value.trim() || 'groth';
+    const logoUrl = document.getElementById('ct-logo-url').value.trim();
+    const shortDesc = document.getElementById('ct-short-desc').value.trim();
+    const longDesc = document.getElementById('ct-long-desc').value.trim();
+    const color = document.getElementById('ct-color').value;
+
+    // Validation
+    if (!name) {
+        showToast('Please enter a token name', 'error');
+        return;
+    }
+    if (!symbol || symbol.length > 8) {
+        showToast('Symbol is required (max 8 characters)', 'error');
+        return;
+    }
+
+    const supplyNum = parseInt(supply);
+    if (!supplyNum || supplyNum <= 0) {
+        showToast('Please enter a valid max supply', 'error');
+        return;
+    }
+
+    // Check BEAM balance (need 60 BEAM + fee)
+    const beamAsset = walletData.assets?.find(a => a.id === 0);
+    const beamAvailable = (beamAsset?.available || 0) / GROTH;
+    if (beamAvailable < 61) {
+        showToast('Insufficient BEAM balance. You need at least 61 BEAM (60 fee + 1 for tx)', 'error');
+        return;
+    }
+
+    // Build metadata string
+    const ratio = Math.pow(10, decimals);
+    let metadata = `STD:SCH_VER=1;N=${name};SN=${shortName};UN=${symbol};NTHUN=${unitName};NTH_RATIO=${ratio}`;
+    if (logoUrl) metadata += `;OPT_LOGO_URL=${logoUrl}`;
+    if (shortDesc) metadata += `;OPT_SHORT_DESC=${shortDesc}`;
+    if (longDesc) metadata += `;OPT_LONG_DESC=${longDesc}`;
+    if (color && /^#[0-9A-Fa-f]{6}$/.test(color)) metadata += `;OPT_COLOR=${color}`;
+
+    // Calculate limit in smallest units
+    const limit = BigInt(supplyNum) * BigInt(ratio);
+
+    // Update button
+    const btn = document.getElementById('ct-create-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-small"></span> Creating Token...';
+
+    showToastAdvanced('Creating Token', `Creating ${symbol} on BEAM blockchain...`, 'pending');
+
+    try {
+        // Call Minter contract
+        const createResult = await apiCall('invoke_contract', {
+            args: `action=create_token,cid=${MINTER_CID},metadata=${metadata},limit=${limit}`,
+            createTx: true
+        });
+
+        if (createResult.error) {
+            throw new Error(createResult.error.message || 'Contract call failed');
+        }
+
+        // Check for raw_data to process
+        if (createResult.raw_data) {
+            const txResult = await apiCall('process_invoke_data', {
+                data: createResult.raw_data
+            });
+
+            if (txResult.error) {
+                throw new Error(txResult.error.message || 'Transaction failed');
+            }
+
+            showToastAdvanced('Token Created!', `${symbol} has been created. TX: ${(txResult.txid || '').slice(0, 16)}...`, 'success');
+        } else {
+            showToastAdvanced('Token Created!', `${symbol} creation initiated`, 'success');
+        }
+
+        closeModal('create-token-modal');
+
+        // Refresh wallet data
+        await loadWalletData();
+        renderAssetCards();
+
+    } catch (e) {
+        showToastAdvanced('Creation Failed', e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="vertical-align: middle; margin-right: 8px;"><path d="M12 5v14M5 12h14"/></svg> Create Token (60 BEAM)`;
+    }
+}
+
+// Toggle "My Created Assets" filter
+async function toggleMyAssets() {
+    const checkbox = document.getElementById('show-my-assets');
+    const isChecked = checkbox.checked;
+
+    if (isChecked) {
+        // Load owned assets from Minter contract
+        showToastAdvanced('Loading', 'Loading your created assets...', 'pending');
+
+        try {
+            const result = await apiCall('invoke_contract', {
+                args: `action=view_owned,cid=${MINTER_CID}`
+            });
+
+            let output = result;
+            if (result?.output) {
+                try { output = JSON.parse(result.output); } catch(e) {}
+            }
+
+            ownedAssets = output?.assets || [];
+
+            if (ownedAssets.length === 0) {
+                showToast('You haven\'t created any tokens yet', 'info');
+            } else {
+                showToastAdvanced('Loaded', `Found ${ownedAssets.length} owned assets`, 'success');
+            }
+
+        } catch (e) {
+            showToast('Failed to load owned assets: ' + e.message, 'error');
+            ownedAssets = [];
+        }
+    }
+
+    // Re-render all assets with filter
+    renderAllAssets();
+}
+
+// Render all assets (with optional "My Assets" filter)
+function renderAllAssetsFiltered(assets) {
+    const showMyAssets = document.getElementById('show-my-assets')?.checked || false;
+
+    if (showMyAssets && ownedAssets.length > 0) {
+        // Filter to only show owned assets
+        const ownedIds = ownedAssets.map(a => a.aid);
+        return assets.filter(a => ownedIds.includes(a.id));
+    }
+
+    return assets;
+}
+
+// Open Mint Token modal for a specific asset
+async function openMintModal(assetId) {
+    // Get asset info
+    const asset = getAssetInfo(assetId);
+
+    // Find owned asset data
+    let ownedData = ownedAssets.find(a => a.aid === assetId);
+
+    // If not in cache, try to load
+    if (!ownedData) {
+        try {
+            const result = await apiCall('invoke_contract', {
+                args: `action=view_owned,cid=${MINTER_CID}`
+            });
+
+            let output = result;
+            if (result?.output) {
+                try { output = JSON.parse(result.output); } catch(e) {}
+            }
+
+            ownedAssets = output?.assets || [];
+            ownedData = ownedAssets.find(a => a.aid === assetId);
+        } catch (e) {
+            console.error('Failed to load owned assets:', e);
+        }
+    }
+
+    if (!ownedData) {
+        showToast('You don\'t own this asset or it wasn\'t created with Minter contract', 'error');
+        return;
+    }
+
+    currentMintAsset = {
+        aid: assetId,
+        symbol: asset.symbol,
+        name: asset.name,
+        icon: asset.icon,
+        color: asset.color,
+        supply: ownedData.supply || 0,
+        limit: ownedData.limit || 0,
+        remaining: (ownedData.limit || 0) - (ownedData.supply || 0),
+        decimals: asset.decimals || 8
+    };
+
+    // Update modal UI
+    const iconEl = document.getElementById('mint-token-icon');
+    const initials = (asset.symbol || '??').slice(0, 2).toUpperCase();
+    if (asset.icon) {
+        iconEl.innerHTML = `<img src="${asset.icon}" style="width:100%;height:100%;border-radius:50%;" onerror="this.parentElement.innerHTML='${initials}'">`;
+    } else {
+        iconEl.innerHTML = initials;
+        iconEl.style.background = asset.color || 'var(--beam-cyan)';
+    }
+
+    document.getElementById('mint-token-name').textContent = `${asset.symbol} (ID: ${assetId})`;
+
+    const remainingDisplay = currentMintAsset.remaining / Math.pow(10, currentMintAsset.decimals);
+    document.getElementById('mint-remaining').textContent = formatAmount(currentMintAsset.remaining, currentMintAsset.decimals);
+
+    document.getElementById('mint-amount').value = '';
+
+    // Reset button
+    const btn = document.getElementById('mint-btn');
+    btn.disabled = false;
+    btn.textContent = 'Mint Tokens';
+
+    openModal('mint-token-modal');
+}
+
+// Set mint amount based on percentage
+function setMintPercent(percent) {
+    if (!currentMintAsset) return;
+
+    const remaining = currentMintAsset.remaining / Math.pow(10, currentMintAsset.decimals);
+    const amount = (remaining * percent / 100).toFixed(currentMintAsset.decimals);
+
+    document.getElementById('mint-amount').value = parseFloat(amount);
+}
+
+// Execute mint tokens
+async function executeMintToken() {
+    if (!currentMintAsset) {
+        showToast('No asset selected', 'error');
+        return;
+    }
+
+    const amountStr = document.getElementById('mint-amount').value;
+    const amount = parseFloat(amountStr);
+
+    if (!amount || amount <= 0) {
+        showToast('Please enter a valid amount', 'error');
+        return;
+    }
+
+    // Convert to smallest units
+    const amountSmall = Math.floor(amount * Math.pow(10, currentMintAsset.decimals));
+
+    if (amountSmall > currentMintAsset.remaining) {
+        showToast('Amount exceeds remaining mintable supply', 'error');
+        return;
+    }
+
+    // Update button
+    const btn = document.getElementById('mint-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-small"></span> Minting...';
+
+    showToastAdvanced('Minting', `Minting ${amount} ${currentMintAsset.symbol}...`, 'pending');
+
+    try {
+        // Call Minter contract withdraw action
+        const mintResult = await apiCall('invoke_contract', {
+            args: `action=withdraw,cid=${MINTER_CID},aid=${currentMintAsset.aid},amount=${amountSmall}`,
+            createTx: true
+        });
+
+        if (mintResult.error) {
+            throw new Error(mintResult.error.message || 'Mint call failed');
+        }
+
+        // Process transaction
+        if (mintResult.raw_data) {
+            const txResult = await apiCall('process_invoke_data', {
+                data: mintResult.raw_data
+            });
+
+            if (txResult.error) {
+                throw new Error(txResult.error.message || 'Transaction failed');
+            }
+
+            showToastAdvanced('Tokens Minted!', `${amount} ${currentMintAsset.symbol} minted to your wallet`, 'success');
+        } else {
+            showToastAdvanced('Minting Initiated', `${amount} ${currentMintAsset.symbol}`, 'success');
+        }
+
+        closeModal('mint-token-modal');
+
+        // Refresh wallet data
+        await loadWalletData();
+        renderAssetCards();
+
+    } catch (e) {
+        showToastAdvanced('Minting Failed', e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Mint Tokens';
+    }
+}
+
+// Add event listener for color picker
+document.addEventListener('DOMContentLoaded', () => {
+    const colorPicker = document.getElementById('ct-color');
+    if (colorPicker) {
+        colorPicker.addEventListener('input', syncColorToHex);
+    }
+});
+
+// ============================================
+// EXPLORER PAGE
+// ============================================
+let EXPLORER_NODES = []; // Loaded from config/nodes.json
+let EXPLORER_API = localStorage.getItem('explorerApi') || 'https://explorer.0xmx.net/api';
+let explorerConnected = false;
+let currentExplorerTab = 'overview';
+let explorerData = {
+    status: null,
+    blocks: [],
+    assets: [],
+    contracts: [],
+    dexPools: [],
+    dexTrades: [],
+    lastUpdate: 0,
+    blocksMaxHeight: null,
+    // Timestamps for cache TTL
+    assetsTimestamp: 0,
+    contractsTimestamp: 0,
+    dexTimestamp: 0
+};
+
+// Cache TTL in milliseconds (60 seconds)
+const EXPLORER_CACHE_TTL = 60000;
+
+// Pagination state
+let explorerPagination = {
+    assets: { page: 0, perPage: 50 },
+    contracts: { page: 0, perPage: 50 },
+    trades: { page: 0, perPage: 30 }
+};
+
+// Load Explorer nodes from config
+async function loadExplorerNodesConfig() {
+    try {
+        const resp = await fetch('/config/nodes.json');
+        const config = await resp.json();
+        EXPLORER_NODES = config.mainnet?.explorerNodes || [];
+
+        // Populate the selector in Settings
+        const selector = document.getElementById('explorer-node-selector');
+        if (selector && EXPLORER_NODES.length > 0) {
+            selector.innerHTML = EXPLORER_NODES.map(node =>
+                `<option value="${node.url}">${node.name}</option>`
+            ).join('');
+            selector.value = EXPLORER_API;
+        }
+    } catch (e) {
+        console.error('Failed to load explorer nodes config:', e);
+        // Fallback to default
+        EXPLORER_NODES = [
+            { name: 'explorer.0xmx.net (Primary)', url: 'https://explorer.0xmx.net/api' }
+        ];
+    }
+}
+
+// Show Explorer tab
+function showExplorerTab(tabName, updateUrl = true) {
+    currentExplorerTab = tabName;
+
+    // Update URL
+    if (updateUrl) {
+        history.pushState({ page: 'explorer', tab: tabName }, '', `/explorer/${tabName}`);
+    }
+
+    // Update tab buttons
+    document.querySelectorAll('.explorer-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.explorerTab === tabName);
+    });
+
+    // Update tab content
+    document.querySelectorAll('.explorer-tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `explorer-tab-${tabName}`);
+    });
+
+    // Load data for the tab if needed
+    switch (tabName) {
+        case 'overview':
+            loadExplorerOverview();
+            break;
+        case 'blocks':
+            loadExplorerBlocks();
+            break;
+        case 'assets':
+            loadExplorerAssets();
+            break;
+        case 'dex':
+            loadExplorerDexPools();
+            break;
+        case 'contracts':
+            loadExplorerContracts();
+            break;
+        case 'swaps':
+            loadExplorerAtomicSwaps();
+            break;
+    }
+}
+
+// Initialize Explorer page when it becomes active
+function initExplorerPage() {
+    // Check for URL route (set by serve.py)
+    const route = window.EXPLORER_ROUTE;
+
+    // Check connection first
+    if (!explorerConnected) {
+        testExplorerConnectionForPage().then(() => {
+            handleExplorerRoute(route);
+        });
+    } else {
+        handleExplorerRoute(route);
+    }
+}
+
+// Handle Explorer route from URL
+function handleExplorerRoute(route) {
+    if (!route || !route.type) {
+        showExplorerTab('overview');
+        return;
+    }
+
+    switch (route.type) {
+        case 'block':
+            showExplorerTab('blocks');
+            if (route.id) {
+                setTimeout(() => showBlockDetail(parseInt(route.id)), 500);
+            }
+            break;
+        case 'asset':
+            // Asset detail is now a full page, go directly to it
+            if (route.id) {
+                showAssetDetail(parseInt(route.id));
+            } else {
+                showExplorerTab('assets');
+            }
+            break;
+        case 'contract':
+            // Contract detail is now a full page, go directly to it
+            if (route.id) {
+                showContractDetail(route.id);
+            } else {
+                showExplorerTab('contracts');
+            }
+            break;
+        case 'dex':
+            showExplorerTab('dex');
+            break;
+        case 'blocks':
+            showExplorerTab('blocks');
+            break;
+        case 'assets':
+            showExplorerTab('assets');
+            break;
+        case 'contracts':
+            showExplorerTab('contracts');
+            break;
+        case 'swaps':
+            showExplorerTab('swaps');
+            break;
+        default:
+            showExplorerTab('overview');
+    }
+
+    // Clear the route after handling
+    window.EXPLORER_ROUTE = null;
+}
+
+// Test Explorer connection for page
+async function testExplorerConnectionForPage() {
+    try {
+        const resp = await fetch(`${EXPLORER_API}/status`, { signal: AbortSignal.timeout(5000) });
+        if (resp.ok) {
+            explorerConnected = true;
+            updateExplorerPageConnection(true);
+            showExplorerTab('overview');
+        } else {
+            throw new Error('HTTP ' + resp.status);
+        }
+    } catch (e) {
+        explorerConnected = false;
+        updateExplorerPageConnection(false);
+    }
+}
+
+// Update Explorer page connection status
+function updateExplorerPageConnection(connected) {
+    const badge = document.getElementById('explorer-api-badge');
+    const notConnected = document.getElementById('explorer-not-connected');
+    const contentArea = document.querySelector('.explorer-content-area');
+
+    if (connected) {
+        if (badge) {
+            badge.classList.add('connected');
+            const nodeName = EXPLORER_NODES.find(n => n.url === EXPLORER_API)?.name || 'Connected';
+            document.getElementById('explorer-api-name').textContent = nodeName;
+        }
+        if (notConnected) notConnected.style.display = 'none';
+        if (contentArea) contentArea.style.display = 'block';
+    } else {
+        if (badge) {
+            badge.classList.remove('connected');
+            document.getElementById('explorer-api-name').textContent = 'Not connected';
+        }
+        if (notConnected) notConnected.style.display = 'flex';
+        if (contentArea) contentArea.style.display = 'none';
+    }
+}
+
+// Load Explorer overview data
+async function loadExplorerOverview() {
+    try {
+        // cols: H=Height, T=Timestamp, k=Txs, f=Fee, i=MW.Inputs, o=MW.Outputs
+        const [status, blocks] = await Promise.all([
+            fetchExplorerAPI('/status'),
+            fetchExplorerAPI('/hdrs', { nMax: 10, exp_am: 1, cols: 'HTkfio' })
+        ]);
+
+        explorerConnected = true;
+        explorerData.status = status;
+        explorerData.lastUpdate = Date.now();
+
+        // Render stats - using new element IDs
+        const setTextSafe = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+
+        setTextSafe('explorer-height', (status.height || 0).toLocaleString());
+        setTextSafe('explorer-peers', status.peers_count || 0);
+
+        // Format chainwork nicely
+        const chainwork = status.chainwork || '';
+        const cwNum = parseFloat(chainwork.replace(/,/g, ''));
+        if (cwNum >= 1e12) {
+            setTextSafe('explorer-chainwork', (cwNum / 1e12).toFixed(2) + 'T');
+        } else {
+            setTextSafe('explorer-chainwork', chainwork);
+        }
+
+        setTextSafe('explorer-shielded-24h', status.shielded_outputs_per_24h || 0);
+        setTextSafe('explorer-shielded-total', (status.shielded_outputs_total || 0).toLocaleString());
+
+        // Shielded ready hours - display as integer (no decimals)
+        const shieldedReady = status.shielded_possible_ready_in_hours || 0;
+        setTextSafe('explorer-shielded-ready', shieldedReady > 0 ? Math.round(shieldedReady).toLocaleString() : '--');
+
+        // Last block time
+        if (status.timestamp) {
+            const date = new Date(status.timestamp * 1000);
+            setTextSafe('explorer-last-block', date.toLocaleString());
+        }
+
+        // Block hash (truncated)
+        if (status.hash) {
+            setTextSafe('explorer-block-hash', status.hash.substring(0, 10) + '...');
+        }
+
+        updateExplorerPageConnection(true);
+
+        // Parse and render recent blocks
+        if (blocks?.value && blocks.value.length > 1) {
+            const headers = blocks.value[0].map(h => h.value || h);
+            explorerData.blocks = blocks.value.slice(1).map(row => {
+                const obj = {};
+                headers.forEach((h, i) => {
+                    const cell = row[i];
+                    obj[h] = (cell?.value !== undefined) ? cell.value : cell;
+                });
+                return obj;
+            });
+            renderExplorerRecentBlocks(explorerData.blocks);
+        }
+
+    } catch (e) {
+        console.error('Explorer overview error:', e);
+        explorerConnected = false;
+        updateExplorerPageConnection(false);
+    }
+}
+
+// Format block time for table
+function formatBlockDateTime(ts) {
+    if (!ts) return '-';
+    const date = new Date(ts * 1000);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const mins = date.getMinutes().toString().padStart(2, '0');
+    const secs = date.getSeconds().toString().padStart(2, '0');
+    return `${day}/${month}/${year}, ${hours}:${mins}:${secs}`;
+}
+
+// Render recent blocks on overview (table format)
+function renderExplorerRecentBlocks(blocks) {
+    const container = document.getElementById('explorer-recent-blocks');
+    if (!container) return;
+
+    if (!blocks || blocks.length === 0) {
+        container.innerHTML = '<tr><td colspan="6" class="loading-state">No blocks found</td></tr>';
+        return;
+    }
+
+    container.innerHTML = blocks.map(block => `
+        <tr onclick="showBlockDetail(${block.Height})">
+            <td class="highlight">${(block.Height || 0).toLocaleString()}</td>
+            <td>${formatBlockDateTime(block.Timestamp)}</td>
+            <td>${block.Txs || 0}</td>
+            <td>${block['MW.Inputs'] || block.MWInputs || 0}</td>
+            <td>${block['MW.Outputs'] || block.MWOutputs || 0}</td>
+            <td>${formatAmount(block.Fee || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+// Column definitions for blocks table
+const BLOCK_COLUMNS = {
+    'Height': { code: 'H', label: 'HEIGHT', render: (v) => `<td class="highlight">${(v || 0).toLocaleString()}</td>` },
+    'Timestamp': { code: 'T', label: 'TIME', render: (v) => `<td>${formatBlockDateTime(v)}</td>` },
+    'Txs': { code: 'k', label: 'TXS', render: (v) => `<td>${v || 0}</td>` },
+    'MW.Inputs': { code: 'i', label: 'MW IN', render: (v) => `<td>${v || 0}</td>` },
+    'MW.Outputs': { code: 'o', label: 'MW OUT', render: (v) => `<td>${v || 0}</td>` },
+    'Fee': { code: 'f', label: 'FEE (BEAM)', render: (v) => `<td>${formatAmount(v || 0)}</td>` },
+    'SH.Inputs': { code: 'y', label: 'SH IN', render: (v) => `<td>${v || 0}</td>` },
+    'SH.Outputs': { code: 'z', label: 'SH OUT', render: (v) => `<td>${v || 0}</td>` },
+    'Difficulty': { code: 'd', label: 'DIFFICULTY', render: (v) => `<td>${formatLargeNumber(v || 0)}</td>` },
+    'Chainwork': { code: 'D', label: 'CHAINWORK', render: (v) => `<td>${formatLargeNumber(v || 0)}</td>` },
+    'Contracts': { code: 'b', label: 'CONTRACTS', render: (v) => `<td>${v || 0}</td>` },
+    'ContractCalls': { code: 'p', label: 'CALLS', render: (v) => `<td>${v || 0}</td>` }
+};
+
+// Get selected columns from checkboxes
+function getSelectedBlockColumns() {
+    const checkboxes = document.querySelectorAll('#block-column-filters input[type="checkbox"]:checked');
+    const selected = [];
+    checkboxes.forEach(cb => {
+        const col = cb.dataset.col;
+        if (col && BLOCK_COLUMNS[col]) {
+            selected.push(col);
+        }
+    });
+    return selected.length ? selected : ['Height', 'Timestamp', 'Txs', 'MW.Inputs', 'MW.Outputs', 'Fee'];
+}
+
+// Update block columns and reload
+function updateBlockColumns() {
+    const selectedCols = getSelectedBlockColumns();
+
+    // Update table header
+    const header = document.getElementById('blocks-table-header');
+    if (header) {
+        header.innerHTML = `<tr>${selectedCols.map(col => `<th>${BLOCK_COLUMNS[col].label}</th>`).join('')}</tr>`;
+    }
+
+    // Store last blocks and re-render
+    if (explorerData.blocks && explorerData.blocks.length > 0) {
+        renderExplorerBlocksList(explorerData.blocks, true);
+    } else {
+        // Reload blocks with new columns
+        loadExplorerBlocks();
+    }
+}
+
+// Load full blocks list
+async function loadExplorerBlocks(startHeight = null) {
+    const container = document.getElementById('explorer-blocks-list');
+    if (!container) return;
+
+    const selectedCols = getSelectedBlockColumns();
+    const colCount = selectedCols.length;
+    container.innerHTML = `<tr><td colspan="${colCount}" class="loading-state">Loading blocks...</td></tr>`;
+
+    try {
+        // Build column codes from selected columns
+        const colCodes = selectedCols.map(col => BLOCK_COLUMNS[col].code).join('');
+        const params = { nMax: 50, exp_am: 1, cols: colCodes };
+        if (startHeight) params.hMax = startHeight;
+
+        const blocks = await fetchExplorerAPI('/hdrs', params);
+
+        if (blocks?.value && blocks.value.length > 1) {
+            const headers = blocks.value[0].map(h => h.value || h);
+            const blockList = blocks.value.slice(1).map(row => {
+                const obj = {};
+                headers.forEach((h, i) => {
+                    const cell = row[i];
+                    obj[h] = (cell?.value !== undefined) ? cell.value : cell;
+                });
+                return obj;
+            });
+
+            // Store blocks for column updates
+            explorerData.blocks = startHeight ? [...(explorerData.blocks || []), ...blockList] : blockList;
+
+            // Store max height for pagination
+            if (blockList.length > 0) {
+                explorerData.blocksMaxHeight = blockList[blockList.length - 1].Height - 1;
+            }
+
+            renderExplorerBlocksList(blockList, !startHeight);
+            document.getElementById('blocks-pagination').style.display = 'block';
+        }
+    } catch (e) {
+        console.error('Explorer blocks error:', e);
+        container.innerHTML = `<tr><td colspan="${selectedCols.length}" class="loading-state">Failed to load blocks</td></tr>`;
+    }
+}
+
+// Render blocks list (table format)
+function renderExplorerBlocksList(blocks, replace = true) {
+    const container = document.getElementById('explorer-blocks-list');
+    if (!container) return;
+
+    const selectedCols = getSelectedBlockColumns();
+
+    const rows = blocks.map(block => {
+        const cells = selectedCols.map(col => {
+            const colDef = BLOCK_COLUMNS[col];
+            const value = block[col] !== undefined ? block[col] : block[col.replace('.', '')];
+            return colDef.render(value);
+        }).join('');
+        return `<tr onclick="showBlockDetail(${block.Height})">${cells}</tr>`;
+    }).join('');
+
+    if (replace) {
+        container.innerHTML = rows;
+    } else {
+        container.innerHTML += rows;
+    }
+}
+
+// Load more blocks
+function loadMoreBlocks() {
+    if (explorerData.blocksMaxHeight) {
+        loadExplorerBlocks(explorerData.blocksMaxHeight);
+    }
+}
+
+// Show block detail (full page view like assets/contracts)
+async function showBlockDetail(height) {
+    // Update URL
+    history.pushState({ page: 'explorer-block-detail', height }, '', `/explorer/block/${height}`);
+
+    // Show the block detail page (must set both class AND inline style)
+    document.querySelectorAll('.page').forEach(p => {
+        p.classList.remove('active');
+        p.style.display = 'none';
+    });
+    const detailPage = document.getElementById('page-explorer-block-detail');
+    detailPage.classList.add('active');
+    detailPage.style.display = 'block';
+    window.scrollTo(0, 0);
+
+    const content = document.getElementById('block-detail-content');
+    content.innerHTML = '<div class="loading-state">Loading block...</div>';
+
+    try {
+        // Fetch block data
+        const block = await fetchExplorerAPI('/block', { height });
+
+        if (!block || !block.found) {
+            content.innerHTML = '<div class="error-state">Block not found</div>';
+            return;
+        }
+
+        // Format timestamp
+        const date = new Date(block.timestamp * 1000);
+        const timeStr = date.toLocaleString();
+
+        // Build detail view
+        content.innerHTML = `
+            <div class="detail-header">
+                <div class="detail-icon" style="background: linear-gradient(135deg, var(--beam-cyan), var(--beam-green));">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <path d="M3 9h18M9 21V9"/>
+                    </svg>
+                </div>
+                <div class="detail-title">
+                    <h2>Block #${height.toLocaleString()}</h2>
+                    <div class="subtitle">${timeStr}</div>
+                </div>
+            </div>
+
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">Height</div>
+                    <div class="detail-value highlight">${block.height?.toLocaleString() || height}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Timestamp</div>
+                    <div class="detail-value">${timeStr}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Difficulty</div>
+                    <div class="detail-value">${block.difficulty?.toLocaleString() || '--'}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Subsidy</div>
+                    <div class="detail-value">${block.subsidy ? (block.subsidy / 100000000).toFixed(8) + ' BEAM' : '--'}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Chainwork</div>
+                    <div class="detail-value">${block.chainwork ? formatLargeNumber(parseInt(block.chainwork.replace(/,/g, ''))) : '--'}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">USD Rate</div>
+                    <div class="detail-value">${block.rate_usd != null ? '$' + Number(block.rate_usd).toFixed(4) : '--'}</div>
+                </div>
+                <div class="detail-item full-width">
+                    <div class="detail-label">Hash</div>
+                    <div class="detail-value mono-text" style="font-size: 12px; word-break: break-all;">${block.hash || '--'}</div>
+                </div>
+                <div class="detail-item full-width">
+                    <div class="detail-label">Previous Hash</div>
+                    <div class="detail-value mono-text" style="font-size: 12px; word-break: break-all;">${block.prev || '--'}</div>
+                </div>
+            </div>
+
+            ${block.inputs?.length ? `
+                <div class="detail-section">
+                    <h3>Inputs (${block.inputs.length})</h3>
+                    <div class="table-wrapper">
+                        <table class="explorer-table">
+                            <thead><tr><th>Commitment</th><th>Value</th><th>Height</th><th>Maturity</th></tr></thead>
+                            <tbody>
+                                ${block.inputs.slice(0, 20).map(inp => `
+                                    <tr>
+                                        <td class="mono-text" style="font-size: 11px;">${inp.commitment?.substring(0, 24) || '--'}...</td>
+                                        <td>${inp.Value ? (inp.Value / 100000000).toFixed(8) + ' BEAM' : '--'}</td>
+                                        <td>${inp.height || '--'}</td>
+                                        <td>${inp.Maturity || '--'}</td>
+                                    </tr>
+                                `).join('')}
+                                ${block.inputs.length > 20 ? `<tr><td colspan="4" class="text-muted">...and ${block.inputs.length - 20} more inputs</td></tr>` : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ` : ''}
+
+            ${block.outputs?.length ? `
+                <div class="detail-section">
+                    <h3>Outputs (${block.outputs.length})</h3>
+                    <div class="table-wrapper">
+                        <table class="explorer-table">
+                            <thead><tr><th>Commitment</th><th>Asset</th><th>Status</th></tr></thead>
+                            <tbody>
+                                ${block.outputs.slice(0, 20).map(out => `
+                                    <tr>
+                                        <td class="mono-text" style="font-size: 11px;">${out.commitment?.substring(0, 24) || '--'}...</td>
+                                        <td>${out.Asset ? `ID: ${out.Asset.min}${out.Asset.min !== out.Asset.max ? '-' + out.Asset.max : ''}` : 'BEAM'}</td>
+                                        <td><span class="${out.spent ? 'text-muted' : 'text-success'}">${out.spent ? 'Spent' : 'Unspent'}</span></td>
+                                    </tr>
+                                `).join('')}
+                                ${block.outputs.length > 20 ? `<tr><td colspan="3" class="text-muted">...and ${block.outputs.length - 20} more outputs</td></tr>` : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ` : ''}
+
+            ${block.kernels?.length ? `
+                <div class="detail-section">
+                    <h3>Kernels (${block.kernels.length})</h3>
+                    <div class="table-wrapper">
+                        <table class="explorer-table">
+                            <thead><tr><th>ID</th><th>Fee</th><th>Min Height</th><th>Max Height</th></tr></thead>
+                            <tbody>
+                                ${block.kernels.slice(0, 20).map(k => `
+                                    <tr>
+                                        <td class="mono-text" style="font-size: 11px;">${k.id?.substring(0, 24) || '--'}...</td>
+                                        <td>${k.fee ? (k.fee / 100000000).toFixed(8) + ' BEAM' : '0'}</td>
+                                        <td>${k.minHeight || '--'}</td>
+                                        <td>${k.maxHeight || '--'}</td>
+                                    </tr>
+                                `).join('')}
+                                ${block.kernels.length > 20 ? `<tr><td colspan="4" class="text-muted">...and ${block.kernels.length - 20} more kernels</td></tr>` : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ` : ''}
+        `;
+    } catch (e) {
+        console.error('Block detail error:', e);
+        content.innerHTML = `<div class="error-state">Failed to load block: ${e.message}</div>`;
+    }
+}
+
+// Parse metadata from BEAM STD format
+function parseAssetMetadata(metaStr) {
+    if (!metaStr) return {};
+    if (typeof metaStr === 'object') return metaStr;
+    const result = {};
+    String(metaStr).replace('STD:', '').split(';').forEach(p => {
+        const [k, ...v] = p.split('=');
+        if (k) result[k] = v.join('=');
+    });
+    return result;
+}
+
+// Get decimals from NTHUN field
+function getAssetDecimals(nthun) {
+    if (!nthun) return 8;
+    const units = { Groth: 8, Cent: 6, Satoshi: 8, fomo: 8, Flicker: 8, MiniB: 8 };
+    return units[nthun] || 8;
+}
+
+// Format asset amount with proper decimals
+function formatAssetAmount(amt, decimals = 8) {
+    const v = Math.abs(Number(amt)) / Math.pow(10, decimals);
+    if (v >= 1e12) return (v / 1e12).toFixed(2) + 'T';
+    if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+    if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+    if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+    return v.toFixed(Math.min(decimals, 4));
+}
+
+// Parse table value from Explorer API response
+function parseTableValue(cell) {
+    if (cell == null) return null;
+    if (typeof cell !== 'object') return cell;
+    if (cell.type === 'table') return cell;
+    if (cell.type === 'amount') return cell.value;
+    if ('value' in cell) return cell.value;
+    return cell;
+}
+
+// Parse table rows from Explorer API response
+function parseExplorerTableRows(data) {
+    if (!data?.value || !Array.isArray(data.value) || data.value.length < 2) return [];
+    const headerRow = data.value[0];
+    if (!Array.isArray(headerRow)) return [];
+    const headers = headerRow.map(h => parseTableValue(h) || String(h));
+    return data.value.slice(1).map(row => {
+        if (!Array.isArray(row)) return row;
+        const obj = {};
+        headers.forEach((h, i) => obj[h] = parseTableValue(row[i]));
+        return obj;
+    });
+}
+
+// Escape HTML
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+}
+
+// Copy button HTML
+function copyBtnHtml(text) {
+    return `<button class="copy-btn" onclick="event.stopPropagation(); copyToClipboard('${text}', this)" title="Copy">Copy</button>`;
+}
+
+// Copy to clipboard
+function copyToClipboard(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        if (btn) {
+            btn.classList.add('copied');
+            btn.textContent = 'Copied!';
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                btn.textContent = 'Copy';
+            }, 2000);
+        }
+    });
+}
+
+// Show asset detail (full page, like BeamExplorer.html)
+async function showAssetDetail(assetId) {
+    // Update URL
+    history.pushState({ page: 'explorer-asset-detail', assetId }, '', `/explorer/asset/${assetId}`);
+
+    // Show the asset detail page (must set both class AND inline style)
+    document.querySelectorAll('.page').forEach(p => {
+        p.classList.remove('active');
+        p.style.display = 'none';
+    });
+    const detailPage = document.getElementById('page-explorer-asset-detail');
+    detailPage.classList.add('active');
+    detailPage.style.display = 'block';
+    window.scrollTo(0, 0);
+
+    const content = document.getElementById('asset-detail-content');
+    content.innerHTML = '<div class="loading-state">Loading asset...</div>';
+
+    try {
+        // BEAM (asset 0) is totally private - no detail page
+        if (assetId === 0) {
+            showExplorerTab('assets');
+            return;
+        }
+
+        // Get asset info from our cache (has proper names, symbols, icons)
+        const assetInfo = getExplorerAssetInfo(assetId);
+
+        // Fetch Confidential Asset data from explorer
+        const asset = await fetchExplorerAPI('/asset', { id: assetId, nMaxOps: 100 });
+
+        // Parse metadata from explorer (fallback)
+        const meta = parseAssetMetadata(asset?.metadata);
+
+        // Use assetInfo first (from ASSET_CONFIG/allAssetsCache), then metadata fallback
+        const symbol = assetInfo.symbol || meta.UN || meta.SN || meta.N || `CA-${assetId}`;
+        const name = assetInfo.name || meta.N || `Asset ${assetId}`;
+        const decimals = assetInfo.decimals || getAssetDecimals(meta.NTHUN);
+        const icon = assetInfo.icon;
+        const color = assetInfo.color || '#25c2a0';
+
+        // Parse distribution
+        const distribution = parseExplorerTableRows(asset?.['Asset distribution'] || {});
+
+        // Parse history
+        const history = parseExplorerTableRows(asset?.['Asset history'] || {});
+
+        // Build icon HTML with proper logo
+        let iconHtml;
+        if (icon) {
+            iconHtml = `<img src="${icon}" alt="${symbol}" class="detail-icon-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="detail-icon-fallback" style="display:none; background:${color}">${symbol.slice(0,2).toUpperCase()}</div>`;
+        } else {
+            iconHtml = `<div class="detail-icon-fallback" style="background:${color}">${symbol.slice(0,2).toUpperCase()}</div>`;
+        }
+
+        // Find pools containing this asset
+        let poolsHtml = '';
+        try {
+            const dexResp = await fetchExplorerAPI('/contract', { id: DEX_CONTRACT_ID, state: 1 });
+            const poolsTable = dexResp?.State?.Pools;
+            if (poolsTable?.value) {
+                const pools = parseExplorerTableRows(poolsTable).filter(p =>
+                    (p.Aid1 == assetId || p.Aid2 == assetId) && ((p['Amount1'] || 0) > 0 || (p['Amount2'] || 0) > 0)
+                );
+                if (pools.length) {
+                    poolsHtml = `
+                        <div class="detail-section">
+                            <h3>Liquidity Pools (${pools.length})</h3>
+                            <div class="card-grid">
+                                ${pools.map(p => {
+                                    const a1 = getExplorerAssetInfo(p.Aid1);
+                                    const a2 = getExplorerAssetInfo(p.Aid2);
+                                    const vol = (p.Volatility || 'High').toLowerCase();
+                                    const volClass = vol === 'high' ? 'vol-high' : vol === 'medium' ? 'vol-medium' : 'vol-low';
+                                    const rate = p['Rate 1:2'] || '';
+                                    const otherAssetId = p.Aid1 == assetId ? p.Aid2 : p.Aid1;
+                                    return `
+                                        <div class="pool-card" onclick="showAssetDetail(${otherAssetId})">
+                                            <div class="pool-pair">
+                                                <div class="pool-pair-icons">
+                                                    ${renderAssetBadge(p.Aid1)}
+                                                    ${renderAssetBadge(p.Aid2)}
+                                                </div>
+                                                <span class="pool-pair-name">${a1.symbol} / ${a2.symbol}</span>
+                                                <span class="volatility-badge ${volClass}">${p.Volatility || 'High'}</span>
+                                            </div>
+                                            <div class="pool-stats">
+                                                <div class="pool-stat">
+                                                    <div class="pool-stat-label">${a1.symbol} Reserve</div>
+                                                    <div class="pool-stat-value">${formatAssetAmount(p['Amount1'] || 0, a1.decimals || 8)}</div>
+                                                </div>
+                                                <div class="pool-stat">
+                                                    <div class="pool-stat-label">${a2.symbol} Reserve</div>
+                                                    <div class="pool-stat-value">${formatAssetAmount(p['Amount2'] || 0, a2.decimals || 8)}</div>
+                                                </div>
+                                                <div class="pool-stat">
+                                                    <div class="pool-stat-label">LP Token ID</div>
+                                                    <div class="pool-stat-value">#${p['LP-Token'] || 'N/A'}</div>
+                                                </div>
+                                                <div class="pool-stat">
+                                                    <div class="pool-stat-label">LP Supply</div>
+                                                    <div class="pool-stat-value">${formatAssetAmount(p['Amount-LP-Token'] || 0, 8)}</div>
+                                                </div>
+                                                ${rate ? `<div class="pool-stat full-width"><div class="pool-stat-label">Rate</div><div class="pool-stat-value">1 ${a2.symbol} = ${rate} ${a1.symbol}</div></div>` : ''}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        } catch (e) { console.error('Failed to load pools:', e); }
+
+        // Build distribution section
+        let distributionHtml = '';
+        if (distribution.length > 0) {
+            distributionHtml = `
+                <div class="detail-section">
+                    <h3>Distribution (${distribution.length})</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead><tr><th>Location</th><th>Type</th><th>Amount</th></tr></thead>
+                            <tbody>${distribution.map(d => `
+                                <tr ${d.Cid ? `onclick="showContractDetail('${d.Cid}')" class="clickable"` : ''}>
+                                    <td class="mono-text">${d.Cid ? `<span class="hash truncate" title="${d.Cid}">${d.Cid.slice(0,12)}...${d.Cid.slice(-8)}</span>` : 'Unlocked'}</td>
+                                    <td>${d.Kind || '-'}</td>
+                                    <td class="mono-text">${formatAssetAmount(d['Locked Value'] || 0, decimals)} ${symbol}</td>
+                                </tr>
+                            `).join('')}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Build history section
+        let historyHtml = '';
+        if (history.length > 0) {
+            historyHtml = `
+                <div class="detail-section">
+                    <h3>History (${history.length})</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead><tr><th>Block</th><th>Event</th><th>Amount</th><th>Total Supply</th></tr></thead>
+                            <tbody>${history.map(h => {
+                                const eventClass = h.Event === 'Mint' ? 'trade-type-mint' : h.Event === 'Burn' ? 'trade-type-burn' : 'trade-type-create';
+                                const amountStr = h.Amount != null ? String(h.Amount) : '';
+                                const amountClass = amountStr.includes('+') ? 'amount-positive' : amountStr.includes('-') ? 'amount-negative' : '';
+                                const parsedAmount = parseInt(String(h.Amount || '').replace(/[+,]/g, '')) || 0;
+                                return `
+                                    <tr onclick="showBlockDetail(${h.Height})" class="clickable">
+                                        <td><span class="mono-text highlight">${h.Height?.toLocaleString?.() || h.Height}</span></td>
+                                        <td><span class="trade-type ${eventClass}">${h.Event || '-'}</span></td>
+                                        <td class="mono-text ${amountClass}">${h.Amount != null ? formatAssetAmount(parsedAmount, decimals) : '-'}</td>
+                                        <td class="mono-text">${h['Total Amount'] != null ? formatAssetAmount(h['Total Amount'], decimals) : '-'}</td>
+                                    </tr>
+                                `;
+                            }).join('')}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render full page content
+        content.innerHTML = `
+            <div class="detail-header">
+                <div class="detail-icon">
+                    ${iconHtml}
+                </div>
+                <div class="detail-title">
+                    <h2>${escapeHtml(symbol)}</h2>
+                    <div class="subtitle">${escapeHtml(name)} <span class="asset-id-badge">#${assetId}</span></div>
+                </div>
+            </div>
+
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">Total Supply</div>
+                    <div class="detail-value">${formatAssetAmount(asset?.value || 0, decimals)} ${symbol}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Decimals</div>
+                    <div class="detail-value">${decimals}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Lock Height</div>
+                    <div class="detail-value">${asset?.lock_height ? asset.lock_height.toLocaleString() : 'None'}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Owner Contract</div>
+                    <div class="detail-value">${asset?.owner ? `<span class="hash truncate clickable" onclick="showContractDetail('${asset.owner}')" title="${asset.owner}">${asset.owner.slice(0,12)}...${asset.owner.slice(-8)}</span>` : 'None'}</div>
+                </div>
+                ${meta.OPT_SITE_URL ? `<div class="detail-item"><div class="detail-label">Website</div><div class="detail-value"><a href="${escapeHtml(meta.OPT_SITE_URL)}" target="_blank">${escapeHtml(meta.OPT_SITE_URL.slice(0,40))}...</a></div></div>` : ''}
+                ${meta.OPT_SHORT_DESC ? `<div class="detail-item full-width"><div class="detail-label">Description</div><div class="detail-value">${escapeHtml(meta.OPT_SHORT_DESC)}</div></div>` : ''}
+            </div>
+
+            ${distributionHtml}
+            ${poolsHtml}
+            ${historyHtml}
+        `;
+    } catch (e) {
+        console.error('Asset detail error:', e);
+        content.innerHTML = `<div class="error-state">Failed to load asset: ${e.message}</div>`;
+    }
+}
+
+// Show contract detail (full page, like BeamExplorer.html)
+async function showContractDetail(cid) {
+    // Update URL
+    history.pushState({ page: 'explorer-contract-detail', cid }, '', `/explorer/contract/${cid}`);
+
+    // Show the contract detail page (must set both class AND inline style)
+    document.querySelectorAll('.page').forEach(p => {
+        p.classList.remove('active');
+        p.style.display = 'none';
+    });
+    const detailPage = document.getElementById('page-explorer-contract-detail');
+    detailPage.classList.add('active');
+    detailPage.style.display = 'block';
+    window.scrollTo(0, 0);
+
+    const content = document.getElementById('contract-detail-content');
+    content.innerHTML = '<div class="loading-state">Loading contract...</div>';
+
+    try {
+        // Fetch contract data
+        const contract = await fetchExplorerAPI('/contract', { id: cid, state: 1, nMaxTxs: 50 });
+
+        const kind = contract?.kind || 'Unknown';
+        const height = contract?.h || '--';
+        const isDex = cid === DEX_CONTRACT_ID;
+
+        // Build locked funds section
+        let lockedHtml = '';
+        const lockedFunds = contract?.['Locked Funds'];
+        if (lockedFunds?.value && Array.isArray(lockedFunds.value) && lockedFunds.value.length > 1) {
+            const rows = lockedFunds.value.slice(1);
+            lockedHtml = `
+                <div class="detail-section">
+                    <h3>Locked Funds (${rows.length})</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead><tr><th>Asset</th><th>Amount</th></tr></thead>
+                            <tbody>${rows.map(r => {
+                                const aid = parseTableValue(r[0]);
+                                const amount = parseTableValue(r[1]);
+                                const assetInfo = getExplorerAssetInfo(aid);
+                                return `
+                                    <tr onclick="showAssetDetail(${aid})" class="clickable">
+                                        <td>
+                                            <div class="asset-info-cell">
+                                                ${renderAssetBadge(aid)}
+                                                <span class="asset-aid">(ID: ${aid})</span>
+                                            </div>
+                                        </td>
+                                        <td class="mono-text">${formatAssetAmount(amount || 0, assetInfo.decimals || 8)}</td>
+                                    </tr>
+                                `;
+                            }).join('')}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Build owned assets section
+        let ownedHtml = '';
+        const ownedAssets = contract?.['Owned assets'];
+        if (ownedAssets?.value && Array.isArray(ownedAssets.value) && ownedAssets.value.length > 1) {
+            const rows = ownedAssets.value.slice(1);
+            ownedHtml = `
+                <div class="detail-section">
+                    <h3>Owned Assets (${rows.length})</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead><tr><th>Asset</th><th>Supply</th></tr></thead>
+                            <tbody>${rows.map(r => {
+                                const aid = parseTableValue(r[0]);
+                                const supply = parseTableValue(r[1]);
+                                const assetInfo = getExplorerAssetInfo(aid);
+                                return `
+                                    <tr onclick="showAssetDetail(${aid})" class="clickable">
+                                        <td>
+                                            <div class="asset-info-cell">
+                                                ${renderAssetBadge(aid)}
+                                                <span class="asset-aid">(ID: ${aid})</span>
+                                            </div>
+                                        </td>
+                                        <td class="mono-text">${formatAssetAmount(supply || 0, assetInfo.decimals || 8)}</td>
+                                    </tr>
+                                `;
+                            }).join('')}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Build calls history section
+        let historyHtml = '';
+        const callsHistory = contract?.['Calls history'];
+        if (callsHistory?.value && callsHistory.value.length > 1) {
+            const calls = [];
+            callsHistory.value.slice(1).forEach(item => {
+                const rows = item.type === 'group' ? item.value : [item];
+                rows.forEach(row => {
+                    if (!Array.isArray(row)) return;
+                    calls.push({
+                        height: row[0],
+                        kind: row[3] || '-'
+                    });
+                });
+            });
+
+            if (calls.length) {
+                historyHtml = `
+                    <div class="detail-section">
+                        <h3>Recent Calls (${calls.length})</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead><tr><th>Block</th><th>Action</th></tr></thead>
+                                <tbody>${calls.slice(0, 50).map(c => {
+                                    const actionClass = c.kind === 'Trade' ? 'trade-type-trade' :
+                                                       c.kind === 'Withdraw' ? 'trade-type-withdraw' :
+                                                       String(c.kind).includes('Liquidity') ? 'trade-type-liquidity' : '';
+                                    return `
+                                        <tr onclick="showBlockDetail(${c.height})" class="clickable">
+                                            <td><span class="mono-text highlight">${typeof c.height === 'number' ? c.height.toLocaleString() : c.height}</span></td>
+                                            <td><span class="trade-type ${actionClass}">${c.kind}</span></td>
+                                        </tr>
+                                    `;
+                                }).join('')}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Build state section (for DEX, show pools)
+        let stateHtml = '';
+        if (contract?.State?.Pools?.value) {
+            const pools = parseExplorerTableRows(contract.State.Pools).filter(p =>
+                (p['Amount1'] || 0) > 0 || (p['Amount2'] || 0) > 0
+            );
+            if (pools.length) {
+                stateHtml = `
+                    <div class="detail-section">
+                        <h3>Liquidity Pools (${pools.length})</h3>
+                        <div class="card-grid">
+                            ${pools.slice(0, 12).map(p => {
+                                const a1 = getExplorerAssetInfo(p.Aid1);
+                                const a2 = getExplorerAssetInfo(p.Aid2);
+                                return `
+                                    <div class="pool-card" onclick="showAssetDetail(${p.Aid2})">
+                                        <div class="pool-pair">
+                                            <div class="pool-pair-icons">
+                                                ${renderAssetBadge(p.Aid1)}
+                                                ${renderAssetBadge(p.Aid2)}
+                                            </div>
+                                            <span class="pool-pair-name">${a1.symbol}/${a2.symbol}</span>
+                                        </div>
+                                        <div class="pool-stats">
+                                            <div class="pool-stat">
+                                                <div class="pool-stat-label">${a1.symbol}</div>
+                                                <div class="pool-stat-value">${formatAssetAmount(p['Amount1'] || 0, a1.decimals || 8)}</div>
+                                            </div>
+                                            <div class="pool-stat">
+                                                <div class="pool-stat-label">${a2.symbol}</div>
+                                                <div class="pool-stat-value">${formatAssetAmount(p['Amount2'] || 0, a2.decimals || 8)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Render full page content
+        content.innerHTML = `
+            <div class="detail-header">
+                <div class="detail-icon contract-icon">SC</div>
+                <div class="detail-title">
+                    <h2>${escapeHtml(kind)}${isDex ? ' (DEX)' : ''}</h2>
+                    <div class="subtitle">Smart Contract</div>
+                </div>
+            </div>
+
+            <div class="detail-grid">
+                <div class="detail-item full-width">
+                    <div class="detail-label">Contract ID</div>
+                    <div class="detail-value mono-text">${cid} ${copyBtnHtml(cid)}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Type</div>
+                    <div class="detail-value">${escapeHtml(kind)}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Current Height</div>
+                    <div class="detail-value">${typeof height === 'number' ? height.toLocaleString() : height}</div>
+                </div>
+            </div>
+
+            ${lockedHtml}
+            ${ownedHtml}
+            ${stateHtml}
+            ${historyHtml}
+        `;
+    } catch (e) {
+        console.error('Contract detail error:', e);
+        content.innerHTML = `<div class="error-state">Failed to load contract: ${e.message}</div>`;
+    }
+}
+
+// Close modal and restore URL (for explorer modal-container)
+function closeExplorerModal() {
+    const modal = document.getElementById('modal-container');
+    modal.classList.remove('active');
+    modal.innerHTML = '';
+
+    // Restore URL to explorer tab
+    if (currentExplorerTab) {
+        history.pushState({ page: 'explorer', tab: currentExplorerTab }, '', `/explorer/${currentExplorerTab}`);
+    }
+}
+
+// Load Explorer assets (with caching)
+async function loadExplorerAssets(force = false) {
+    const container = document.getElementById('explorer-assets-grid');
+    if (!container) return;
+
+    // Check cache freshness
+    if (!force && explorerData.assets?.length > 0) {
+        const age = Date.now() - explorerData.assetsTimestamp;
+        if (age < EXPLORER_CACHE_TTL) {
+            console.log('Using cached assets data');
+            explorerPagination.assets.page = 0;
+            renderExplorerAssets(explorerData.assets);
+            return;
+        }
+    }
+
+    container.innerHTML = '<div class="loading-state">Loading assets...</div>';
+
+    try {
+        const assets = await fetchExplorerAPI('/assets');
+
+        if (assets?.value && assets.value.length > 1) {
+            const headers = assets.value[0].map(h => h.value || h);
+            explorerData.assets = assets.value.slice(1).map(row => {
+                const obj = {};
+                headers.forEach((h, i) => {
+                    const cell = row[i];
+                    obj[h] = (cell?.value !== undefined) ? cell.value : cell;
+                });
+                return obj;
+            });
+            explorerData.assetsTimestamp = Date.now();
+            explorerPagination.assets.page = 0;
+
+            renderExplorerAssets(explorerData.assets);
+        }
+    } catch (e) {
+        console.error('Explorer assets error:', e);
+        container.innerHTML = '<div class="loading-state">Failed to load assets</div>';
+    }
+}
+
+// Render Explorer assets (with pagination)
+function renderExplorerAssets(assets, append = false) {
+    const container = document.getElementById('explorer-assets-grid');
+    if (!container) return;
+
+    if (!assets || assets.length === 0) {
+        container.innerHTML = '<div class="loading-state">No assets found</div>';
+        hideLoadMoreAssets();
+        return;
+    }
+
+    // Parse metadata
+    const parseMetadata = (metaStr) => {
+        const meta = {};
+        if (!metaStr) return meta;
+        const pairs = metaStr.split(';');
+        pairs.forEach(pair => {
+            const [key, ...vals] = pair.split('=');
+            if (key && vals.length) meta[key] = vals.join('=');
+        });
+        return meta;
+    };
+
+    const { page, perPage } = explorerPagination.assets;
+    const startIdx = page * perPage;
+    const endIdx = startIdx + perPage;
+    const pageAssets = assets.slice(startIdx, endIdx);
+
+    const html = pageAssets.map(asset => {
+        const meta = parseMetadata(asset.Metadata);
+        const name = meta.N || meta.SN || `Asset ${asset.Aid}`;
+        const symbol = meta.UN || meta.SN || '??';
+        const icon = ASSET_ICONS[asset.Aid] || null;
+        const iconHtml = icon
+            ? `<img src="${icon}" alt="${symbol}" onerror="this.parentElement.innerHTML='${symbol.substring(0,2).toUpperCase()}'">`
+            : symbol.substring(0, 2).toUpperCase();
+
+        return `
+            <div class="explorer-asset-card" onclick="showAssetDetail(${asset.Aid})">
+                <div class="asset-header">
+                    <div class="asset-icon">${iconHtml}</div>
+                    <div class="asset-info">
+                        <h4>${name}</h4>
+                        <div class="asset-id">ID: ${asset.Aid}</div>
+                    </div>
+                </div>
+                <div class="asset-stats">
+                    <div class="asset-stat">
+                        <div class="asset-stat-label">Supply</div>
+                        <div class="asset-stat-value">${formatLargeNumber(asset.Supply || 0)}</div>
+                    </div>
+                    <div class="asset-stat">
+                        <div class="asset-stat-label">Deposit</div>
+                        <div class="asset-stat-value">${formatAmount(asset.Deposit || 0)} BEAM</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (append) {
+        container.insertAdjacentHTML('beforeend', html);
+    } else {
+        container.innerHTML = html;
+    }
+
+    // Show/hide load more button
+    const hasMore = assets.length > endIdx;
+    showLoadMoreAssets(hasMore, assets.length, endIdx);
+}
+
+// Load more assets
+function loadMoreAssets() {
+    explorerPagination.assets.page++;
+    renderExplorerAssets(explorerData.assets, true);
+}
+
+// Show/hide load more assets button
+function showLoadMoreAssets(show, total, loaded) {
+    let btn = document.getElementById('load-more-assets-btn');
+    if (!btn) {
+        // Create button if doesn't exist
+        const container = document.getElementById('explorer-assets-grid');
+        if (container) {
+            btn = document.createElement('button');
+            btn.id = 'load-more-assets-btn';
+            btn.className = 'load-more-btn';
+            btn.onclick = loadMoreAssets;
+            container.parentElement.appendChild(btn);
+        }
+    }
+    if (btn) {
+        btn.style.display = show ? 'block' : 'none';
+        btn.textContent = `Load More Assets (${loaded}/${total})`;
+    }
+}
+
+function hideLoadMoreAssets() {
+    const btn = document.getElementById('load-more-assets-btn');
+    if (btn) btn.style.display = 'none';
+}
+
+// Filter Explorer assets
+function filterExplorerAssets() {
+    const query = document.getElementById('explorer-asset-search').value.toLowerCase().trim();
+    if (!explorerData.assets) return;
+
+    const parseMetadata = (metaStr) => {
+        const meta = {};
+        if (!metaStr) return meta;
+        const pairs = metaStr.split(';');
+        pairs.forEach(pair => {
+            const [key, ...vals] = pair.split('=');
+            if (key && vals.length) meta[key] = vals.join('=');
+        });
+        return meta;
+    };
+
+    const filtered = explorerData.assets.filter(asset => {
+        if (!query) return true;
+        const meta = parseMetadata(asset.Metadata);
+        const name = (meta.N || meta.SN || '').toLowerCase();
+        const symbol = (meta.UN || meta.SN || '').toLowerCase();
+        return name.includes(query) || symbol.includes(query) || String(asset.Aid).includes(query);
+    });
+
+    // Reset pagination when filtering
+    explorerPagination.assets.page = 0;
+    renderExplorerAssets(filtered);
+}
+
+// Format large number
+function formatLargeNumber(num) {
+    if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+    if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+    return num.toLocaleString();
+}
+
+// Load Explorer contracts (with caching)
+async function loadExplorerContracts(force = false) {
+    const container = document.getElementById('explorer-contracts-list');
+    if (!container) return;
+
+    // Check cache freshness
+    if (!force && explorerData.contracts?.length > 0) {
+        const age = Date.now() - explorerData.contractsTimestamp;
+        if (age < EXPLORER_CACHE_TTL) {
+            console.log('Using cached contracts data');
+            explorerPagination.contracts.page = 0;
+            renderExplorerContracts(explorerData.contracts);
+            return;
+        }
+    }
+
+    container.innerHTML = '<tr><td colspan="5" class="loading-state">Loading contracts...</td></tr>';
+
+    try {
+        const contracts = await fetchExplorerAPI('/contracts');
+
+        if (contracts?.value && contracts.value.length > 1) {
+            const headers = contracts.value[0].map(h => h.value || h);
+            explorerData.contracts = contracts.value.slice(1).map(row => {
+                const obj = {};
+                headers.forEach((h, i) => {
+                    const cell = row[i];
+                    // Keep nested tables as-is (they have type: "table")
+                    if (cell && typeof cell === 'object' && cell.type === 'table') {
+                        obj[h] = cell; // Keep the full table object
+                    } else if (cell?.value !== undefined) {
+                        obj[h] = cell.value;
+                    } else {
+                        obj[h] = cell;
+                    }
+                });
+                return obj;
+            });
+            explorerData.contractsTimestamp = Date.now();
+            explorerPagination.contracts.page = 0;
+
+            renderExplorerContracts(explorerData.contracts);
+        }
+    } catch (e) {
+        console.error('Explorer contracts error:', e);
+        container.innerHTML = '<tr><td colspan="5" class="loading-state">Failed to load contracts</td></tr>';
+    }
+}
+
+// Count items in a nested table from Explorer API
+function countNestedTableItems(cell) {
+    if (!cell) return 0;
+    // If it's a table object with value array
+    if (cell.type === 'table' && Array.isArray(cell.value)) {
+        return cell.value.length;
+    }
+    // If it's directly an array (shouldn't happen after fix, but handle anyway)
+    if (Array.isArray(cell)) {
+        return cell.length;
+    }
+    return 0;
+}
+
+// Render Explorer contracts (table format with pagination)
+function renderExplorerContracts(contracts, append = false) {
+    const container = document.getElementById('explorer-contracts-list');
+    if (!container) return;
+
+    if (!contracts || contracts.length === 0) {
+        container.innerHTML = '<tr><td colspan="5" class="loading-state">No contracts found</td></tr>';
+        hideLoadMoreContracts();
+        return;
+    }
+
+    const { page, perPage } = explorerPagination.contracts;
+    const startIdx = page * perPage;
+    const endIdx = startIdx + perPage;
+    const pageContracts = contracts.slice(startIdx, endIdx);
+
+    const html = pageContracts.map(contract => {
+        const cid = contract.Cid || '';
+        // Handle complex Kind objects like {Wrapper: "upgradable2", subtype: {...}}
+        let kind = contract.Kind || 'Unknown';
+        if (typeof kind === 'object') {
+            kind = kind.Wrapper || kind.value || JSON.stringify(kind).slice(0, 30);
+        }
+        const height = contract['Deploy Height'] || contract.Height || 0;
+
+        // Count locked funds and owned assets from nested tables
+        const lockedCount = countNestedTableItems(contract['Locked Funds']);
+        const ownedCount = countNestedTableItems(contract['Owned Assets']);
+
+        // Highlight DEX contract
+        const isDex = cid === DEX_CONTRACT_ID;
+        const cidShort = cid ? (cid.substring(0, 16) + '...' + cid.substring(cid.length - 8)) : '--';
+
+        return `
+            <tr onclick="showContractDetail('${cid}')" class="clickable ${isDex ? 'dex-contract' : ''}">
+                <td class="mono-text" title="${cid}">${cidShort}</td>
+                <td><span class="highlight">${kind}${isDex ? ' (DEX)' : ''}</span></td>
+                <td>${typeof height === 'number' ? height.toLocaleString() : height}</td>
+                <td>${lockedCount} assets</td>
+                <td>${ownedCount} assets</td>
+            </tr>
+        `;
+    }).join('');
+
+    if (append) {
+        container.insertAdjacentHTML('beforeend', html);
+    } else {
+        container.innerHTML = html;
+    }
+
+    // Show/hide load more button
+    const hasMore = contracts.length > endIdx;
+    showLoadMoreContracts(hasMore, contracts.length, endIdx);
+}
+
+// Load more contracts
+function loadMoreContracts() {
+    explorerPagination.contracts.page++;
+    renderExplorerContracts(explorerData.contracts, true);
+}
+
+// Show/hide load more contracts button
+function showLoadMoreContracts(show, total, loaded) {
+    let btn = document.getElementById('load-more-contracts-btn');
+    if (!btn) {
+        // Create button if doesn't exist
+        const table = document.getElementById('explorer-contracts-list')?.closest('table');
+        if (table) {
+            btn = document.createElement('button');
+            btn.id = 'load-more-contracts-btn';
+            btn.className = 'load-more-btn';
+            btn.onclick = loadMoreContracts;
+            table.parentElement.appendChild(btn);
+        }
+    }
+    if (btn) {
+        btn.style.display = show ? 'block' : 'none';
+        btn.textContent = `Load More Contracts (${loaded}/${total})`;
+    }
+}
+
+function hideLoadMoreContracts() {
+    const btn = document.getElementById('load-more-contracts-btn');
+    if (btn) btn.style.display = 'none';
+}
+
+// Load Explorer DEX Pools (with caching)
+async function loadExplorerDexPools(force = false) {
+    const poolsContainer = document.getElementById('explorer-dex-pools');
+    const tradesContainer = document.getElementById('explorer-dex-trades');
+
+    // Check cache freshness
+    if (!force && explorerData.dexTrades?.length > 0) {
+        const age = Date.now() - explorerData.dexTimestamp;
+        if (age < EXPLORER_CACHE_TTL) {
+            console.log('Using cached DEX data');
+            explorerPagination.trades.page = 0;
+            // Re-render from cache
+            if (poolsContainer && explorerData.dexPools) {
+                renderExplorerDexPools(explorerData.dexPools);
+            }
+            if (tradesContainer && explorerData.dexTrades) {
+                renderExplorerDexTradesFromCache();
+            }
+            return;
+        }
+    }
+
+    if (poolsContainer) {
+        poolsContainer.innerHTML = '<tr><td colspan="9" class="loading-state">Loading pools...</td></tr>';
+    }
+    if (tradesContainer) {
+        tradesContainer.innerHTML = '<tr><td colspan="6" class="loading-state">Loading trades...</td></tr>';
+    }
+
+    try {
+        // Fetch DEX contract state
+        const contract = await fetchExplorerAPI('/contract', { id: DEX_CONTRACT_ID, state: 1, nMaxTxs: 50 });
+
+        // Render pools from state
+        if (contract?.State?.Pools?.value && contract.State.Pools.value.length > 1) {
+            const headers = contract.State.Pools.value[0].map(h => h.value || h);
+            const pools = contract.State.Pools.value.slice(1).map(row => {
+                const obj = {};
+                headers.forEach((h, i) => {
+                    const cell = row[i];
+                    obj[h] = (cell?.value !== undefined) ? cell.value : cell;
+                });
+                return obj;
+            });
+
+            explorerData.dexPools = pools;
+            renderExplorerDexPools(pools);
+        } else {
+            if (poolsContainer) {
+                poolsContainer.innerHTML = '<tr><td colspan="9" class="loading-state">No pools found</td></tr>';
+            }
+        }
+
+        // Render trades from calls history
+        if (contract?.['Calls history']?.value && contract['Calls history'].value.length > 1) {
+            explorerPagination.trades.page = 0;
+            renderExplorerDexTrades(contract['Calls history']);
+            explorerData.dexTimestamp = Date.now();
+        } else {
+            if (tradesContainer) {
+                tradesContainer.innerHTML = '<tr><td colspan="6" class="loading-state">No recent trades</td></tr>';
+            }
+        }
+
+    } catch (e) {
+        console.error('Explorer DEX error:', e);
+        if (poolsContainer) {
+            poolsContainer.innerHTML = '<tr><td colspan="9" class="loading-state">Failed to load pools</td></tr>';
+        }
+        if (tradesContainer) {
+            tradesContainer.innerHTML = '<tr><td colspan="6" class="loading-state">Failed to load trades</td></tr>';
+        }
+    }
+}
+
+// Render DEX pools (table format)
+// Get asset display info for Explorer (uses same data as wallet assets)
+function getExplorerAssetInfo(aid) {
+    // Use the existing getAssetInfo function which already handles all cases
+    const info = getAssetInfo(Number(aid));
+    return {
+        name: info.name || `Asset ${aid}`,
+        symbol: info.symbol || `#${aid}`,
+        icon: info.icon || ASSET_ICONS[aid] || null,
+        color: info.color || '#25c2a0',
+        decimals: info.decimals || 8
+    };
+}
+
+// Render asset badge with icon (optionally show aid)
+function renderAssetBadge(aid, showAid = false) {
+    // Extract numeric aid from object if needed (e.g., {type: 'aid', value: 174})
+    if (aid && typeof aid === 'object') {
+        aid = aid.value !== undefined ? aid.value : aid;
+    }
+    aid = Number(aid) || 0;
+
+    const info = getExplorerAssetInfo(aid);
+    const iconHtml = info.icon
+        ? `<img src="${info.icon}" alt="${info.symbol}" class="asset-badge-icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"><span class="asset-badge-initials" style="background:${info.color}; display:none">${info.symbol.substring(0, 2)}</span>`
+        : `<span class="asset-badge-initials" style="background:${info.color}">${info.symbol.substring(0, 2)}</span>`;
+
+    const aidDisplay = showAid ? `<span class="asset-badge-aid">(${aid})</span>` : '';
+
+    return `
+        <div class="asset-badge" onclick="showAssetDetail(${aid})" title="${info.name} (ID: ${aid})">
+            ${iconHtml}
+            <span class="asset-badge-symbol">${info.symbol}</span>
+            ${aidDisplay}
+        </div>
+    `;
+}
+
+// Render asset badge with full info (logo, ticker, aid)
+function renderAssetBadgeFull(aid) {
+    // Extract numeric aid from object if needed
+    if (aid && typeof aid === 'object') {
+        aid = aid.value !== undefined ? aid.value : aid;
+    }
+    aid = Number(aid) || 0;
+
+    const info = getExplorerAssetInfo(aid);
+    const iconHtml = info.icon
+        ? `<img src="${info.icon}" alt="${info.symbol}" class="asset-badge-icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"><span class="asset-badge-initials" style="background:${info.color}; display:none">${info.symbol.substring(0, 2)}</span>`
+        : `<span class="asset-badge-initials" style="background:${info.color}">${info.symbol.substring(0, 2)}</span>`;
+
+    return `
+        <div class="asset-badge-full" onclick="showAssetDetail(${aid})" title="${info.name}">
+            ${iconHtml}
+            <div class="asset-badge-info">
+                <span class="asset-badge-symbol">${info.symbol}</span>
+                <span class="asset-badge-aid">#${aid}</span>
+            </div>
+        </div>
+    `;
+}
+
+// Calculate USD value for a reserve (uses global beamPriceUsd from top of file)
+function calculateReserveUsd(amount, aid) {
+    const beamAmount = amount / 100000000; // Convert from groth
+    if (aid === 0) {
+        // BEAM - direct price
+        return beamAmount * beamPriceUsd;
+    }
+    // For other assets, we'd need their specific price
+    // For now, return 0 for non-BEAM assets
+    return 0;
+}
+
+// Format USD value
+function formatUsdValue(value) {
+    if (value <= 0) return '';
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+    if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
+    return `$${value.toFixed(2)}`;
+}
+
+function renderExplorerDexPools(pools) {
+    const container = document.getElementById('explorer-dex-pools');
+    if (!container) return;
+
+    // Sort pools by BEAM reserve (highest first)
+    // Aid1=0 means BEAM is the first asset, use Amount1
+    // Otherwise check if Aid2=0 (BEAM is second asset)
+    const sortedPools = [...pools].sort((a, b) => {
+        const beamA = (a.Aid1 === 0 || a.aid1 === 0) ? (a.Amount1 || a.tok1 || 0) :
+                      (a.Aid2 === 0 || a.aid2 === 0) ? (a.Amount2 || a.tok2 || 0) : 0;
+        const beamB = (b.Aid1 === 0 || b.aid1 === 0) ? (b.Amount1 || b.tok1 || 0) :
+                      (b.Aid2 === 0 || b.aid2 === 0) ? (b.Amount2 || b.tok2 || 0) : 0;
+        return beamB - beamA; // Descending order
+    });
+
+    container.innerHTML = sortedPools.map(pool => {
+        const aid1 = pool.Aid1 || pool.aid1 || 0;
+        const aid2 = pool.Aid2 || pool.aid2 || 0;
+        const volatility = pool.Volatility || pool.kind || 2;
+        const lpToken = pool['LP-Token'] || pool['lp-token'] || '--';
+        const amount1 = pool.Amount1 || pool.tok1 || 0;
+        const amount2 = pool.Amount2 || pool.tok2 || 0;
+        const rate12 = pool['Rate 1:2'] || pool.k1_2 || '--';
+        const rate21 = pool['Rate 2:1'] || pool.k2_1 || '--';
+
+        const info1 = getExplorerAssetInfo(aid1);
+        const info2 = getExplorerAssetInfo(aid2);
+
+        const volLabel = volatility == 0 ? 'High' : volatility == 1 ? 'Medium' : 'Low';
+        const volClass = volatility == 0 ? 'vol-high' : volatility == 1 ? 'vol-medium' : 'vol-low';
+
+        // Format reserves with proper decimals (8 for BEAM-like assets)
+        const reserve1Num = amount1 / 100000000;
+        const reserve2Num = amount2 / 100000000;
+        const reserve1 = reserve1Num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        const reserve2 = reserve2Num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+        // Calculate USD values
+        const usd1 = calculateReserveUsd(amount1, aid1);
+        const usd2 = calculateReserveUsd(amount2, aid2);
+        const usd1Str = formatUsdValue(usd1);
+        const usd2Str = formatUsdValue(usd2);
+
+        // Calculate total pool TVL (both reserves in USD if possible)
+        let tvlStr = '';
+        if (usd1 > 0 || usd2 > 0) {
+            // If one is BEAM, estimate other asset's value using the rate
+            let tvl = usd1 + usd2;
+            if (aid1 === 0 && usd2 === 0 && typeof rate12 === 'number') {
+                // aid2 price = aid1 price / rate12
+                tvl = usd1 * 2; // Approximate: both sides roughly equal in AMM
+            } else if (aid2 === 0 && usd1 === 0 && typeof rate21 === 'number') {
+                tvl = usd2 * 2;
+            }
+            tvlStr = formatUsdValue(tvl);
+        }
+
+        return `
+            <tr class="pool-row">
+                <td class="pool-pair">
+                    <div class="pair-assets">
+                        ${renderAssetBadgeFull(aid1)}
+                        <span class="pair-separator">/</span>
+                        ${renderAssetBadgeFull(aid2)}
+                    </div>
+                </td>
+                <td>
+                    <div class="reserve-cell">
+                        <span class="reserve-amount">${reserve1}</span>
+                        <span class="reserve-symbol">${info1.symbol}</span>
+                        ${usd1Str ? `<span class="reserve-usd">${usd1Str}</span>` : ''}
+                    </div>
+                </td>
+                <td>
+                    <div class="reserve-cell">
+                        <span class="reserve-amount">${reserve2}</span>
+                        <span class="reserve-symbol">${info2.symbol}</span>
+                        ${usd2Str ? `<span class="reserve-usd">${usd2Str}</span>` : ''}
+                    </div>
+                </td>
+                <td>
+                    <div class="rate-cell">
+                        <span class="rate-value">1 ${info1.symbol} = ${typeof rate12 === 'number' ? rate12.toFixed(4) : rate12} ${info2.symbol}</span>
+                        ${tvlStr ? `<span class="tvl-value">TVL: ${tvlStr}</span>` : ''}
+                    </div>
+                </td>
+                <td><span class="volatility-badge ${volClass}">${volLabel}</span></td>
+                <td class="lp-token-cell">#${lpToken}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Render DEX trades (table format with pagination)
+function renderExplorerDexTrades(callsHistory) {
+    const container = document.getElementById('explorer-dex-trades');
+    if (!container) return;
+
+    const trades = [];
+
+    // Parse calls history (may have grouped rows)
+    callsHistory.value.slice(1).forEach(row => {
+        if (row?.type === 'group') {
+            // Grouped trades
+            row.value.forEach(trade => {
+                if (trade[3] === 'Trade') {
+                    trades.push(parseTrade(trade));
+                }
+            });
+        } else if (row[3] === 'Trade') {
+            trades.push(parseTrade(row));
+        }
+    });
+
+    function parseTrade(row) {
+        const height = row[0]?.value || row[0] || 0;
+        const action = row[3] || 'Trade';
+        const funds = row[5];
+
+        let assetIn = 0, amountIn = 0, assetOut = 0, amountOut = 0;
+
+        if (funds?.value) {
+            funds.value.forEach(f => {
+                // Extract numeric aid - handle nested objects like {type: 'aid', value: 174}
+                let aid = f[0];
+                if (aid && typeof aid === 'object') {
+                    aid = aid.value !== undefined ? aid.value : 0;
+                }
+                aid = Number(aid) || 0;
+
+                // Extract amount
+                let amt = f[1];
+                if (amt && typeof amt === 'object') {
+                    amt = amt.value !== undefined ? amt.value : 0;
+                }
+                amt = Number(amt) || 0;
+
+                if (amt < 0) {
+                    assetIn = aid;
+                    amountIn = Math.abs(amt);
+                } else if (amt > 0) {
+                    assetOut = aid;
+                    amountOut = amt;
+                }
+            });
+        }
+
+        return { height, action, assetIn, amountIn, assetOut, amountOut };
+    }
+
+    // Store trades in explorerData for pagination
+    explorerData.dexTrades = trades;
+
+    if (trades.length === 0) {
+        container.innerHTML = '<tr><td colspan="4" class="loading-state">No recent trades</td></tr>';
+        hideLoadMoreTrades();
+        return;
+    }
+
+    renderDexTradesPage(trades, false);
+}
+
+// Render from cached trades
+function renderExplorerDexTradesFromCache() {
+    if (!explorerData.dexTrades) return;
+    renderDexTradesPage(explorerData.dexTrades, false);
+}
+
+// Render a page of trades
+function renderDexTradesPage(trades, append = false) {
+    const container = document.getElementById('explorer-dex-trades');
+    if (!container) return;
+
+    const { page, perPage } = explorerPagination.trades;
+    const startIdx = page * perPage;
+    const endIdx = startIdx + perPage;
+    const pageTrades = trades.slice(startIdx, endIdx);
+
+    const html = pageTrades.map(t => {
+        const inInfo = getExplorerAssetInfo(t.assetIn);
+        const outInfo = getExplorerAssetInfo(t.assetOut);
+        const amtIn = (t.amountIn / 100000000).toLocaleString(undefined, { maximumFractionDigits: 4 });
+        const amtOut = (t.amountOut / 100000000).toLocaleString(undefined, { maximumFractionDigits: 4 });
+
+        return `
+            <tr>
+                <td class="highlight">${t.height.toLocaleString()}</td>
+                <td><span class="trade-type">Swap</span></td>
+                <td>
+                    <div class="trade-asset">
+                        ${renderAssetBadge(t.assetIn)}
+                        <span class="trade-amount negative">-${amtIn}</span>
+                    </div>
+                </td>
+                <td>
+                    <div class="trade-asset">
+                        ${renderAssetBadge(t.assetOut)}
+                        <span class="trade-amount positive">+${amtOut}</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (append) {
+        container.insertAdjacentHTML('beforeend', html);
+    } else {
+        container.innerHTML = html;
+    }
+
+    // Show/hide load more button
+    const hasMore = trades.length > endIdx;
+    showLoadMoreTrades(hasMore, trades.length, endIdx);
+}
+
+// Load more trades
+function loadMoreTrades() {
+    explorerPagination.trades.page++;
+    renderDexTradesPage(explorerData.dexTrades, true);
+}
+
+// Show/hide load more trades button
+function showLoadMoreTrades(show, total, loaded) {
+    let btn = document.getElementById('load-more-trades-btn');
+    if (!btn) {
+        // Create button if doesn't exist
+        const table = document.getElementById('explorer-dex-trades')?.closest('table');
+        if (table) {
+            btn = document.createElement('button');
+            btn.id = 'load-more-trades-btn';
+            btn.className = 'load-more-btn';
+            btn.onclick = loadMoreTrades;
+            table.parentElement.appendChild(btn);
+        }
+    }
+    if (btn) {
+        btn.style.display = show ? 'block' : 'none';
+        btn.textContent = `Load More Trades (${loaded}/${total})`;
+    }
+}
+
+function hideLoadMoreTrades() {
+    const btn = document.getElementById('load-more-trades-btn');
+    if (btn) btn.style.display = 'none';
+}
+
+// Load Atomic Swaps data
+async function loadExplorerAtomicSwaps() {
+    const totalsContainer = document.getElementById('swap-totals-grid');
+    const offersContainer = document.getElementById('explorer-swap-offers');
+
+    if (totalsContainer) {
+        totalsContainer.innerHTML = '<div class="loading-state">Loading swap data...</div>';
+    }
+    if (offersContainer) {
+        offersContainer.innerHTML = '<tr><td colspan="5" class="loading-state">Loading offers...</td></tr>';
+    }
+
+    try {
+        // Fetch swap totals
+        const totals = await fetchExplorerAPI('/swap_totals');
+
+        if (totals && totalsContainer) {
+            const swapAssets = [
+                { name: 'Total Swaps', value: totals.total_swaps_count || 0, icon: null },
+                { name: 'Bitcoin', symbol: 'BTC', value: totals.bitcoin_offered || '0', icon: 'https://cryptologos.cc/logos/bitcoin-btc-logo.svg' },
+                { name: 'Ethereum', symbol: 'ETH', value: totals.ethereum_offered || '0', icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.svg' },
+                { name: 'Litecoin', symbol: 'LTC', value: totals.litecoin_offered || '0', icon: 'https://cryptologos.cc/logos/litecoin-ltc-logo.svg' },
+                { name: 'Dogecoin', symbol: 'DOGE', value: totals.dogecoin_offered || '0', icon: 'https://cryptologos.cc/logos/dogecoin-doge-logo.svg' },
+                { name: 'Dash', symbol: 'DASH', value: totals.dash_offered || '0', icon: 'https://cryptologos.cc/logos/dash-dash-logo.svg' },
+                { name: 'USDT', symbol: 'USDT', value: totals.usdt_offered || '0', icon: 'https://cryptologos.cc/logos/tether-usdt-logo.svg' },
+                { name: 'DAI', symbol: 'DAI', value: totals.dai_offered || '0', icon: 'https://cryptologos.cc/logos/multi-collateral-dai-dai-logo.svg' },
+                { name: 'WBTC', symbol: 'WBTC', value: totals.wbtc_offered || '0', icon: 'https://cryptologos.cc/logos/wrapped-bitcoin-wbtc-logo.svg' },
+                { name: 'QTUM', symbol: 'QTUM', value: totals.qtum_offered || '0', icon: 'https://cryptologos.cc/logos/qtum-qtum-logo.svg' },
+                { name: 'BEAM Offered', symbol: 'BEAM', value: totals.beams_offered || '0', icon: BEAM_LOGO }
+            ];
+
+            totalsContainer.innerHTML = `
+                <div class="swap-stat-card total-swaps">
+                    <div class="swap-stat-value">${totals.total_swaps_count || 0}</div>
+                    <div class="swap-stat-label">Total Atomic Swaps</div>
+                </div>
+                <div class="swap-assets-grid">
+                    ${swapAssets.slice(1).map(asset => `
+                        <div class="swap-asset-card">
+                            <div class="swap-asset-icon">
+                                ${asset.icon ? `<img src="${asset.icon}" alt="${asset.symbol}" onerror="this.style.display='none'">` : ''}
+                            </div>
+                            <div class="swap-asset-info">
+                                <div class="swap-asset-value">${asset.value}</div>
+                                <div class="swap-asset-name">${asset.symbol} Offered</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Fetch active offers
+        const offers = await fetchExplorerAPI('/swap_offers');
+
+        if (offersContainer) {
+            if (!offers || offers.length === 0) {
+                offersContainer.innerHTML = '<tr><td colspan="5" class="loading-state">No active swap offers</td></tr>';
+            } else {
+                offersContainer.innerHTML = offers.map(offer => `
+                    <tr>
+                        <td class="mono-text">${offer.id?.substring(0, 16) || '--'}...</td>
+                        <td>${offer.send_amount || '--'} ${offer.send_currency || ''}</td>
+                        <td>${offer.receive_amount || '--'} ${offer.receive_currency || ''}</td>
+                        <td>${offer.rate || '--'}</td>
+                        <td><span class="status-badge active">Active</span></td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+    } catch (e) {
+        console.error('Explorer Atomic Swaps error:', e);
+        if (totalsContainer) {
+            totalsContainer.innerHTML = '<div class="error-state">Failed to load swap data</div>';
+        }
+        if (offersContainer) {
+            offersContainer.innerHTML = '<tr><td colspan="5" class="loading-state">Failed to load offers</td></tr>';
+        }
+    }
+}
+
+// Change Explorer node
+function changeExplorerNode() {
+    const selector = document.getElementById('explorer-node-selector');
+    if (selector) {
+        EXPLORER_API = selector.value;
+        localStorage.setItem('explorerApi', EXPLORER_API);
+        testExplorerConnection();
+    }
+}
+
+// Test Explorer connection
+async function testExplorerConnection() {
+    const statusEl = document.getElementById('explorer-connection-status');
+    if (statusEl) {
+        statusEl.innerHTML = '<span class="status-dot status-checking"></span> Testing...';
+    }
+
+    try {
+        const resp = await fetch(`${EXPLORER_API}/status`, { signal: AbortSignal.timeout(5000) });
+        if (resp.ok) {
+            const data = await resp.json();
+            explorerConnected = true;
+            updateExplorerConnectionStatus(true);
+            showToast(`Connected to Explorer (Height: ${data.height?.toLocaleString()})`, 'success');
+
+            // Reload explorer page if active
+            if (document.getElementById('page-explorer')?.classList.contains('active')) {
+                showExplorerTab(currentExplorerTab);
+            }
+        } else {
+            throw new Error('HTTP ' + resp.status);
+        }
+    } catch (e) {
+        explorerConnected = false;
+        updateExplorerConnectionStatus(false);
+        showToast('Explorer connection failed: ' + e.message, 'error');
+    }
+}
+
+// Update Explorer connection status in Settings
+function updateExplorerConnectionStatus(connected) {
+    const statusEl = document.getElementById('explorer-connection-status');
+    if (statusEl) {
+        if (connected) {
+            statusEl.innerHTML = '<span class="status-dot status-connected"></span> Connected';
+            statusEl.querySelector('.status-dot').style.background = 'var(--success)';
+        } else {
+            statusEl.innerHTML = '<span class="status-dot status-error"></span> Disconnected';
+            statusEl.querySelector('.status-dot').style.background = 'var(--error)';
+        }
+    }
+}
+
+// Initialize Explorer settings on page load
+async function initExplorerSettings() {
+    await loadExplorerNodesConfig();
+    const selector = document.getElementById('explorer-node-selector');
+    if (selector) {
+        selector.value = EXPLORER_API;
+    }
+    // Test connection on init
+    testExplorerConnection();
+}
+
+// Fetch from Explorer API
+async function fetchExplorerAPI(endpoint, params = {}) {
+    const url = new URL(`${EXPLORER_API}${endpoint}`);
+    Object.entries(params).forEach(([k, v]) => v != null && url.searchParams.append(k, v));
+    const resp = await fetch(url.toString());
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+}
+
+// Search Explorer main (in-app search) - block height, hash, or kernel only
+function searchExplorerMain() {
+    const query = document.getElementById('explorer-main-search')?.value.trim();
+    if (!query) return;
+
+    // Detect query type
+    if (/^\d+$/.test(query)) {
+        // Pure number = Block height
+        const height = parseInt(query);
+        showBlockDetail(height);
+    } else if (query.length === 64 && /^[a-fA-F0-9]+$/.test(query)) {
+        // 64 hex chars = Block hash - search for block with this hash
+        searchBlockByHash(query);
+    } else {
+        // Assume it's a kernel ID - search for kernel
+        searchKernel(query);
+    }
+
+    // Clear search input
+    document.getElementById('explorer-main-search').value = '';
+}
+
+// Search for block by hash
+async function searchBlockByHash(hash) {
+    try {
+        showToast('Searching for block...', 'info');
+
+        // Try to find block in recent blocks first
+        if (explorerData.blocks && explorerData.blocks.length > 0) {
+            const block = explorerData.blocks.find(b =>
+                (b.Hash || b.hash || '').toLowerCase() === hash.toLowerCase()
+            );
+            if (block) {
+                showBlockDetail(block.Height || block.height);
+                return;
+            }
+        }
+
+        // If not found locally, we'd need an API endpoint to search by hash
+        // For now, show a message
+        showToast('Block hash search requires checking the blockchain. Try searching by height.', 'warning');
+    } catch (e) {
+        console.error('Error searching block by hash:', e);
+        showToast('Failed to search for block', 'error');
+    }
+}
+
+// Search for kernel by ID
+async function searchKernel(kernelId) {
+    try {
+        showToast('Searching for kernel...', 'info');
+
+        // Kernel search would require an API endpoint
+        // For now, show informative message
+        showToast('Kernel search: ' + kernelId.substring(0, 16) + '...', 'info');
+
+        // TODO: Implement kernel search when API endpoint is available
+        // The explorer API may have a /kernel?id={kernelId} endpoint
+    } catch (e) {
+        console.error('Error searching kernel:', e);
+        showToast('Failed to search for kernel', 'error');
+    }
+}
+
+// Filter contracts by search term
+function filterExplorerContracts() {
+    const query = document.getElementById('explorer-contract-search')?.value.trim().toLowerCase() || '';
+
+    if (!explorerData.contracts) return;
+
+    const filtered = query
+        ? explorerData.contracts.filter(c => {
+            const cid = (c.Cid || '').toLowerCase();
+            let kind = c.Kind || '';
+            if (typeof kind === 'object') {
+                kind = kind.Wrapper || kind.value || JSON.stringify(kind);
+            }
+            kind = String(kind).toLowerCase();
+            return cid.includes(query) || kind.includes(query);
+        })
+        : explorerData.contracts;
+
+    renderExplorerContracts(filtered);
+}
+
+// Auto-refresh explorer data when page is active
+setInterval(() => {
+    const explorerPage = document.getElementById('page-explorer');
+    if (explorerPage?.classList.contains('active') && Date.now() - explorerData.lastUpdate > 30000) {
+        if (currentExplorerTab === 'overview') {
+            loadExplorerOverview();
+        }
+    }
+}, 30000);
