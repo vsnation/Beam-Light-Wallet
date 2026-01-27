@@ -47,8 +47,9 @@ DEFAULT_NODE = "eu-node01.mainnet.beam.mw:8100"
 LOCAL_NODE_ADDR = "127.0.0.1:10005"
 LOCAL_NODE_PORT = 10005
 
-# DEX contract ID
+# Contract IDs
 DEX_CONTRACT_ID = "729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf"
+MINTER_CONTRACT_ID = "295fe749dc12c55213d1bd16ced174dc8780c020f59cb17749e900bb0c15d868"
 
 # Load DEX shader bytes for contract calls
 DEX_SHADER = None
@@ -60,6 +61,17 @@ try:
         print(f"Loaded DEX shader: {len(DEX_SHADER)} bytes")
 except Exception as e:
     print(f"Warning: Could not load DEX shader: {e}")
+
+# Load Minter shader bytes for contract calls
+MINTER_SHADER = None
+try:
+    shader_path = BASE_DIR / "shaders" / "minter_app.wasm"
+    if shader_path.exists():
+        with open(shader_path, "rb") as f:
+            MINTER_SHADER = list(f.read())
+        print(f"Loaded Minter shader: {len(MINTER_SHADER)} bytes")
+except Exception as e:
+    print(f"Warning: Could not load Minter shader: {e}")
 
 # Track state
 wallet_api_process = None
@@ -1238,15 +1250,21 @@ window.APP_ROUTE = {json.dumps(app_route)};
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length) if content_length > 0 else b""
 
-            # Inject DEX shader for invoke_contract calls
-            if body and DEX_SHADER:
+            # Inject shader for invoke_contract calls (DEX or Minter)
+            if body:
                 try:
                     data = json.loads(body)
                     if (data.get("method") == "invoke_contract" and
-                        data.get("params", {}).get("args", "").find(DEX_CONTRACT_ID) >= 0 and
                         "contract" not in data.get("params", {})):
-                        data["params"]["contract"] = DEX_SHADER
-                        body = json.dumps(data).encode()
+                        args = data.get("params", {}).get("args", "")
+                        # Inject DEX shader
+                        if DEX_SHADER and DEX_CONTRACT_ID in args:
+                            data["params"]["contract"] = DEX_SHADER
+                            body = json.dumps(data).encode()
+                        # Inject Minter shader
+                        elif MINTER_SHADER and MINTER_CONTRACT_ID in args:
+                            data["params"]["contract"] = MINTER_SHADER
+                            body = json.dumps(data).encode()
                 except json.JSONDecodeError:
                     pass
 
