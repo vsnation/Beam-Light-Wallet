@@ -2046,7 +2046,7 @@ async function checkDexSupport() {
 }
 
 // Select node type
-function selectNodeType(type, triggerChange = false) {
+async function selectNodeType(type, triggerChange = false) {
     currentNodeType = type;
 
     document.getElementById('node-public-btn').classList.toggle('active', type === 'public');
@@ -2063,13 +2063,59 @@ function selectNodeType(type, triggerChange = false) {
         localSection.style.display = 'none';
     }
 
-    // Update selector value and currentNode to match current state (no prompt)
+    // Update selector value and currentNode to match current state
     selector.value = newValue;
-    currentNode = newValue;
 
     // Only trigger change if explicitly requested (e.g., from button click)
-    if (triggerChange) {
+    if (triggerChange && newValue !== currentNode) {
+        // Check if local node is already running and synced
+        if (type === 'local') {
+            const serverStatus = await checkServerStatus();
+            if (serverStatus?.node_running && serverStatus?.node_synced) {
+                // Local node is ready - switch without password
+                await switchNodeWithoutPassword(newValue, 'local');
+                return;
+            }
+        }
+        // Otherwise perform normal node switch
         changeNode();
+    } else {
+        currentNode = newValue;
+    }
+}
+
+// Switch node when local node is already running (no password needed)
+async function switchNodeWithoutPassword(nodeAddr, mode) {
+    showToastAdvanced('Switching Node', `Connecting to ${mode} node...`, 'pending');
+
+    try {
+        const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+        const response = await fetch('/api/node/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mode: mode,
+                password: password,
+                node: nodeAddr
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            currentNode = nodeAddr;
+            currentNodeType = mode;
+            document.getElementById('settings-node').textContent = nodeAddr;
+            document.getElementById('settings-node-type').textContent = mode === 'local' ? 'Local' : 'Public';
+            showToastAdvanced('Node Switched', `Now connected to ${nodeAddr}`, 'success');
+            setTimeout(() => loadWalletData(), 1000);
+        } else {
+            throw new Error(result.error || 'Failed to switch node');
+        }
+    } catch (e) {
+        showToastAdvanced('Switch Failed', e.message, 'error');
+        // Reset dropdown to current node
+        document.getElementById('node-selector').value = currentNode;
     }
 }
 
@@ -2081,24 +2127,17 @@ async function changeNode() {
 
     if (newNode === currentNode) return;
 
+    // Use stored password - no prompting
+    const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+    if (!password) {
+        showToastAdvanced('Error', 'Session expired. Please re-unlock your wallet.', 'error');
+        selector.value = currentNode;
+        return;
+    }
+
     showToastAdvanced('Switching Node', `Connecting to ${isLocal ? 'local' : 'public'} node...`, 'pending');
 
     try {
-        // Use stored password if available, otherwise prompt
-        let password = storedWalletPassword || sessionStorage.getItem('walletPassword');
-        if (!password) {
-            password = prompt('Enter wallet password to switch nodes:\n\n(Password is needed to restart the wallet connection with the new node)');
-            if (!password) {
-                showToastAdvanced('Cancelled', 'Node switch cancelled', 'info');
-                // Reset dropdown to current
-                selector.value = currentNode;
-                return;
-            }
-            // Store for future switches in this session
-            storedWalletPassword = password;
-            sessionStorage.setItem('walletPassword', password);
-        }
-
         // Call server API to switch node
         const response = await fetch('/api/node/switch', {
             method: 'POST',
@@ -2189,8 +2228,7 @@ async function triggerRescan() {
 function showRescanWarningModal() {
     const modal = document.createElement('div');
     modal.id = 'rescan-warning-modal';
-    modal.className = 'modal-overlay';
-    modal.style.display = 'flex';
+    modal.className = 'modal-overlay active';
 
     modal.innerHTML = `
         <div class="modal" style="max-width: 500px;">
