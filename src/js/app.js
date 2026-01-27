@@ -3843,6 +3843,13 @@ async function welcomeRestoreWallet() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+    // Restore password from sessionStorage for node switching
+    const savedPassword = sessionStorage.getItem('walletPassword');
+    if (savedPassword) {
+        storedWalletPassword = savedPassword;
+        console.log('Restored password from session');
+    }
+
     // Check for updates (async, non-blocking)
     checkForUpdates().catch(e => console.log('Update check skipped:', e.message));
 
