@@ -127,3 +127,4 @@ secrets/
 credentials/
 node-utxo-image.bin
 .wallet_config
+CLAUDE.md
