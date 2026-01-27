@@ -50,6 +50,7 @@ LOCAL_NODE_PORT = 10005
 # Contract IDs
 DEX_CONTRACT_ID = "729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf"
 MINTER_CONTRACT_ID = "295fe749dc12c55213d1bd16ced174dc8780c020f59cb17749e900bb0c15d868"
+BLACKHOLE_CONTRACT_ID = "5ab408982b148210e88f180114f10222a2235eafeede0a3a224fda0e523e17b7"
 
 # Load DEX shader bytes for contract calls
 DEX_SHADER = None
@@ -72,6 +73,17 @@ try:
         print(f"Loaded Minter shader: {len(MINTER_SHADER)} bytes")
 except Exception as e:
     print(f"Warning: Could not load Minter shader: {e}")
+
+# Load BlackHole shader bytes for burn functionality
+BLACKHOLE_SHADER = None
+try:
+    shader_path = BASE_DIR / "shaders" / "blackhole_app.wasm"
+    if shader_path.exists():
+        with open(shader_path, "rb") as f:
+            BLACKHOLE_SHADER = list(f.read())
+        print(f"Loaded BlackHole shader: {len(BLACKHOLE_SHADER)} bytes")
+except Exception as e:
+    print(f"Warning: Could not load BlackHole shader: {e}")
 
 # Track state
 wallet_api_process = None
@@ -156,6 +168,37 @@ def list_wallets():
     return sorted(wallets)
 
 
+def kill_process_on_port(port):
+    """Kill any process using the specified port"""
+    try:
+        # Use lsof to find process on port (works on macOS and Linux)
+        result = subprocess.run(
+            ["lsof", "-ti", f":{port}"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            pids = result.stdout.strip().split('\n')
+            for pid in pids:
+                try:
+                    pid = int(pid.strip())
+                    os.kill(pid, signal.SIGTERM)
+                    print(f"Killed process {pid} on port {port}")
+                    time.sleep(1)
+                    # Force kill if still running
+                    try:
+                        os.kill(pid, 0)  # Check if still alive
+                        os.kill(pid, signal.SIGKILL)
+                        print(f"Force killed process {pid}")
+                    except ProcessLookupError:
+                        pass  # Process already dead
+                except (ValueError, ProcessLookupError):
+                    pass
+            return True
+    except Exception as e:
+        print(f"Error killing process on port {port}: {e}")
+    return False
+
+
 def stop_wallet_api():
     """Stop running wallet-api process"""
     global wallet_api_process, active_wallet
@@ -172,6 +215,9 @@ def stop_wallet_api():
 
     wallet_api_process = None
     active_wallet = None
+
+    # Also kill any process using the wallet API port
+    kill_process_on_port(WALLET_API_PORT)
 
     state_file = BASE_DIR / ".active_wallet"
     if state_file.exists():
@@ -287,6 +333,9 @@ def stop_beam_node():
 
     beam_beam_node_process = None
 
+    # Also kill any process using the node port
+    kill_process_on_port(LOCAL_NODE_PORT)
+
     # Remove PID file
     pid_file = BASE_DIR / ".node.pid"
     if pid_file.exists():
@@ -302,8 +351,11 @@ def start_beam_node(owner_key=None, password=None):
     if not BEAM_NODE_BINARY.exists():
         return {"error": f"beam-node binary not found at {BEAM_NODE_BINARY}"}
 
-    # Stop existing node first
+    # Stop existing node and kill any process on the port
     stop_beam_node()
+    kill_process_on_port(LOCAL_NODE_PORT)
+    time.sleep(1)  # Give port time to be released
+
     LOGS_DIR.mkdir(exist_ok=True)
     NODE_DATA_DIR.mkdir(exist_ok=True)
 
@@ -423,7 +475,11 @@ def start_wallet_api(wallet_name, password, node_addr=None):
     if not WALLET_API_BINARY.exists():
         return {"error": f"wallet-api binary not found at {WALLET_API_BINARY}"}
 
+    # Stop existing wallet-api and kill any process on the port
     stop_wallet_api()
+    kill_process_on_port(WALLET_API_PORT)
+    time.sleep(1)  # Give port time to be released
+
     LOGS_DIR.mkdir(exist_ok=True)
 
     log_file = LOGS_DIR / f"{wallet_name}_api.log"
@@ -1250,7 +1306,7 @@ window.APP_ROUTE = {json.dumps(app_route)};
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length) if content_length > 0 else b""
 
-            # Inject shader for invoke_contract calls (DEX or Minter)
+            # Inject shader for invoke_contract calls (DEX, Minter, or BlackHole)
             if body:
                 try:
                     data = json.loads(body)
@@ -1264,6 +1320,10 @@ window.APP_ROUTE = {json.dumps(app_route)};
                         # Inject Minter shader
                         elif MINTER_SHADER and MINTER_CONTRACT_ID in args:
                             data["params"]["contract"] = MINTER_SHADER
+                            body = json.dumps(data).encode()
+                        # Inject BlackHole shader for burn operations
+                        elif BLACKHOLE_SHADER and BLACKHOLE_CONTRACT_ID in args:
+                            data["params"]["contract"] = BLACKHOLE_SHADER
                             body = json.dumps(data).encode()
                 except json.JSONDecodeError:
                     pass
@@ -1357,7 +1417,11 @@ def main():
 ╚══════════════════════════════════════════════════════════════════╝
 """)
 
-    server = HTTPServer(("127.0.0.1", PORT), WalletProxyHandler)
+    # Allow socket reuse to avoid "Address already in use" errors
+    class ReusableHTTPServer(HTTPServer):
+        allow_reuse_address = True
+
+    server = ReusableHTTPServer(("127.0.0.1", PORT), WalletProxyHandler)
 
     try:
         server.serve_forever()

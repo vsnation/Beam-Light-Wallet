@@ -533,6 +533,11 @@ function getAssetUsdValue(assetId, amount) {
 // Hidden assets (stored in localStorage)
 let hiddenAssets = new Set(JSON.parse(localStorage.getItem('hiddenAssets') || '[]'));
 let showHiddenAssets = false;
+let showLowLiquid = false;
+
+// Minimum BEAM reserves in LP pool to show asset by default (5000 BEAM = 5000 * 1e8 groth)
+const MIN_LIQUIDITY_BEAM = 5000;
+const MIN_LIQUIDITY_GROTH = MIN_LIQUIDITY_BEAM * 100000000; // 5000 BEAM in groth
 
 // API Configuration
 const API_URL = '/api/wallet';
@@ -1048,7 +1053,8 @@ function renderAssetCards() {
         const displayName = isLpToken ? info.name : (config.name || info.name);
         const displaySymbol = isLpToken ? info.symbol : (config.symbol || info.symbol);
         const displayColor = isLpToken ? 'linear-gradient(135deg, #25c2a0, #60a5fa)' : (config.color || info.color);
-        const displayIcon = isLpToken ? null : config.icon;
+        // Use icon from config first, then from metadata (info.icon), then null
+        const displayIcon = isLpToken ? null : (config.icon || info.icon || null);
 
         const balance = formatAmount(asset.balance);
         const [whole, decimal] = balance.includes('.') ? balance.split('.') : [balance, '00000000'];
@@ -1152,8 +1158,8 @@ function renderBalancesTable() {
                     <div class="asset-cell">
                         ${isLpToken
                             ? renderLpDualIcon(asset.id, 32)
-                            : `<div class="asset-cell-icon" style="${config.icon ? '' : `background: ${config.color}; color: ${textColor}`}">
-                                ${config.icon ? `<img src="${config.icon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color}';this.parentNode.style.color='${textColor}';this.parentNode.textContent='${config.symbol.substring(0,2)}'">` : config.symbol.substring(0, 2)}
+                            : `<div class="asset-cell-icon" style="${(config.icon || info.icon) ? '' : `background: ${config.color}; color: ${textColor}`}">
+                                ${(config.icon || info.icon) ? `<img src="${config.icon || info.icon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color}';this.parentNode.style.color='${textColor}';this.parentNode.textContent='${config.symbol.substring(0,2)}'">` : config.symbol.substring(0, 2)}
                               </div>`
                         }
                         <div class="asset-cell-info">
@@ -1566,16 +1572,18 @@ function renderUtxos() {
     }
 
     tbody.innerHTML = walletData.utxos.map(utxo => {
-        const config = ASSET_CONFIG[utxo.asset] || { name: 'Unknown', symbol: 'CA' + utxo.asset, color: `hsl(${(utxo.asset * 137) % 360}, 50%, 50%)` };
+        const info = getAssetInfo(utxo.asset);
+        const config = ASSET_CONFIG[utxo.asset] || { name: info.name, symbol: info.symbol, color: info.color };
         const amount = formatAmount(utxo.amount);
         const textColor = ['warning', 'success'].includes(config.class) ? '#000' : '#fff';
+        const displayIcon = config.icon || info.icon;
 
         return `
             <tr>
                 <td>
                     <div class="utxo-coin">
-                        <div class="utxo-coin-icon" style="${config.icon ? '' : `background: ${config.color}; color: ${textColor}`}">
-                            ${config.icon ? `<img src="${config.icon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color}';this.parentNode.style.color='${textColor}';this.parentNode.textContent='${config.symbol.substring(0,2)}'">` : config.symbol.substring(0, 2)}
+                        <div class="utxo-coin-icon" style="${displayIcon ? '' : `background: ${config.color}; color: ${textColor}`}">
+                            ${displayIcon ? `<img src="${displayIcon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color}';this.parentNode.style.color='${textColor}';this.parentNode.textContent='${config.symbol.substring(0,2)}'">` : config.symbol.substring(0, 2)}
                         </div>
                         <span class="utxo-amount">${amount} ${config.symbol}</span>
                     </div>
@@ -4188,6 +4196,15 @@ async function loadAllAssets() {
     const tbody = document.getElementById('all-assets-tbody');
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">Loading assets...</td></tr>';
 
+    // Ensure DEX pools are loaded for liquidity filtering
+    if (dexPools.length === 0) {
+        try {
+            await loadDexPools();
+        } catch (e) {
+            console.log('DEX pools not available for liquidity filtering:', e.message);
+        }
+    }
+
     try {
         // Get all assets from wallet using assets_list API
         // Response: { assets: [{asset_id, metadata, metadata_pairs, emission, ...}] }
@@ -4288,6 +4305,36 @@ function toggleShowHidden() {
     renderAllAssets(allAssetsCache);
 }
 
+// Toggle show low liquid assets (assets without high-liquidity LP pools)
+function toggleShowLowLiquid() {
+    showLowLiquid = document.getElementById('show-low-liquid')?.checked || false;
+    renderAllAssets(allAssetsCache);
+}
+
+// Check if asset has sufficient liquidity in DEX pools
+function hasHighLiquidity(assetId) {
+    // BEAM always has liquidity
+    if (assetId === 0) return true;
+
+    // Find pool with this asset
+    const pool = dexPools.find(p =>
+        (p.aid1 === assetId || p.aid2 === assetId)
+    );
+
+    if (!pool) return false;
+
+    // Check BEAM reserves in the pool
+    const beamReserve = pool.aid1 === 0 ? pool.tok1 : (pool.aid2 === 0 ? pool.tok2 : 0);
+
+    // If no BEAM in pool, check if any side has high reserves (cross-pair)
+    if (beamReserve === 0) {
+        // For non-BEAM pairs, check if either side has significant reserves
+        return pool.tok1 >= MIN_LIQUIDITY_GROTH || pool.tok2 >= MIN_LIQUIDITY_GROTH;
+    }
+
+    return beamReserve >= MIN_LIQUIDITY_GROTH;
+}
+
 // Toggle hide/unhide asset
 function toggleHideAsset(assetId) {
     if (hiddenAssets.has(assetId)) {
@@ -4319,6 +4366,16 @@ function renderAllAssets(assets) {
         // Hide hidden assets unless show hidden is checked
         if (hiddenAssets.has(aid) && !showHiddenAssets) {
             return false;
+        }
+
+        // Hide low liquidity assets unless "Show low liquid" is checked
+        // Also show assets that user has balance in (regardless of liquidity)
+        if (!showLowLiquid) {
+            const userAsset = walletData.assets.find(ua => ua.id === aid);
+            const hasBalance = userAsset && (userAsset.balance + userAsset.locked) > 0;
+            if (!hasBalance && !hasHighLiquidity(aid)) {
+                return false;
+            }
         }
 
         const meta = a.metadata || {};
@@ -4385,9 +4442,12 @@ function renderAllAssets(assets) {
             ? `<button class="action-btn trade-btn" onclick="event.stopPropagation();openQuickWithdrawLPModal(${aid})" style="background:linear-gradient(135deg, #f59e0b, #ef4444);color:#fff;">Withdraw LP</button>`
             : `<button class="action-btn trade-btn" onclick="event.stopPropagation();openQuickTradeModal(${aid})">Trade</button>`;
 
-        // Mint button for owned assets
+        // Mint and Burn buttons for owned assets
         const mintButton = isOwned
             ? `<button class="action-btn" onclick="event.stopPropagation();openMintModal(${aid})" style="background:linear-gradient(135deg, #8b5cf6, #6366f1);color:#fff;">Mint</button>`
+            : '';
+        const burnButton = hasBalance
+            ? `<button class="action-btn" onclick="event.stopPropagation();openBurnModal(${aid})" style="background:linear-gradient(135deg, #ef4444, #f97316);color:#fff;">Burn</button>`
             : '';
 
         // Owned badge
@@ -4425,6 +4485,7 @@ function renderAllAssets(assets) {
                         <button class="action-btn" onclick="event.stopPropagation();openReceiveModal()">Receive</button>
                         ${actionButton}
                         ${mintButton}
+                        ${burnButton}
                         <button class="action-btn" onclick="event.stopPropagation();toggleHideAsset(${aid})" title="${isHidden ? 'Unhide' : 'Hide'}">
                             ${isHidden ? '👁' : '🙈'}
                         </button>
@@ -4441,6 +4502,24 @@ async function loadTransactions() {
     container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading...</div>';
 
     try {
+        // Ensure assets are loaded for proper name/icon display
+        if (!allAssetsCache || allAssetsCache.length === 0) {
+            try {
+                const assetsResp = await apiCall('assets_list', { refresh: true });
+                const assets = assetsResp?.assets || assetsResp || [];
+                if (assets.length > 0) {
+                    allAssetsCache = assets.map(a => ({
+                        asset_id: a.asset_id,
+                        metadata: a.metadata_pairs || (typeof a.metadata === 'string' ? parseMetadata(a.metadata) : (a.metadata || {})),
+                        metadata_pairs: a.metadata_pairs,
+                        value: a.emission || 0
+                    }));
+                }
+            } catch (e) {
+                console.warn('Could not pre-load assets for transactions:', e);
+            }
+        }
+
         const txs = await apiCall('tx_list', { count: 50 });
 
         if (!txs || txs.length === 0) {
@@ -4509,7 +4588,8 @@ async function renderTransactions(txs) {
     const txHtml = txs.map((tx, idx) => {
         const isReceive = tx.income;
         const aid = tx.asset_id || 0;
-        const config = ASSET_CONFIG[aid] || { symbol: 'CA' + aid, color: '#64748b', icon: null };
+        // Use getAssetInfo to get proper name/symbol/icon from cache
+        const config = getAssetInfo(aid);
         const amount = formatAmount(tx.value || 0);
         const fee = tx.fee ? formatAmount(tx.fee) : '0';
         const txId = tx.txId || tx.tx_id || '-';
@@ -4588,10 +4668,29 @@ async function renderTransactions(txs) {
             }
         }
 
-        // Action type
-        const actionTypes = { 0: 'Simple', 1: 'Split', 2: 'AssetIssue', 3: 'AssetConsume', 4: 'AssetInfo', 5: 'PushTx', 6: 'PullTx', 7: 'Contract', 12: 'Contract' };
+        // Detect asset creation, minting, and burning
+        const isAssetCreate = commentLower.includes('creating asset') || commentLower.includes('create asset');
+        const isAssetMint = commentLower.includes('minting asset') || commentLower.includes('mint asset') || commentLower.includes('withdraw');
+        const isAssetBurn = commentLower.includes('blackhole') || commentLower.includes('burn') ||
+            (tx.invoke_data && tx.invoke_data.some(d => d.contract_id === '5ab408982b148210e88f180114f10222a2235eafeede0a3a224fda0e523e17b7'));
+
+        // Action type - user-friendly names
+        const actionTypes = {
+            0: 'Transfer',
+            1: 'UTXO Split',
+            2: 'Asset Created',
+            3: 'Asset Burned',
+            4: 'Asset Info',
+            5: 'Offline Send',
+            6: 'Offline Receive',
+            7: 'Contract',
+            12: 'Contract'
+        };
         let action;
-        if (isAddLiquidity) action = 'Add Liquidity';
+        if (isAssetCreate) action = 'Create Asset';
+        else if (isAssetMint) action = 'Mint Tokens';
+        else if (isAssetBurn) action = 'Burn Tokens';
+        else if (isAddLiquidity) action = 'Add Liquidity';
         else if (isRemoveLiquidity) action = 'Remove Liquidity';
         else if (isSwap) action = 'Swap';
         else action = actionTypes[tx.tx_type] || (isReceive ? 'Receive' : 'Send');
@@ -4606,9 +4705,18 @@ async function renderTransactions(txs) {
             else if (confirmations > 0) { confirmText = String(confirmations); confirmColor = 'var(--warning)'; }
         } else if (tx.status === 0 || tx.status === 1) { confirmText = '0'; }
 
-        // Status mapping
-        const statusMap = { 0: { text: 'Pending', cls: 'status-pending' }, 1: { text: 'In Progress', cls: 'status-pending' }, 2: { text: 'Canceled', cls: 'expired' }, 3: { text: 'Completed', cls: 'available' }, 4: { text: 'Failed', cls: 'spent' } };
-        const status = statusMap[tx.status] || { text: 'Unknown', cls: '' };
+        // Status mapping (BEAM wallet API statuses)
+        const statusMap = {
+            0: { text: 'Pending', cls: 'status-pending' },
+            1: { text: 'In Progress', cls: 'status-pending' },
+            2: { text: 'Canceled', cls: 'expired' },
+            3: { text: 'Completed', cls: 'available' },
+            4: { text: 'Failed', cls: 'spent' },
+            5: { text: 'In Progress', cls: 'status-pending' },  // Registering/confirming
+            6: { text: 'In Progress', cls: 'status-pending' },  // Self-spending
+            7: { text: 'In Progress', cls: 'status-pending' }   // Asset confirming
+        };
+        const status = statusMap[tx.status] || { text: 'In Progress', cls: 'status-pending' };
         const isPending = tx.status === 0 || tx.status === 1;
 
         // Format date
@@ -4627,14 +4735,20 @@ async function renderTransactions(txs) {
 
         // Background color based on transaction type
         let bgColor;
-        if (isAddLiquidity) bgColor = 'linear-gradient(135deg, #25c2a0, #60a5fa)';  // LP gradient
+        if (isAssetCreate) bgColor = 'linear-gradient(135deg, #8b5cf6, #d946ef)';  // Purple gradient for asset creation
+        else if (isAssetMint) bgColor = 'linear-gradient(135deg, #10b981, #6ee7b7)';  // Green gradient for minting
+        else if (isAssetBurn) bgColor = 'linear-gradient(135deg, #ef4444, #f97316)';  // Red-orange gradient for burning (fire colors)
+        else if (isAddLiquidity) bgColor = 'linear-gradient(135deg, #25c2a0, #60a5fa)';  // LP gradient
         else if (isRemoveLiquidity) bgColor = 'linear-gradient(135deg, #f59e0b, #ef4444)';  // Orange-red gradient
         else if (isSwap) bgColor = 'linear-gradient(135deg, var(--beam-cyan), var(--beam-pink))';
         else bgColor = isReceive ? 'var(--success)' : 'var(--warning)';
 
         // SVG icon based on type
         let svgIcon;
-        if (isAddLiquidity) svgIcon = '<path d="M12 5v14M5 12h14"/>'; // Plus
+        if (isAssetCreate) svgIcon = '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>'; // Token/layers icon
+        else if (isAssetMint) svgIcon = '<circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/>'; // Coin with plus
+        else if (isAssetBurn) svgIcon = '<path d="M12 22c-4.97 0-9-2.69-9-6 0-2.21 1.47-4.21 3.5-5.5-.42.89-.5 1.85-.5 2.5 0 2.21 2.24 4 5 4 1.5 0 2.85-.55 3.8-1.45.28 1.38 1.2 2.45 1.2 2.45s2-1.5 2-4c0-3.31-4-6-4-10 0 0-3 1-3 4 0 1.5.5 2.5.5 2.5s-1-.5-2-2c-.67-.67-1-1.5-1-2.5 0-1.5 1-3 2-4-5 2-8 6-8 9 0 4.42 4.03 8 9 8z"/>'; // Fire icon
+        else if (isAddLiquidity) svgIcon = '<path d="M12 5v14M5 12h14"/>'; // Plus
         else if (isRemoveLiquidity) svgIcon = '<path d="M5 12h14"/>'; // Minus
         else if (isSwap) svgIcon = '<path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>';
         else svgIcon = '<path d="' + (isReceive ? 'M12 5v14M19 12l-7 7-7-7' : 'M12 19V5M5 12l7-7 7 7') + '"/>';
@@ -4644,7 +4758,82 @@ async function renderTransactions(txs) {
 
         // Build detail info based on transaction type
         let detailHtml, amountHtml;
-        if (liquidityDetails) {
+
+        // Handle asset creation/minting transactions
+        if (isAssetCreate && tx.invoke_data && tx.invoke_data.length > 0) {
+            const amounts = tx.invoke_data[0].amounts || [];
+            const feeAmount = amounts.find(a => a.asset_id === 0);
+            const feeDisplay = feeAmount ? formatAmount(Math.abs(feeAmount.amount)) : '50';
+            // Try to find the created asset ID from the amounts (negative non-BEAM asset)
+            const createdAsset = amounts.find(a => a.asset_id !== 0);
+            let createdInfo = null;
+            let createdIconHtml = '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg, #8b5cf6, #d946ef);align-items:center;justify-content:center;font-size:10px;color:#fff;">CA</span>';
+            if (createdAsset) {
+                createdInfo = getAssetInfo(Math.abs(createdAsset.asset_id));
+                if (createdInfo.icon) {
+                    createdIconHtml = '<img src="' + createdInfo.icon + '" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display=\'none\'">';
+                } else if (createdInfo.symbol && createdInfo.symbol !== 'CA' + Math.abs(createdAsset.asset_id)) {
+                    createdIconHtml = '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:' + (createdInfo.color || '#8b5cf6') + ';align-items:center;justify-content:center;font-size:10px;color:#fff;">' + createdInfo.symbol.substring(0,2) + '</span>';
+                }
+            }
+            const assetName = createdInfo && createdInfo.name ? createdInfo.name : 'New Confidential Asset';
+            const assetSymbol = createdInfo && createdInfo.symbol ? createdInfo.symbol : (createdAsset ? '#' + Math.abs(createdAsset.asset_id) : '');
+            detailHtml = '<div class="tx-asset" style="display:flex;align-items:center;gap:6px;">' +
+                createdIconHtml +
+                '<span style="color:#8b5cf6;">' + assetName + '</span>' +
+                (assetSymbol ? '<span class="tx-asset-id">' + assetSymbol + '</span>' : '') +
+            '</div>';
+            amountHtml = '<div class="tx-amount" style="color:var(--warning);font-size:12px;">-' + feeDisplay + ' BEAM</div>' +
+                '<div style="font-size:10px;opacity:0.7;">Creation Fee</div>' +
+                '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+        } else if (isAssetMint && tx.invoke_data && tx.invoke_data.length > 0) {
+            const amounts = tx.invoke_data[0].amounts || [];
+            const mintedAsset = amounts.find(a => a.asset_id !== 0 && a.amount < 0);
+            if (mintedAsset) {
+                const mintInfo = getAssetInfo(Math.abs(mintedAsset.asset_id));
+                const mintAmount = formatAmount(Math.abs(mintedAsset.amount));
+                // Build icon HTML for minted asset
+                const mintIconHtml = mintInfo.icon
+                    ? '<img src="' + mintInfo.icon + '" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display=\'none\'">'
+                    : '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:' + (mintInfo.color || '#10b981') + ';align-items:center;justify-content:center;font-size:10px;color:#fff;">' + mintInfo.symbol.substring(0,2) + '</span>';
+                detailHtml = '<div class="tx-asset" style="display:flex;align-items:center;gap:6px;">' +
+                    mintIconHtml +
+                    '<span style="color:#10b981;">Minting</span>' +
+                    '<span>' + mintInfo.symbol + '</span>' +
+                    '<span class="tx-asset-id">#' + Math.abs(mintedAsset.asset_id) + '</span>' +
+                '</div>';
+                amountHtml = '<div class="tx-amount" style="color:var(--success);font-size:12px;">+' + mintAmount + ' ' + mintInfo.symbol + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;">' + (mintInfo.name || 'Asset #' + Math.abs(mintedAsset.asset_id)) + '</div>' +
+                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            } else {
+                detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);">Minting tokens</div>';
+                amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            }
+        } else if (isAssetBurn && tx.invoke_data && tx.invoke_data.length > 0) {
+            // Burn transaction - tokens sent to BlackHole
+            const amounts = tx.invoke_data[0].amounts || [];
+            const burnedAsset = amounts.find(a => a.asset_id !== 0 && a.amount > 0);
+            if (burnedAsset) {
+                const burnInfo = getAssetInfo(burnedAsset.asset_id);
+                const burnAmount = formatAmount(burnedAsset.amount);
+                // Build icon HTML for burned asset
+                const burnIconHtml = burnInfo.icon
+                    ? '<img src="' + burnInfo.icon + '" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display=\'none\'">'
+                    : '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:' + (burnInfo.color || '#ef4444') + ';align-items:center;justify-content:center;font-size:10px;color:#fff;">' + burnInfo.symbol.substring(0,2) + '</span>';
+                detailHtml = '<div class="tx-asset" style="display:flex;align-items:center;gap:6px;">' +
+                    burnIconHtml +
+                    '<span style="color:#ef4444;">🔥 Burned</span>' +
+                    '<span>' + burnInfo.symbol + '</span>' +
+                    '<span class="tx-asset-id">#' + burnedAsset.asset_id + '</span>' +
+                '</div>';
+                amountHtml = '<div class="tx-amount" style="color:#ef4444;font-size:12px;">-' + burnAmount + ' ' + burnInfo.symbol + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;">' + (burnInfo.name || 'Sent to BlackHole') + '</div>' +
+                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            } else {
+                detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:#ef4444;">🔥 Burning tokens</div>';
+                amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            }
+        } else if (liquidityDetails) {
             if (liquidityDetails.type === 'add') {
                 detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:4px;">' +
                     '<span style="color:var(--warning);">' + liquidityDetails.asset1.symbol + '+' + liquidityDetails.asset2.symbol + '</span>' +
@@ -4896,6 +5085,7 @@ function copyToClipboard(text) {
 // =============================================
 const DEX_CID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
 const MINTER_CID = '295fe749dc12c55213d1bd16ced174dc8780c020f59cb17749e900bb0c15d868';
+const BLACKHOLE_CID = '5ab408982b148210e88f180114f10222a2235eafeede0a3a224fda0e523e17b7';
 let dexPools = [];
 // Default pair: BEAM → FOMO
 let dexFromAsset = { aid: 0, symbol: 'BEAM', name: 'BEAM', color: '#25c2a0', icon: ASSET_ICONS[0] };
@@ -5433,7 +5623,8 @@ function getAssetInfo(aid) {
         }
 
         let name = meta.N || meta.name || `Asset #${aid}`;
-        let symbol = meta.UN || meta.SN || meta.symbol || `A${aid}`;
+        // Prefer UN (Unit Name), then SN (Short Name), then first word of name, then fallback
+        let symbol = meta.UN || meta.SN || meta.symbol || (name && name !== `Asset #${aid}` ? name.split(' ')[0].substring(0, 10) : `CA${aid}`);
 
         // Check if this is an LP token (AMM Liquidity Token)
         // Format: "Amm Liquidity Token X-Y-Z" where X, Y are asset IDs
@@ -5488,10 +5679,26 @@ function getAssetInfo(aid) {
         };
     }
 
+    // Not in config or cache - try to get from walletData.assets
+    const walletAsset = walletData.assets?.find(a => a.id === aid);
+    if (walletAsset?.metadata_pairs) {
+        const meta = walletAsset.metadata_pairs;
+        let name = meta.N || meta.name || `Asset #${aid}`;
+        let symbol = meta.UN || meta.SN || (name !== `Asset #${aid}` ? name.split(' ')[0].substring(0, 10) : `CA${aid}`);
+        return {
+            aid,
+            name,
+            symbol,
+            color: meta.OPT_COLOR || `hsl(${(aid * 137) % 360}, 50%, 50%)`,
+            icon: meta.OPT_LOGO_URL || meta.OPT_ICON_URL || ASSET_ICONS[aid] || null
+        };
+    }
+
+    // Final fallback - unknown asset
     return {
         aid,
-        name: `Asset #${aid}`,
-        symbol: `A${aid}`,
+        name: `Confidential Asset #${aid}`,
+        symbol: `CA${aid}`,
         color: `hsl(${(aid * 137) % 360}, 50%, 50%)`,
         icon: null
     };
@@ -5504,15 +5711,16 @@ function getAssetInfoBasic(aid) {
 
     const cached = allAssetsCache.find(a => a.asset_id === aid);
     if (cached) {
-        const pairs = cached.metadata_pairs || {};
+        const meta = cached.metadata_pairs || cached.metadata || {};
+        const name = meta.N || meta.name || `Asset #${aid}`;
         return {
             aid,
-            symbol: pairs.UN || pairs.SN || `A${aid}`,
-            name: pairs.N || `Asset #${aid}`
+            symbol: meta.UN || meta.SN || (name !== `Asset #${aid}` ? name.split(' ')[0].substring(0, 10) : `CA${aid}`),
+            name
         };
     }
 
-    return { aid, symbol: `A${aid}`, name: `Asset #${aid}` };
+    return { aid, symbol: `CA${aid}`, name: `Asset #${aid}` };
 }
 
 // Select pool for swap
@@ -8372,9 +8580,10 @@ async function createToken() {
         return;
     }
 
-    // Check BEAM balance (need 60 BEAM + fee)
+    // Check BEAM balance (need 60 BEAM fee + ~1 for tx)
     const beamAsset = walletData.assets?.find(a => a.id === 0);
-    const beamAvailable = (beamAsset?.available || 0) / GROTH;
+    const beamAvailable = (beamAsset?.balance || 0) / GROTH;
+    console.log('BEAM balance check:', beamAsset, 'available:', beamAvailable);
     if (beamAvailable < 61) {
         showToast('Insufficient BEAM balance. You need at least 61 BEAM (60 fee + 1 for tx)', 'error');
         return;
@@ -8399,9 +8608,9 @@ async function createToken() {
     showToastAdvanced('Creating Token', `Creating ${symbol} on BEAM blockchain...`, 'pending');
 
     try {
-        // Call Minter contract
+        // Call Minter contract - metadata must be quoted to preserve semicolons
         const createResult = await apiCall('invoke_contract', {
-            args: `action=create_token,cid=${MINTER_CID},metadata=${metadata},limit=${limit}`,
+            args: `action=create_token,cid=${MINTER_CID},metadata="${metadata}",limit=${limit}`,
             createTx: true
         });
 
@@ -8420,13 +8629,21 @@ async function createToken() {
             }
 
             showToastAdvanced('Token Created!', `${symbol} has been created. TX: ${(txResult.txid || '').slice(0, 16)}...`, 'success');
+
+            // Wait a moment for the blockchain to process, then sync new asset
+            showToastAdvanced('Syncing', 'Syncing new asset metadata...', 'pending');
+
+            // Poll for the new asset from view_owned
+            await syncNewlyCreatedAssets();
+
         } else {
             showToastAdvanced('Token Created!', `${symbol} creation initiated`, 'success');
         }
 
         closeModal('create-token-modal');
 
-        // Refresh wallet data
+        // Refresh wallet data and asset cache
+        await loadAllAssets();
         await loadWalletData();
         renderAssetCards();
 
@@ -8438,6 +8655,49 @@ async function createToken() {
     }
 }
 
+// Sync newly created assets by calling tx_asset_info for each owned asset
+async function syncNewlyCreatedAssets() {
+    try {
+        // Get owned assets from minter contract
+        const result = await apiCall('invoke_contract', {
+            args: `action=view_owned,cid=${MINTER_CID}`
+        });
+
+        let output = result;
+        if (result?.output) {
+            try { output = JSON.parse(result.output); } catch(e) {}
+        }
+
+        const ownedAssets = output?.res || [];
+        console.log('Owned assets from minter:', ownedAssets);
+
+        // For each owned asset, call tx_asset_info to sync metadata to local DB
+        for (const asset of ownedAssets) {
+            const aid = asset.aid;
+            if (aid && aid > 0) {
+                // Check if we already have this asset in cache
+                const cached = allAssetsCache.find(a => a.asset_id === aid);
+                if (!cached || !cached.metadata_pairs || Object.keys(cached.metadata_pairs).length === 0) {
+                    console.log(`Syncing asset ${aid} metadata...`);
+                    try {
+                        await apiCall('tx_asset_info', { asset_id: aid });
+                        // Small delay to allow the sync transaction to process
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    } catch (e) {
+                        console.warn(`Could not sync asset ${aid}:`, e);
+                    }
+                }
+            }
+        }
+
+        // Wait a moment for the DB to update
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log('Asset sync complete');
+    } catch (e) {
+        console.warn('Error syncing newly created assets:', e);
+    }
+}
+
 // Toggle "My Created Assets" filter
 async function toggleMyAssets() {
     const checkbox = document.getElementById('show-my-assets');
@@ -8445,34 +8705,51 @@ async function toggleMyAssets() {
 
     if (isChecked) {
         // Load owned assets from Minter contract
-        showToastAdvanced('Loading', 'Loading your created assets...', 'pending');
+        showToastAdvanced('Loading', 'Querying Minter contract for your created assets...', 'pending');
 
         try {
             const result = await apiCall('invoke_contract', {
                 args: `action=view_owned,cid=${MINTER_CID}`
             });
 
+            console.log('view_owned result:', result);
+
             let output = result;
-            if (result?.output) {
-                try { output = JSON.parse(result.output); } catch(e) {}
+            if (result?.result?.output) {
+                try { output = JSON.parse(result.result.output); } catch(e) { output = result.result; }
+            } else if (result?.output) {
+                try { output = JSON.parse(result.output); } catch(e) { output = result; }
             }
 
-            ownedAssets = output?.assets || [];
+            console.log('Parsed output:', output);
+
+            // Handle different response formats
+            ownedAssets = output?.assets || output?.res || [];
 
             if (ownedAssets.length === 0) {
-                showToast('You haven\'t created any tokens yet', 'info');
+                showToast('You haven\'t created any tokens yet via the Minter contract', 'info');
             } else {
-                showToastAdvanced('Loaded', `Found ${ownedAssets.length} owned assets`, 'success');
+                showToastAdvanced('Loaded', `Found ${ownedAssets.length} token(s) you created`, 'success');
+                console.log('Owned assets:', ownedAssets);
             }
 
         } catch (e) {
-            showToast('Failed to load owned assets: ' + e.message, 'error');
+            console.error('Failed to load owned assets:', e);
+            showToast('Failed to query Minter: ' + e.message, 'error');
             ownedAssets = [];
         }
+    } else {
+        // Unchecked - clear filter
+        ownedAssets = [];
     }
 
-    // Re-render all assets with filter
-    renderAllAssets();
+    // Re-render all assets with filter using cached data
+    if (allAssetsCache && allAssetsCache.length > 0) {
+        renderAllAssets(allAssetsCache);
+    } else {
+        // Reload if cache empty
+        loadAllAssets();
+    }
 }
 
 // Render all assets (with optional "My Assets" filter)
@@ -8508,8 +8785,9 @@ async function openMintModal(assetId) {
                 try { output = JSON.parse(result.output); } catch(e) {}
             }
 
-            ownedAssets = output?.assets || [];
+            ownedAssets = output?.res || output?.assets || [];
             ownedData = ownedAssets.find(a => a.aid === assetId);
+            console.log('Loaded owned assets:', ownedAssets);
         } catch (e) {
             console.error('Failed to load owned assets:', e);
         }
@@ -8520,17 +8798,23 @@ async function openMintModal(assetId) {
         return;
     }
 
+    // Note: API returns mintedLo/limitLo, not supply/limit
+    const minted = ownedData.mintedLo || ownedData.supply || 0;
+    const limit = ownedData.limitLo || ownedData.limit || 0;
+
     currentMintAsset = {
         aid: assetId,
         symbol: asset.symbol,
         name: asset.name,
         icon: asset.icon,
         color: asset.color,
-        supply: ownedData.supply || 0,
-        limit: ownedData.limit || 0,
-        remaining: (ownedData.limit || 0) - (ownedData.supply || 0),
+        supply: minted,
+        limit: limit,
+        remaining: limit - minted,
         decimals: asset.decimals || 8
     };
+
+    console.log('Mint asset data:', { minted, limit, remaining: limit - minted, ownedData });
 
     // Update modal UI
     const iconEl = document.getElementById('mint-token-icon');
@@ -8598,9 +8882,9 @@ async function executeMintToken() {
     showToastAdvanced('Minting', `Minting ${amount} ${currentMintAsset.symbol}...`, 'pending');
 
     try {
-        // Call Minter contract withdraw action
+        // Call Minter contract withdraw action (role=manager required, use "value" not "amount")
         const mintResult = await apiCall('invoke_contract', {
-            args: `action=withdraw,cid=${MINTER_CID},aid=${currentMintAsset.aid},amount=${amountSmall}`,
+            args: `role=manager,action=withdraw,cid=${MINTER_CID},aid=${currentMintAsset.aid},value=${amountSmall}`,
             createTx: true
         });
 
@@ -8634,6 +8918,144 @@ async function executeMintToken() {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Mint Tokens';
+    }
+}
+
+// =====================
+// BURN TOKEN FUNCTIONS
+// =====================
+let currentBurnAsset = null;
+
+// Open Burn Token modal for a specific asset
+async function openBurnModal(assetId) {
+    // Get asset info
+    const asset = getAssetInfo(assetId);
+
+    // Get user's balance for this asset
+    const userAsset = walletData.assets?.find(a => a.id === assetId);
+    const balance = userAsset?.balance || 0;
+
+    if (balance <= 0) {
+        showToast('You have no tokens to burn', 'error');
+        return;
+    }
+
+    currentBurnAsset = {
+        aid: assetId,
+        symbol: asset.symbol,
+        name: asset.name,
+        icon: asset.icon,
+        color: asset.color,
+        balance: balance,
+        decimals: asset.decimals || 8
+    };
+
+    // Update modal UI
+    const iconEl = document.getElementById('burn-token-icon');
+    const initials = (asset.symbol || '??').slice(0, 2).toUpperCase();
+    if (asset.icon) {
+        iconEl.innerHTML = `<img src="${asset.icon}" style="width:100%;height:100%;border-radius:50%;" onerror="this.parentElement.innerHTML='${initials}'">`;
+        iconEl.style.background = 'transparent';
+    } else {
+        iconEl.innerHTML = initials;
+        iconEl.style.background = asset.color || '#ef4444';
+    }
+
+    document.getElementById('burn-token-name').textContent = `${asset.symbol} (ID: ${assetId})`;
+    document.getElementById('burn-balance').textContent = formatAmount(balance, currentBurnAsset.decimals);
+    document.getElementById('burn-amount').value = '';
+
+    // Reset button
+    const btn = document.getElementById('burn-btn');
+    btn.disabled = false;
+    btn.innerHTML = '🔥 Burn Tokens';
+
+    openModal('burn-token-modal');
+}
+
+// Set burn amount based on percentage
+function setBurnPercent(percent) {
+    if (!currentBurnAsset) return;
+
+    const balance = currentBurnAsset.balance / Math.pow(10, currentBurnAsset.decimals);
+    const amount = (balance * percent / 100).toFixed(currentBurnAsset.decimals);
+
+    document.getElementById('burn-amount').value = parseFloat(amount);
+}
+
+// Execute burn tokens using BlackHole contract deposit
+// BlackHole permanently locks tokens - they can never be retrieved
+async function executeBurnToken() {
+    if (!currentBurnAsset) {
+        showToast('No asset selected', 'error');
+        return;
+    }
+
+    const amountStr = document.getElementById('burn-amount').value;
+    const amount = parseFloat(amountStr);
+
+    if (!amount || amount <= 0) {
+        showToast('Please enter a valid amount', 'error');
+        return;
+    }
+
+    // Convert to smallest units
+    const amountSmall = Math.floor(amount * Math.pow(10, currentBurnAsset.decimals));
+
+    if (amountSmall > currentBurnAsset.balance) {
+        showToast('Amount exceeds your balance', 'error');
+        return;
+    }
+
+    // Confirm action
+    const confirmed = confirm(`Are you sure you want to burn ${amount} ${currentBurnAsset.symbol}?\n\nThis sends tokens to the BlackHole contract where they are PERMANENTLY locked and can NEVER be retrieved!\n\nThis action cannot be undone.`);
+    if (!confirmed) return;
+
+    // Update button
+    const btn = document.getElementById('burn-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-small"></span> Burning...';
+
+    showToastAdvanced('Burning', `Sending ${amount} ${currentBurnAsset.symbol} to BlackHole...`, 'pending');
+
+    try {
+        // Use BlackHole contract deposit to permanently lock tokens
+        const burnResult = await apiCall('invoke_contract', {
+            args: `role=manager,action=deposit,cid=${BLACKHOLE_CID},aid=${currentBurnAsset.aid},amount=${amountSmall}`,
+            createTx: true
+        });
+
+        if (burnResult.error) {
+            throw new Error(burnResult.error.message || 'Burn transaction failed');
+        }
+
+        // Check for raw_data that needs processing
+        if (burnResult.result?.raw_data) {
+            const processResult = await apiCall('process_invoke_data', {
+                data: burnResult.result.raw_data
+            });
+            if (processResult.error) {
+                throw new Error(processResult.error.message || 'Transaction confirmation failed');
+            }
+            showToastAdvanced('Tokens Burned!', `${amount} ${currentBurnAsset.symbol} permanently locked in BlackHole`, 'success');
+        } else if (burnResult.result?.txid || burnResult.result?.txId) {
+            showToastAdvanced('Tokens Burned!', `${amount} ${currentBurnAsset.symbol} permanently locked in BlackHole`, 'success');
+        } else {
+            showToastAdvanced('Tokens Burned!', `${amount} ${currentBurnAsset.symbol} sent to BlackHole`, 'success');
+        }
+
+        closeModal('burn-token-modal');
+
+        // Refresh wallet data
+        await loadWalletData();
+        renderAssetCards();
+        loadAllAssets();
+
+    } catch (e) {
+        showToastAdvanced('Burn Failed', e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🔥 Burn Tokens';
     }
 }
 

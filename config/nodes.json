@@ -1,4 +1,8 @@
 {
+    "settings": {
+        "minLiquidityBeam": 5000,
+        "description": "Minimum BEAM reserves in LP pool to show asset by default (in BEAM, not groth)"
+    },
     "mainnet": {
         "name": "Mainnet",
         "nodes": [
