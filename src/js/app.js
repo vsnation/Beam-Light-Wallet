@@ -5,7 +5,7 @@
 // ============================================
 // Version and Auto-Update
 // ============================================
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.0.3';
 const GITHUB_REPO = 'vsnation/Beam-Light-Wallet';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -445,6 +445,20 @@ const ASSET_CONFIG = {
 
 // DEX Contract ID
 const DEX_CONTRACT_ID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
+
+// Password error handling - clean user-facing message
+const PASSWORD_ERROR_MESSAGE = 'Please check your password. If password is lost, restore wallet.db from latest backup or delete it and restore from seed phrase.';
+
+// Helper to detect password-related errors
+function isPasswordError(error) {
+    if (!error) return false;
+    const errLower = (typeof error === 'string' ? error : (error.message || String(error))).toLowerCase();
+    return errLower.includes('password') ||
+           errLower.includes('invalid') ||
+           errLower.includes('file is not a database') ||
+           errLower.includes('decryption') ||
+           errLower.includes('authentication');
+}
 
 // Wallet data - will be fetched from API
 let walletData = {
@@ -887,6 +901,7 @@ function showPage(pageId, updateUrl = true) {
         transactions: 'Transactions',
         addresses: 'Addresses',
         dex: 'DEX Trading',
+        p2p: 'P2P Marketplace',
         explorer: 'Explorer',
         donate: 'Support Development',
         settings: 'Settings'
@@ -901,6 +916,7 @@ function showPage(pageId, updateUrl = true) {
             transactions: '/transactions',
             addresses: '/addresses',
             dex: '/dex',
+            p2p: '/p2p',
             explorer: '/explorer',
             donate: '/donate',
             settings: '/settings'
@@ -1356,13 +1372,13 @@ function quickTradeGetQuote() {
             const reserveIn = isForward ? pool.tok1 : pool.tok2;
             const reserveOut = isForward ? pool.tok2 : pool.tok1;
 
-            const feeRate = pool.kind === 2 ? 0.003 : 0.001;
+            const feeRate = pool.kind === 0 ? 0.003 : pool.kind === 1 ? 0.0005 : 0.01;
             const amountInWithFee = amountGroth * (1 - feeRate);
             const amountOut = Math.floor((amountInWithFee * reserveOut) / (reserveIn + amountInWithFee));
 
             document.getElementById('qt-to-amount').textContent = formatAmount(amountOut);
             document.getElementById('qt-rate').textContent = `1 ${qtFromAsset.symbol} = ${(amountOut / amountGroth).toFixed(6)} ${qtToAsset.symbol}`;
-            document.getElementById('qt-fee').textContent = `${(feeRate * 100).toFixed(1)}%`;
+            document.getElementById('qt-fee').textContent = `${(feeRate * 100).toFixed(2).replace(/\.?0+$/, '')}%`;
             document.getElementById('qt-rate-info').style.display = 'block';
 
             qtQuoteData = { pool, amountIn: amountGroth, amountOut, isForward };
@@ -1743,17 +1759,17 @@ async function generateAddress() {
             userMessage = 'Wallet not connected';
             userHint = 'Please start wallet-api and refresh';
         } else if (errorMsg.includes('not supported') || errorMsg.includes('Invalid address type')) {
-            userMessage = `${currentReceiveType} addresses not supported`;
-            userHint = 'Your wallet version may not support this address type';
+            userMessage = `${currentReceiveType} addresses require Local Node`;
+            userHint = 'Go to Settings and switch to Local Node';
         } else if (errorMsg.includes('shielded') || errorMsg.includes('lelantus')) {
             userMessage = 'Shielded pool not available';
-            userHint = 'Please wait for wallet to sync shielded UTXOs';
+            userHint = 'This address type requires a Local Node. Switch in Settings.';
         } else if (currentReceiveType === 'max_privacy') {
-            userMessage = 'Max Privacy address unavailable';
-            userHint = 'Requires connection to your own node with owner key';
+            userMessage = 'Max Privacy requires Local Node';
+            userHint = 'Go to Settings and switch to Local Node';
         } else if (currentReceiveType === 'offline' || currentReceiveType === 'public_offline') {
-            userMessage = `${currentReceiveType === 'offline' ? 'Offline' : 'Donation'} address error`;
-            userHint = errorMsg.length < 100 ? errorMsg : 'Check console for details';
+            userMessage = `${currentReceiveType === 'offline' ? 'Offline' : 'Donation'} address requires Local Node`;
+            userHint = 'Go to Settings and switch to Local Node';
         } else {
             userHint = errorMsg.length < 100 ? errorMsg : 'Check console for details';
         }
@@ -1915,11 +1931,11 @@ function setReceiveType(type, evt) {
         offlinePaymentsOption.style.display = type === 'offline' ? 'block' : 'none';
     }
 
-    // Show note for max_privacy and public_offline that require own node
-    if (type === 'max_privacy' || type === 'public_offline') {
+    // Show warning for address types that require local node
+    if (type === 'max_privacy' || type === 'public_offline' || type === 'offline') {
         const infoEl = document.getElementById('address-type-info');
         if (infoEl) {
-            infoEl.innerHTML += '<br><span style="color: var(--warning); font-size: 11px;">Note: Requires connection to your own node for full functionality.</span>';
+            infoEl.innerHTML += '<br><span style="color: var(--warning); font-size: 12px; font-weight: 500;">⚠️ Requires Local Node. Switch in Settings page.</span>';
         }
     }
 
@@ -2055,11 +2071,23 @@ async function checkDexSupport() {
 
 // Select node type
 async function selectNodeType(type, triggerChange = false) {
+    const publicBtn = document.getElementById('node-public-btn');
+    const localBtn = document.getElementById('node-local-btn');
+
+    // Early return if already on this node type (prevent duplicate clicks)
+    if (triggerChange && type === currentNodeType) {
+        return;
+    }
+
     currentNodeType = type;
 
-    document.getElementById('node-public-btn').classList.toggle('active', type === 'public');
-    document.getElementById('node-local-btn').classList.toggle('active', type === 'local');
+    publicBtn.classList.toggle('active', type === 'public');
+    localBtn.classList.toggle('active', type === 'local');
     document.getElementById('settings-node-type').textContent = type === 'public' ? 'Public' : 'Local';
+
+    // Update button disabled states - disable the active one
+    publicBtn.disabled = (type === 'public');
+    localBtn.disabled = (type === 'local');
 
     const localSection = document.getElementById('local-node-section');
     const selector = document.getElementById('node-selector');
@@ -2076,17 +2104,27 @@ async function selectNodeType(type, triggerChange = false) {
 
     // Only trigger change if explicitly requested (e.g., from button click)
     if (triggerChange && newValue !== currentNode) {
-        // Check if local node is already running and synced
-        if (type === 'local') {
-            const serverStatus = await checkServerStatus();
-            if (serverStatus?.node_running && serverStatus?.node_synced) {
-                // Local node is ready - switch without password
-                await switchNodeWithoutPassword(newValue, 'local');
-                return;
+        // Disable both buttons during switch operation
+        publicBtn.disabled = true;
+        localBtn.disabled = true;
+
+        try {
+            // Check if local node is already running and synced
+            if (type === 'local') {
+                const serverStatus = await checkServerStatus();
+                if (serverStatus?.node_running && serverStatus?.node_synced) {
+                    // Local node is ready - switch without password
+                    await switchNodeWithoutPassword(newValue, 'local');
+                    return;
+                }
             }
+            // Otherwise perform normal node switch
+            await changeNode();
+        } finally {
+            // Re-enable the non-active button after switch completes
+            publicBtn.disabled = (currentNodeType === 'public');
+            localBtn.disabled = (currentNodeType === 'local');
         }
-        // Otherwise perform normal node switch
-        changeNode();
     } else {
         currentNode = newValue;
     }
@@ -2415,6 +2453,230 @@ async function performRescan() {
         </svg>
         Rescan Wallet
     `;
+}
+
+// ============================================
+// TELEGRAM NOTIFICATIONS
+// ============================================
+
+// Load Telegram settings on page load
+function loadTelegramSettings() {
+    const settings = JSON.parse(localStorage.getItem('telegramSettings') || '{}');
+
+    const tokenInput = document.getElementById('telegram-bot-token');
+    const userIdInput = document.getElementById('telegram-user-id');
+    const statusDot = document.getElementById('telegram-status-dot');
+    const statusText = document.getElementById('telegram-status-text');
+
+    if (tokenInput) tokenInput.value = settings.botToken || '';
+    if (userIdInput) userIdInput.value = settings.userId || '';
+
+    // Load notification preferences
+    const notifyIncoming = document.getElementById('notify-incoming');
+    const notifyP2p = document.getElementById('notify-p2p-trade');
+    const notifyEscrow = document.getElementById('notify-escrow');
+    const notifyConfirmed = document.getElementById('notify-tx-confirmed');
+
+    if (notifyIncoming) notifyIncoming.checked = settings.notifyIncoming !== false;
+    if (notifyP2p) notifyP2p.checked = settings.notifyP2pTrade !== false;
+    if (notifyEscrow) notifyEscrow.checked = settings.notifyEscrow === true;
+    if (notifyConfirmed) notifyConfirmed.checked = settings.notifyTxConfirmed === true;
+
+    // Update status indicator
+    if (settings.botToken && settings.userId) {
+        if (statusDot) statusDot.className = 'status-dot status-online';
+        if (statusText) statusText.textContent = 'Configured';
+    } else {
+        if (statusDot) statusDot.className = 'status-dot status-offline';
+        if (statusText) statusText.textContent = 'Not configured';
+    }
+}
+
+// Save Telegram settings
+function saveTelegramSettings() {
+    const botToken = document.getElementById('telegram-bot-token')?.value?.trim();
+    const userId = document.getElementById('telegram-user-id')?.value?.trim();
+    const msgDiv = document.getElementById('telegram-message');
+
+    // Validate inputs
+    if (!botToken || !userId) {
+        showTelegramMessage('Please enter both Bot Token and User ID', 'error');
+        return;
+    }
+
+    // Validate token format (basic check)
+    if (!botToken.includes(':')) {
+        showTelegramMessage('Invalid Bot Token format. It should look like: 123456789:ABC-DEF...', 'error');
+        return;
+    }
+
+    // Validate user ID (should be numeric)
+    if (!/^\d+$/.test(userId)) {
+        showTelegramMessage('User ID should be a number (e.g., 123456789)', 'error');
+        return;
+    }
+
+    // Gather notification preferences
+    const settings = {
+        botToken,
+        userId,
+        notifyIncoming: document.getElementById('notify-incoming')?.checked ?? true,
+        notifyP2pTrade: document.getElementById('notify-p2p-trade')?.checked ?? true,
+        notifyEscrow: document.getElementById('notify-escrow')?.checked ?? false,
+        notifyTxConfirmed: document.getElementById('notify-tx-confirmed')?.checked ?? false,
+        updatedAt: Date.now()
+    };
+
+    localStorage.setItem('telegramSettings', JSON.stringify(settings));
+
+    // Update status indicator
+    const statusDot = document.getElementById('telegram-status-dot');
+    const statusText = document.getElementById('telegram-status-text');
+    if (statusDot) statusDot.className = 'status-dot status-online';
+    if (statusText) statusText.textContent = 'Configured';
+
+    showTelegramMessage('Settings saved successfully!', 'success');
+    showToastAdvanced('Telegram Settings', 'Notification settings saved', 'success');
+}
+
+// Test Telegram notification
+async function testTelegramNotification() {
+    const botToken = document.getElementById('telegram-bot-token')?.value?.trim();
+    const userId = document.getElementById('telegram-user-id')?.value?.trim();
+
+    if (!botToken || !userId) {
+        showTelegramMessage('Please enter Bot Token and User ID first', 'error');
+        return;
+    }
+
+    showTelegramMessage('Sending test notification...', 'pending');
+
+    try {
+        const message = `✅ *BEAM LightWallet Test*
+
+Your Telegram notifications are configured correctly!
+
+🔔 You will now receive alerts for:
+• Incoming transactions
+• P2P trade updates
+• And more...
+
+_Sent at ${new Date().toLocaleString()}_`;
+
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: userId,
+                text: message,
+                parse_mode: 'Markdown'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.ok) {
+            showTelegramMessage('✅ Test notification sent! Check your Telegram.', 'success');
+            showToastAdvanced('Test Sent', 'Check your Telegram for the notification', 'success');
+        } else {
+            const errorMsg = result.description || 'Unknown error';
+
+            if (errorMsg.includes('chat not found')) {
+                showTelegramMessage('❌ User ID not found. Make sure you started a chat with your bot first by sending /start to it.', 'error');
+            } else if (errorMsg.includes('bot token')) {
+                showTelegramMessage('❌ Invalid Bot Token. Please check and try again.', 'error');
+            } else {
+                showTelegramMessage(`❌ Error: ${errorMsg}`, 'error');
+            }
+        }
+    } catch (error) {
+        showTelegramMessage(`❌ Network error: ${error.message}`, 'error');
+    }
+}
+
+// Send a Telegram notification (used by the app)
+async function sendTelegramNotification(type, data) {
+    const settings = JSON.parse(localStorage.getItem('telegramSettings') || '{}');
+
+    if (!settings.botToken || !settings.userId) return;
+
+    // Check if this notification type is enabled
+    const typeEnabled = {
+        'incoming': settings.notifyIncoming,
+        'p2p_trade': settings.notifyP2pTrade,
+        'escrow': settings.notifyEscrow,
+        'tx_confirmed': settings.notifyTxConfirmed
+    };
+
+    if (!typeEnabled[type]) return;
+
+    // Build message based on type
+    let message;
+    switch (type) {
+        case 'incoming':
+            message = `💰 *Incoming Transaction*\n\nYou received *${data.amount} ${data.asset}*\n\nTxID: \`${data.txId}\``;
+            break;
+        case 'p2p_trade':
+            message = `🤝 *P2P Trade Update*\n\n${data.message}\n\nTrade ID: ${data.tradeId}`;
+            break;
+        case 'escrow':
+            message = `⚖️ *Escrow Assignment*\n\nYou have been assigned as an arbiter for dispute #${data.disputeId}.\n\nPlease review the case in the P2P marketplace.`;
+            break;
+        case 'tx_confirmed':
+            message = `✅ *Transaction Confirmed*\n\nYour transaction of *${data.amount} ${data.asset}* has been confirmed.\n\nTxID: \`${data.txId}\``;
+            break;
+        default:
+            message = data.message || 'Notification from BEAM LightWallet';
+    }
+
+    try {
+        await fetch(`https://api.telegram.org/bot${settings.botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: settings.userId,
+                text: message,
+                parse_mode: 'Markdown'
+            })
+        });
+    } catch (error) {
+        console.warn('Failed to send Telegram notification:', error);
+    }
+}
+
+// Helper to show message in Telegram settings section
+function showTelegramMessage(text, type) {
+    const msgDiv = document.getElementById('telegram-message');
+    if (!msgDiv) return;
+
+    msgDiv.style.display = 'block';
+    msgDiv.textContent = text;
+
+    // Style based on type
+    switch (type) {
+        case 'success':
+            msgDiv.style.background = 'var(--success-dim)';
+            msgDiv.style.color = 'var(--success)';
+            break;
+        case 'error':
+            msgDiv.style.background = 'var(--error-dim)';
+            msgDiv.style.color = 'var(--error)';
+            break;
+        case 'pending':
+            msgDiv.style.background = 'var(--info-dim)';
+            msgDiv.style.color = 'var(--info)';
+            break;
+        default:
+            msgDiv.style.background = 'var(--void)';
+            msgDiv.style.color = 'var(--text-secondary)';
+    }
+
+    // Auto-hide after 5 seconds for success
+    if (type === 'success') {
+        setTimeout(() => {
+            msgDiv.style.display = 'none';
+        }, 5000);
+    }
 }
 
 // Show owner key export modal
@@ -3496,9 +3758,8 @@ async function welcomeUnlock() {
                 }
             } else {
                 // Check if it's a password error - don't fallback, show error directly
-                const errLower = (switchResult.error || '').toLowerCase();
-                if (errLower.includes('password') || errLower.includes('invalid')) {
-                    showWelcomeError('', switchResult.error || 'Invalid password');
+                if (isPasswordError(switchResult.error)) {
+                    showWelcomeError('', PASSWORD_ERROR_MESSAGE);
                     resetButton();
                     return; // Don't proceed with fallback
                 }
@@ -3569,7 +3830,12 @@ async function unlockWithPublicNode(password) {
                 loadDexPools().catch(e => console.log('DEX pools not available on public node:', e.message));
             }
         } else {
-            showWelcomeError('', result.error || 'Invalid password');
+            // Use clean password error message
+            if (isPasswordError(result.error)) {
+                showWelcomeError('', PASSWORD_ERROR_MESSAGE);
+            } else {
+                showWelcomeError('', result.error || 'Failed to unlock wallet');
+            }
             throw new Error(result.error);
         }
     } catch (e) {
@@ -3916,6 +4182,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize Explorer settings
     initExplorerSettings();
+
+    // Load Telegram notification settings
+    loadTelegramSettings();
+
     renderBalancesTable();
     renderUtxos();
 
@@ -4674,6 +4944,20 @@ async function renderTransactions(txs) {
         const isAssetBurn = commentLower.includes('blackhole') || commentLower.includes('burn') ||
             (tx.invoke_data && tx.invoke_data.some(d => d.contract_id === '5ab408982b148210e88f180114f10222a2235eafeede0a3a224fda0e523e17b7'));
 
+        // P2P Escrow Contract detection (auto-derived PK version - deployed 2026-01-28)
+        const P2P_CONTRACT_ID = '95d077dcd070c3fe5021b4cd385684372ca0148e8cc90e16338dd00dec31b0bf';
+        const isP2PContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === P2P_CONTRACT_ID);
+        const isP2PCreateOrder = isP2PContract && commentLower.includes('create p2p order');
+        const isP2PCancelOrder = isP2PContract && commentLower.includes('cancel p2p order');
+        const isP2PAcceptOrder = isP2PContract && commentLower.includes('accept');
+        const isP2PPaymentSent = isP2PContract && commentLower.includes('payment sent');
+        const isP2PConfirmPayment = isP2PContract && commentLower.includes('confirm');
+        const isP2PDispute = isP2PContract && commentLower.includes('dispute');
+        const isP2PFeedback = isP2PContract && commentLower.includes('feedback');
+        const isP2PStake = isP2PContract && commentLower.includes('stake');
+        const isP2PUnstake = isP2PContract && commentLower.includes('unstake');
+        const isP2PRegister = isP2PContract && commentLower.includes('register');
+
         // Action type - user-friendly names
         const actionTypes = {
             0: 'Transfer',
@@ -4693,6 +4977,18 @@ async function renderTransactions(txs) {
         else if (isAddLiquidity) action = 'Add Liquidity';
         else if (isRemoveLiquidity) action = 'Remove Liquidity';
         else if (isSwap) action = 'Swap';
+        // P2P Escrow actions
+        else if (isP2PCreateOrder) action = 'P2P: Create Order';
+        else if (isP2PCancelOrder) action = 'P2P: Cancel Order';
+        else if (isP2PAcceptOrder) action = 'P2P: Accept Trade';
+        else if (isP2PPaymentSent) action = 'P2P: Payment Sent';
+        else if (isP2PConfirmPayment) action = 'P2P: Confirm Payment';
+        else if (isP2PDispute) action = 'P2P: Dispute';
+        else if (isP2PFeedback) action = 'P2P: Feedback';
+        else if (isP2PStake) action = 'P2P: Stake Escrow';
+        else if (isP2PUnstake) action = 'P2P: Unstake';
+        else if (isP2PRegister) action = 'P2P: Register Trader';
+        else if (isP2PContract) action = 'P2P Contract';
         else action = actionTypes[tx.tx_type] || (isReceive ? 'Receive' : 'Send');
 
         // Calculate confirmations
@@ -4741,6 +5037,15 @@ async function renderTransactions(txs) {
         else if (isAddLiquidity) bgColor = 'linear-gradient(135deg, #25c2a0, #60a5fa)';  // LP gradient
         else if (isRemoveLiquidity) bgColor = 'linear-gradient(135deg, #f59e0b, #ef4444)';  // Orange-red gradient
         else if (isSwap) bgColor = 'linear-gradient(135deg, var(--beam-cyan), var(--beam-pink))';
+        // P2P Escrow colors
+        else if (isP2PCreateOrder) bgColor = 'linear-gradient(135deg, #3b82f6, #06b6d4)';  // Blue-cyan for create order
+        else if (isP2PCancelOrder) bgColor = 'linear-gradient(135deg, #f97316, #f59e0b)';  // Orange for cancel
+        else if (isP2PAcceptOrder || isP2PConfirmPayment) bgColor = 'linear-gradient(135deg, #10b981, #34d399)';  // Green for accept/confirm
+        else if (isP2PPaymentSent) bgColor = 'linear-gradient(135deg, #8b5cf6, #a78bfa)';  // Purple for payment sent
+        else if (isP2PDispute) bgColor = 'linear-gradient(135deg, #ef4444, #dc2626)';  // Red for dispute
+        else if (isP2PFeedback) bgColor = 'linear-gradient(135deg, #f59e0b, #fbbf24)';  // Yellow for feedback
+        else if (isP2PStake || isP2PUnstake) bgColor = 'linear-gradient(135deg, #6366f1, #8b5cf6)';  // Indigo for staking
+        else if (isP2PContract) bgColor = 'linear-gradient(135deg, #64748b, #94a3b8)';  // Gray for other P2P
         else bgColor = isReceive ? 'var(--success)' : 'var(--warning)';
 
         // SVG icon based on type
@@ -4751,6 +5056,18 @@ async function renderTransactions(txs) {
         else if (isAddLiquidity) svgIcon = '<path d="M12 5v14M5 12h14"/>'; // Plus
         else if (isRemoveLiquidity) svgIcon = '<path d="M5 12h14"/>'; // Minus
         else if (isSwap) svgIcon = '<path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>';
+        // P2P Escrow icons
+        else if (isP2PCreateOrder) svgIcon = '<path d="M9 12h6M12 9v6"/><rect x="3" y="3" width="18" height="18" rx="2"/>'; // Plus in box (new order)
+        else if (isP2PCancelOrder) svgIcon = '<path d="M18 6L6 18M6 6l12 12"/>'; // X (cancel)
+        else if (isP2PAcceptOrder) svgIcon = '<path d="M20 6L9 17l-5-5"/>'; // Checkmark (accept)
+        else if (isP2PPaymentSent) svgIcon = '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>'; // Paper plane (sent)
+        else if (isP2PConfirmPayment) svgIcon = '<circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/>'; // Checkmark in circle
+        else if (isP2PDispute) svgIcon = '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'; // Warning triangle
+        else if (isP2PFeedback) svgIcon = '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'; // Star
+        else if (isP2PStake) svgIcon = '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>'; // Dollar sign (stake)
+        else if (isP2PUnstake) svgIcon = '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/><path d="M3 3l18 18"/>'; // Dollar with line through
+        else if (isP2PRegister) svgIcon = '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>'; // Person icon
+        else if (isP2PContract) svgIcon = '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>'; // Grid/contract
         else svgIcon = '<path d="' + (isReceive ? 'M12 5v14M19 12l-7 7-7-7' : 'M12 19V5M5 12l7-7 7 7') + '"/>';
 
         // Truncate helper
@@ -4832,6 +5149,108 @@ async function renderTransactions(txs) {
             } else {
                 detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:#ef4444;">🔥 Burning tokens</div>';
                 amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            }
+        } else if (isP2PContract && tx.invoke_data && tx.invoke_data.length > 0) {
+            // P2P Escrow transaction details
+            const amounts = tx.invoke_data[0].amounts || [];
+            const p2pAsset = amounts.find(a => a.asset_id !== 0);  // Non-BEAM asset
+            const beamAmount = amounts.find(a => a.asset_id === 0);
+
+            if (isP2PCreateOrder && p2pAsset) {
+                // Create order: locked amount + deposit
+                const assetInfo = getAssetInfo(p2pAsset.asset_id);
+                const lockedAmt = formatAmount(Math.abs(p2pAsset.amount), assetInfo.decimals);
+                const assetIconHtml = assetInfo.icon
+                    ? '<img src="' + assetInfo.icon + '" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display=\'none\'">'
+                    : '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:' + (assetInfo.color || '#3b82f6') + ';align-items:center;justify-content:center;font-size:10px;color:#fff;">' + assetInfo.symbol.substring(0,2) + '</span>';
+                detailHtml = '<div class="tx-asset" style="display:flex;align-items:center;gap:6px;">' +
+                    assetIconHtml +
+                    '<span style="color:#3b82f6;">Sell Order</span>' +
+                    '<span>' + assetInfo.symbol + '</span>' +
+                '</div>';
+                amountHtml = '<div class="tx-amount" style="color:var(--warning);font-size:12px;">-' + lockedAmt + ' ' + assetInfo.symbol + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;">Locked in escrow</div>' +
+                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            } else if (isP2PCancelOrder && p2pAsset) {
+                // Cancel order: refunded amount
+                const assetInfo = getAssetInfo(p2pAsset.asset_id);
+                const refundAmt = formatAmount(Math.abs(p2pAsset.amount), assetInfo.decimals);
+                const isRefund = p2pAsset.amount < 0;  // Negative = received
+                const assetIconHtml = assetInfo.icon
+                    ? '<img src="' + assetInfo.icon + '" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display=\'none\'">'
+                    : '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:' + (assetInfo.color || '#f97316') + ';align-items:center;justify-content:center;font-size:10px;color:#fff;">' + assetInfo.symbol.substring(0,2) + '</span>';
+                detailHtml = '<div class="tx-asset" style="display:flex;align-items:center;gap:6px;">' +
+                    assetIconHtml +
+                    '<span style="color:#f97316;">Order Cancelled</span>' +
+                    '<span>' + assetInfo.symbol + '</span>' +
+                '</div>';
+                amountHtml = '<div class="tx-amount" style="color:' + (isRefund ? 'var(--success)' : 'var(--warning)') + ';font-size:12px;">' + (isRefund ? '+' : '-') + refundAmt + ' ' + assetInfo.symbol + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;">' + (isRefund ? 'Refunded from escrow' : 'Released') + '</div>' +
+                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            } else if ((isP2PAcceptOrder || isP2PConfirmPayment) && p2pAsset) {
+                // Accept/Confirm: trade completed
+                const assetInfo = getAssetInfo(p2pAsset.asset_id);
+                const tradeAmt = formatAmount(Math.abs(p2pAsset.amount), assetInfo.decimals);
+                const isReceiving = p2pAsset.amount < 0;
+                const assetIconHtml = assetInfo.icon
+                    ? '<img src="' + assetInfo.icon + '" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display=\'none\'">'
+                    : '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:' + (assetInfo.color || '#10b981') + ';align-items:center;justify-content:center;font-size:10px;color:#fff;">' + assetInfo.symbol.substring(0,2) + '</span>';
+                detailHtml = '<div class="tx-asset" style="display:flex;align-items:center;gap:6px;">' +
+                    assetIconHtml +
+                    '<span style="color:#10b981;">' + (isP2PConfirmPayment ? 'Trade Complete' : 'Trade Started') + '</span>' +
+                    '<span>' + assetInfo.symbol + '</span>' +
+                '</div>';
+                amountHtml = '<div class="tx-amount" style="color:' + (isReceiving ? 'var(--success)' : 'var(--warning)') + ';font-size:12px;">' + (isReceiving ? '+' : '-') + tradeAmt + ' ' + assetInfo.symbol + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;">' + (isReceiving ? 'Received' : 'Deposit locked') + '</div>' +
+                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            } else if (isP2PStake && p2pAsset) {
+                // Stake escrow
+                const assetInfo = getAssetInfo(p2pAsset.asset_id);
+                const stakeAmt = formatAmount(Math.abs(p2pAsset.amount), assetInfo.decimals);
+                const assetIconHtml = assetInfo.icon
+                    ? '<img src="' + assetInfo.icon + '" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display=\'none\'">'
+                    : '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#6366f1;align-items:center;justify-content:center;font-size:10px;color:#fff;">' + assetInfo.symbol.substring(0,2) + '</span>';
+                detailHtml = '<div class="tx-asset" style="display:flex;align-items:center;gap:6px;">' +
+                    assetIconHtml +
+                    '<span style="color:#6366f1;">Escrow Stake</span>' +
+                    '<span>' + assetInfo.symbol + '</span>' +
+                '</div>';
+                amountHtml = '<div class="tx-amount" style="color:var(--warning);font-size:12px;">-' + stakeAmt + ' ' + assetInfo.symbol + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;">Locked as escrow stake</div>' +
+                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            } else if (isP2PUnstake && p2pAsset) {
+                // Unstake
+                const assetInfo = getAssetInfo(p2pAsset.asset_id);
+                const unstakeAmt = formatAmount(Math.abs(p2pAsset.amount), assetInfo.decimals);
+                const assetIconHtml = assetInfo.icon
+                    ? '<img src="' + assetInfo.icon + '" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display=\'none\'">'
+                    : '<span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#6366f1;align-items:center;justify-content:center;font-size:10px;color:#fff;">' + assetInfo.symbol.substring(0,2) + '</span>';
+                detailHtml = '<div class="tx-asset" style="display:flex;align-items:center;gap:6px;">' +
+                    assetIconHtml +
+                    '<span style="color:#6366f1;">Escrow Unstake</span>' +
+                    '<span>' + assetInfo.symbol + '</span>' +
+                '</div>';
+                amountHtml = '<div class="tx-amount" style="color:var(--success);font-size:12px;">+' + unstakeAmt + ' ' + assetInfo.symbol + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;">Stake + rewards returned</div>' +
+                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            } else {
+                // Generic P2P transaction
+                const p2pActionText = isP2PPaymentSent ? 'Payment marked as sent' :
+                    isP2PDispute ? 'Dispute opened' :
+                    isP2PFeedback ? 'Feedback submitted' :
+                    isP2PRegister ? 'Trader registered' : 'P2P Escrow';
+                detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);">' + p2pActionText + '</div>';
+
+                if (p2pAsset) {
+                    const assetInfo = getAssetInfo(p2pAsset.asset_id);
+                    const p2pAmt = formatAmount(Math.abs(p2pAsset.amount), assetInfo.decimals);
+                    const isP2PReceive = p2pAsset.amount < 0;
+                    amountHtml = '<div class="tx-amount" style="color:' + (isP2PReceive ? 'var(--success)' : 'var(--warning)') + ';font-size:12px;">' +
+                        (isP2PReceive ? '+' : '-') + p2pAmt + ' ' + assetInfo.symbol + '</div>' +
+                        '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                } else {
+                    amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                }
             }
         } else if (liquidityDetails) {
             if (liquidityDetails.type === 'add') {
@@ -5533,8 +5952,8 @@ function renderDexPools() {
         const a2 = getAssetInfo(p.aid2);
         const reserve1 = formatAmount(p.tok1);
         const reserve2 = formatAmount(p.tok2);
-        const feeLabel = p.kind === 1 ? '0.1%' : p.kind === 2 ? '0.3%' : '0.5%';
-        const feeClass = p.kind === 1 ? 'success' : p.kind === 2 ? 'warning' : 'error';
+        const feeLabel = p.kind === 0 ? '0.3%' : p.kind === 1 ? '0.05%' : '1%';
+        const feeClass = p.kind === 1 ? 'success' : p.kind === 0 ? 'warning' : 'error';
         const rate = p.tok1 > 0 ? (p.tok2 / p.tok1).toFixed(4).replace(/,/g, '.') : '-';
         const lpToken = p['lp-token'] || '-';
         const lpTokenInfo = getAssetInfo(p['lp-token']);
@@ -5757,7 +6176,7 @@ function openLiquidityModal(aid1, aid2, kind, mode) {
     // Update pool info
     document.getElementById('liq-pool-icons').innerHTML = renderTokenIcon(a1, 32) + '<div style="margin-left:-10px;">' + renderTokenIcon(a2, 32) + '</div>';
     document.getElementById('liq-pool-name').textContent = `${a1.symbol} / ${a2.symbol}`;
-    document.getElementById('liq-pool-fee').textContent = `Fee: ${kind === 1 ? '0.1%' : '0.3%'}`;
+    document.getElementById('liq-pool-fee').textContent = `Fee: ${kind === 0 ? '0.3%' : kind === 1 ? '0.05%' : '1%'}`;
 
     // Update labels
     document.getElementById('liq-asset1-label').textContent = a1.symbol;
@@ -5956,7 +6375,7 @@ function addLiquidity() {
             </div>
             <div class="confirm-swap-row">
                 <span class="confirm-swap-label">Pool Fee</span>
-                <span class="confirm-swap-value">${pool.kind === 1 ? '0.1%' : '0.3%'}</span>
+                <span class="confirm-swap-value">${pool.kind === 0 ? '0.3%' : pool.kind === 1 ? '0.05%' : '1%'}</span>
             </div>
         </div>
 
@@ -6610,9 +7029,9 @@ function renderCreatePoolModal() {
             <div class="address-field" style="margin-bottom: 16px;">
                 <div class="address-label">Fee Model</div>
                 <select id="pool-fee-model" class="search-input" style="width: 100%; cursor: pointer;">
-                    <option value="2">Standard (0.3% fee) - Recommended</option>
-                    <option value="1">Stable (0.1% fee) - For stablecoins</option>
-                    <option value="0">Volatile (0.5% fee) - For volatile pairs</option>
+                    <option value="2">Standard (1% fee) - Recommended</option>
+                    <option value="1">Stable (0.05% fee) - For stablecoins</option>
+                    <option value="0">Volatile (0.3% fee) - For volatile pairs</option>
                 </select>
             </div>
 
@@ -7233,7 +7652,7 @@ function findPoolsForPair() {
 
     // Render pool options
     container.innerHTML = matchingPools.map((p, i) => {
-        const feeLabel = p.kind === 1 ? '0.1%' : p.kind === 2 ? '0.3%' : '0.5%';
+        const feeLabel = p.kind === 0 ? '0.3%' : p.kind === 1 ? '0.05%' : '1%';
         const reserve1 = formatAmount(p.tok1);
         const reserve2 = formatAmount(p.tok2);
         const a1 = getAssetInfo(p.aid1);
@@ -7277,7 +7696,10 @@ function selectLiqPool(aid1, aid2, kind) {
 
     // Show pool info
     document.getElementById('liq-pool-info').style.display = 'block';
-    const rate = parseFloat(selectedLiqPool.k1_2) || 0;
+    // Rate: if liqAssetA matches aid1, use k2_1 (tok2/tok1), otherwise use k1_2 (tok1/tok2)
+    const rate = (liqAssetA.aid === selectedLiqPool.aid1)
+        ? parseFloat(selectedLiqPool.k2_1) || 0
+        : parseFloat(selectedLiqPool.k1_2) || 0;
     document.getElementById('liq-rate').textContent = `1 ${liqAssetA.symbol} = ${formatForInput(rate, 6)} ${liqAssetB.symbol}`;
     document.getElementById('liq-share').textContent = '0%';
     document.getElementById('liq-lp-tokens').textContent = '0';
@@ -7326,7 +7748,10 @@ function calcLiquidityB() {
     if (!selectedLiqPool) return;
     const amtA = parseFloat(document.getElementById('liq-amount-a').value) || 0;
     if (amtA > 0) {
-        const rate = parseFloat(selectedLiqPool.k1_2) || 0;
+        // Rate: if liqAssetA matches aid1, use k2_1 (tok2/tok1), otherwise use k1_2 (tok1/tok2)
+        const rate = (liqAssetA.aid === selectedLiqPool.aid1)
+            ? parseFloat(selectedLiqPool.k2_1) || 0
+            : parseFloat(selectedLiqPool.k1_2) || 0;
         const amtB = amtA * rate;
         document.getElementById('liq-amount-b').value = formatForInput(amtB, 6);
         updateLiquidityPreview(amtA, amtB);
@@ -7337,7 +7762,10 @@ function calcLiquidityA() {
     if (!selectedLiqPool) return;
     const amtB = parseFloat(document.getElementById('liq-amount-b').value) || 0;
     if (amtB > 0) {
-        const rate = parseFloat(selectedLiqPool.k2_1) || 0;
+        // Reverse rate: if liqAssetA matches aid1, use k1_2 (tok1/tok2), otherwise use k2_1 (tok2/tok1)
+        const rate = (liqAssetA.aid === selectedLiqPool.aid1)
+            ? parseFloat(selectedLiqPool.k1_2) || 0
+            : parseFloat(selectedLiqPool.k2_1) || 0;
         const amtA = amtB * rate;
         document.getElementById('liq-amount-a').value = formatForInput(amtA, 6);
         updateLiquidityPreview(amtA, amtB);
@@ -7374,7 +7802,7 @@ function showAddLiquidityConfirmation() {
     const poolCtl = selectedLiqPool.ctl || 1;
     const estimatedLP = Math.sqrt(amtA * amtB * GROTH * GROTH);
     const sharePercent = ((amtA * GROTH) / (poolTok1 + amtA * GROTH)) * 100;
-    const feeLabel = selectedLiqPool.kind === 1 ? '0.1%' : selectedLiqPool.kind === 2 ? '0.3%' : '0.5%';
+    const feeLabel = selectedLiqPool.kind === 0 ? '0.3%' : selectedLiqPool.kind === 1 ? '0.05%' : '1%';
 
     // Build confirmation content
     const content = document.getElementById('liq-confirm-content');
@@ -7423,7 +7851,7 @@ function showAddLiquidityConfirmation() {
             </div>
             <div style="display: flex; justify-content: space-between;">
                 <span style="color: var(--text-muted);">Pool Rate</span>
-                <span>1 ${liqAssetA.symbol} = ${(parseFloat(selectedLiqPool.k1_2) || 0).toFixed(6)} ${liqAssetB.symbol}</span>
+                <span>1 ${liqAssetA.symbol} = ${((liqAssetA.aid === selectedLiqPool.aid1) ? parseFloat(selectedLiqPool.k2_1) : parseFloat(selectedLiqPool.k1_2)).toFixed(6)} ${liqAssetB.symbol}</span>
             </div>
         </div>
     `;
@@ -7886,7 +8314,18 @@ function startNodeSyncMonitoring() {
                     if (localNodeSyncProgress < 100) {
                         localNodeSyncProgress = 100;
                         showToastAdvanced('Node Synced!', 'Local node is fully synchronized', 'success');
-                        showToastAdvanced('DEX Ready', 'You can now use DEX features with local node', 'success');
+
+                        // Auto-switch to local node if currently on public
+                        if (currentNodeType !== 'local' && storedWalletPassword) {
+                            showToastAdvanced('Node Ready', 'Switching to local node for full features...', 'pending');
+                            try {
+                                await seamlessSwitchToLocalNode();
+                            } catch (e) {
+                                console.log('Auto-switch to local node failed:', e);
+                            }
+                        } else if (currentNodeType === 'local') {
+                            showToastAdvanced('DEX Ready', 'You can now use DEX features with local node', 'success');
+                        }
 
                         // Slow down monitoring once synced
                         stopNodeSyncMonitoring();
@@ -8395,49 +8834,122 @@ function closeDonationPopup() {
 }
 
 async function sendDonation() {
-    const amountStr = document.getElementById('donation-amount').value;
-    const amount = parseFloat(amountStr);
+    // Check if we're in the popup modal (has donation-amount input)
+    const popupAmountInput = document.getElementById('donation-amount');
+
+    if (popupAmountInput) {
+        // We're in the popup modal - use the existing amount input
+        const amountStr = popupAmountInput.value;
+        const amount = parseFloat(amountStr);
+
+        if (!amount || amount <= 0) {
+            showToast('Please enter a valid amount', 'error');
+            return;
+        }
+
+        closeDonationPopup();
+        showDonationConfirmModal(amount);
+    } else {
+        // We're on the donate page - show custom amount modal
+        showCustomDonationModal();
+    }
+}
+
+// Show custom amount donation modal (for donate page)
+function showCustomDonationModal() {
+    // Check if wallet is connected
+    if (!walletData.isConnected) {
+        showToast('Wallet not connected', 'error');
+        return;
+    }
+
+    // Get available balance - uses 'balance' field, not 'available'
+    const beamAsset = walletData.assets?.find(a => a.id === 0);
+    const availableGroth = beamAsset?.balance || 0;
+    const availableBeam = (availableGroth / 100000000).toFixed(4);
+
+    const modal = document.createElement('div');
+    modal.id = 'custom-donation-modal';
+    modal.className = 'modal-overlay active';
+    modal.style.cssText = 'z-index: 10000;';
+    modal.onclick = (e) => { if (e.target === modal) closeCustomDonationModal(); };
+
+    modal.innerHTML = `
+        <div class="modal" style="padding: 32px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+                <h2 style="color: var(--text-primary); font-size: 20px; margin: 0;">Enter Donation Amount</h2>
+                <button class="modal-close" onclick="closeCustomDonationModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label style="display: block; color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">Amount (BEAM)</label>
+                <div style="position: relative;">
+                    <input type="number" id="custom-donation-amount" placeholder="0.00" min="0.001" step="0.001" class="input-field"
+                        style="width: 100%; padding: 16px 80px 16px 16px; font-size: 20px; font-weight: 600; box-sizing: border-box;">
+                    <span style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 16px;">BEAM</span>
+                </div>
+                <div style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">
+                    Available: ${availableBeam} BEAM
+                </div>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label style="display: block; color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Quick Select</label>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                    <button onclick="setCustomDonationAmount(1)" class="quick-btn quick-btn-secondary" style="padding: 12px;">1</button>
+                    <button onclick="setCustomDonationAmount(5)" class="quick-btn quick-btn-secondary" style="padding: 12px;">5</button>
+                    <button onclick="setCustomDonationAmount(10)" class="quick-btn quick-btn-secondary" style="padding: 12px;">10</button>
+                    <button onclick="setCustomDonationAmount(50)" class="quick-btn quick-btn-primary" style="padding: 12px;">50</button>
+                </div>
+            </div>
+
+            <button onclick="submitCustomDonation()" class="quick-btn quick-btn-primary" style="width: 100%; padding: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+                Continue
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Focus the input
+    setTimeout(() => {
+        document.getElementById('custom-donation-amount')?.focus();
+    }, 100);
+}
+
+function closeCustomDonationModal() {
+    const modal = document.getElementById('custom-donation-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.remove(), 300);
+    }
+}
+
+function setCustomDonationAmount(amount) {
+    const input = document.getElementById('custom-donation-amount');
+    if (input) {
+        input.value = amount;
+    }
+}
+
+function submitCustomDonation() {
+    const input = document.getElementById('custom-donation-amount');
+    const amount = parseFloat(input?.value);
 
     if (!amount || amount <= 0) {
         showToast('Please enter a valid amount', 'error');
         return;
     }
 
-    const amountGroth = Math.round(amount * 100000000);
-
-    // Check balance
-    const beamAsset = walletData.assets?.find(a => a.id === 0);
-    const availableGroth = beamAsset?.available || 0;
-
-    if (amountGroth > availableGroth - 100000) { // Leave room for fee
-        showToast('Insufficient balance', 'error');
-        return;
-    }
-
-    closeDonationPopup();
-
-    showToastAdvanced('Sending Donation', `${amount} BEAM to developers...`, 'pending');
-
-    try {
-        await apiCall('tx_send', {
-            address: DONATION_ADDRESS,
-            value: amountGroth,
-            fee: 100000,
-            asset_id: 0,
-            comment: 'BEAM Light Wallet Donation - Thank you!',
-            offline: true
-        });
-
-        showToastAdvanced('Thank You! 💝', `Your ${amount} BEAM donation was sent!`, 'success');
-
-        // Refresh data
-        await loadWalletData();
-        renderAssetCards();
-        renderBalancesTable();
-
-    } catch (e) {
-        showToastAdvanced('Donation Failed', e.message, 'error');
-    }
+    closeCustomDonationModal();
+    showDonationConfirmModal(amount);
 }
 
 // ============================================
@@ -8453,7 +8965,8 @@ function copyDonateAddress() {
     });
 }
 
-async function sendDonationAmount(amount) {
+// Show donation confirmation modal before sending
+function showDonationConfirmModal(amount) {
     // Check if wallet is connected
     if (!walletData.isConnected) {
         showToast('Wallet not connected', 'error');
@@ -8461,15 +8974,144 @@ async function sendDonationAmount(amount) {
     }
 
     const amountGroth = Math.round(amount * 100000000);
+    const feeGroth = 100000;
+    const totalGroth = amountGroth + feeGroth;
 
-    // Check balance
+    // Check balance - uses 'balance' field, not 'available'
     const beamAsset = walletData.assets?.find(a => a.id === 0);
-    const availableGroth = beamAsset?.available || 0;
+    const availableGroth = beamAsset?.balance || 0;
 
-    if (amountGroth > availableGroth - 100000) { // Leave room for fee
+    if (totalGroth > availableGroth) {
         showToast('Insufficient balance', 'error');
         return;
     }
+
+    // Create confirmation modal
+    const modal = document.createElement('div');
+    modal.id = 'donation-confirm-modal';
+    modal.className = 'modal-overlay active';
+    modal.style.cssText = 'z-index: 10000;';
+    modal.onclick = (e) => { if (e.target === modal) closeDonationConfirmModal(); };
+
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 420px; padding: 32px; text-align: center;">
+            <div style="width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, var(--beam-green, #25c2a0) 0%, var(--beam-cyan, #00d4ff) 100%); display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="36" height="36">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+            </div>
+
+            <h2 style="color: var(--text-primary); font-size: 24px; margin-bottom: 8px;">Confirm Donation</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 24px;">You're about to support BEAM Light Wallet development</p>
+
+            <div style="background: var(--void); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                    <span style="color: var(--text-secondary);">Donation Amount</span>
+                    <span style="color: var(--text-primary); font-weight: 600;">${amount} BEAM</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--glass-border);">
+                    <span style="color: var(--text-secondary);">Network Fee</span>
+                    <span style="color: var(--text-secondary);">0.001 BEAM</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-primary); font-weight: 600;">Total</span>
+                    <span style="color: var(--beam-green); font-weight: 600;">${(amount + 0.001).toFixed(3)} BEAM</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <button class="quick-btn quick-btn-secondary" onclick="closeDonationConfirmModal()" style="flex: 1; padding: 14px 24px;">
+                    Cancel
+                </button>
+                <button class="quick-btn quick-btn-primary" onclick="executeDonation(${amount})" style="flex: 1; padding: 14px 24px;">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+}
+
+function closeDonationConfirmModal() {
+    const modal = document.getElementById('donation-confirm-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.remove(), 300);
+    }
+}
+
+// Show success celebration modal after donation
+function showDonationSuccessModal(amount) {
+    const modal = document.createElement('div');
+    modal.id = 'donation-success-modal';
+    modal.className = 'modal-overlay active';
+    modal.style.cssText = 'z-index: 10000;';
+    modal.onclick = (e) => { if (e.target === modal) closeDonationSuccessModal(); };
+
+    modal.innerHTML = `
+        <div class="modal" style="max-width: 420px; padding: 40px; text-align: center; position: relative; overflow: hidden;">
+            <!-- Confetti animation -->
+            <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; overflow: hidden;">
+                ${Array.from({length: 20}, (_, i) => `
+                    <div style="position: absolute; width: 10px; height: 10px; background: ${['#25c2a0', '#00d4ff', '#f59e0b', '#ef4444', '#8b5cf6'][i % 5]}; border-radius: 50%; top: -10px; left: ${10 + (i * 4.5)}%; animation: confettiFall ${1.5 + Math.random()}s ease-out forwards; animation-delay: ${Math.random() * 0.3}s;"></div>
+                `).join('')}
+            </div>
+
+            <div style="width: 96px; height: 96px; border-radius: 50%; background: linear-gradient(135deg, #25c2a0 0%, #00d4ff 100%); display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; animation: heartBeat 1s ease infinite;">
+                <svg viewBox="0 0 24 24" fill="white" width="48" height="48">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+            </div>
+
+            <h2 style="color: var(--text-primary); font-size: 28px; margin-bottom: 8px;">Thank You!</h2>
+            <p style="color: var(--text-secondary); font-size: 16px; margin-bottom: 8px;">Your generous donation of</p>
+            <p style="color: #25c2a0; font-size: 32px; font-weight: 700; margin-bottom: 16px;">${amount} BEAM</p>
+            <p style="color: var(--text-secondary); margin-bottom: 32px;">helps keep BEAM Light Wallet free and open source for everyone!</p>
+
+            <div style="display: flex; justify-content: center;">
+                <button onclick="closeDonationSuccessModal()" class="quick-btn quick-btn-primary" style="padding: 14px 48px;">
+                    Awesome!
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Add confetti animation style if not exists
+    if (!document.getElementById('confetti-style')) {
+        const style = document.createElement('style');
+        style.id = 'confetti-style';
+        style.textContent = `
+            @keyframes confettiFall {
+                0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+                100% { transform: translateY(400px) rotate(720deg); opacity: 0; }
+            }
+            @keyframes heartBeat {
+                0%, 100% { transform: scale(1); }
+                25% { transform: scale(1.1); }
+                50% { transform: scale(1); }
+                75% { transform: scale(1.05); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(modal);
+}
+
+function closeDonationSuccessModal() {
+    const modal = document.getElementById('donation-success-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.remove(), 300);
+    }
+}
+
+// Execute the actual donation transaction
+async function executeDonation(amount) {
+    closeDonationConfirmModal();
+
+    const amountGroth = Math.round(amount * 100000000);
 
     showToastAdvanced('Sending Donation', `${amount} BEAM to developers...`, 'pending');
 
@@ -8483,7 +9125,8 @@ async function sendDonationAmount(amount) {
             offline: true
         });
 
-        showToastAdvanced('Thank You!', `Your ${amount} BEAM donation was sent!`, 'success');
+        // Show success celebration modal
+        showDonationSuccessModal(amount);
 
         // Refresh data
         await loadWalletData();
@@ -8493,6 +9136,11 @@ async function sendDonationAmount(amount) {
     } catch (e) {
         showToastAdvanced('Donation Failed', e.message, 'error');
     }
+}
+
+// Show confirmation modal when clicking quick donation buttons
+async function sendDonationAmount(amount) {
+    showDonationConfirmModal(amount);
 }
 
 // ============================================
@@ -11151,3 +11799,131 @@ setInterval(() => {
         }
     }
 }, 30000);
+
+// ============================================
+// P2P MARKETPLACE COMMUNICATION
+// ============================================
+
+/**
+ * Handle messages from P2P iframe
+ * Provides wallet functionality to the isolated P2P module
+ */
+window.addEventListener('message', async (event) => {
+    // Only handle p2p_request messages
+    if (!event.data || event.data.type !== 'p2p_request') return;
+
+    const { id, action, params } = event.data;
+    let result = null;
+    let error = null;
+
+    try {
+        switch (action) {
+            case 'get_address':
+                // Create or get existing address for P2P trading
+                const addrResult = await apiCall('create_address', {
+                    type: 'regular',
+                    comment: 'P2P Trading'
+                });
+                result = { address: addrResult?.result };
+                break;
+
+            case 'get_balance':
+                // Get balance for specific asset
+                const assetId = params?.assetId || 0;
+                const walletStatus = await apiCall('wallet_status');
+                if (walletStatus && walletStatus.totals) {
+                    const assetBalance = walletStatus.totals.find(t => t.asset_id === assetId);
+                    result = {
+                        available: assetBalance?.available || 0,
+                        receiving: assetBalance?.receiving || 0,
+                        sending: assetBalance?.sending || 0
+                    };
+                } else {
+                    result = { available: 0 };
+                }
+                break;
+
+            case 'get_all_balances':
+                // Get all asset balances
+                const status = await apiCall('wallet_status');
+                result = status?.totals || [];
+                break;
+
+            case 'invoke_contract':
+                // Call smart contract (for escrow operations)
+                const contractResult = await apiCall('invoke_contract', {
+                    args: params?.args,
+                    create_tx: params?.createTx || false
+                });
+                result = contractResult;
+                break;
+
+            case 'process_invoke_data':
+                // Process and sign contract transaction
+                const processResult = await apiCall('process_invoke_data', {
+                    data: params?.data
+                });
+                result = processResult;
+                break;
+
+            case 'send_transaction':
+                // Send tokens (for escrow locking)
+                const txResult = await apiCall('tx_send', {
+                    value: params?.value,
+                    fee: params?.fee || 100000,
+                    address: params?.address,
+                    asset_id: params?.assetId || 0,
+                    comment: params?.comment || 'P2P Trade'
+                });
+                result = txResult;
+                break;
+
+            case 'get_wallet_status':
+                // Get full wallet status
+                result = await apiCall('wallet_status');
+                break;
+
+            case 'validate_address':
+                // Validate BEAM address
+                const validResult = await apiCall('validate_address', {
+                    address: params?.address
+                });
+                result = validResult;
+                break;
+
+            case 'tx_status': {
+                const txListForStatus = await apiCall('tx_list', { count: 200 });
+                const txArrForStatus = Array.isArray(txListForStatus) ? txListForStatus : (txListForStatus?.result || []);
+                const foundTx = txArrForStatus.find(t => t.txId === params?.txId || t.tx_id === params?.txId);
+                if (foundTx) {
+                    result = foundTx;
+                } else {
+                    error = 'Transaction not found';
+                }
+                break;
+            }
+
+            case 'get_tx_list': {
+                const txListAll = await apiCall('tx_list', { count: params?.count || 100 });
+                result = Array.isArray(txListAll) ? txListAll : (txListAll?.result || txListAll || []);
+                break;
+            }
+
+            default:
+                error = `Unknown action: ${action}`;
+        }
+    } catch (e) {
+        console.error('P2P request error:', e);
+        error = e.message;
+    }
+
+    // Send response back to iframe
+    event.source?.postMessage({
+        type: 'p2p_response',
+        id: id,
+        result: result,
+        error: error
+    }, '*');
+});
+
+console.log('P2P communication handler initialized');

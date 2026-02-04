@@ -1,0 +1,272 @@
+{
+  "_comment": "Payment methods and currencies with sequential IDs for smart contract storage",
+  "_format": "Payment method 'id' is unique sequential number. Currency 'id' is ISO 4217 numeric code.",
+  "paymentMethods": {
+    "popular": {
+      "label": "Popular",
+      "methods": [
+        { "id": 1001, "code": "bank_transfer", "name": "Bank Transfer", "color": "#22c55e", "icon": "bank", "type": "fiat" },
+        { "id": 1002, "code": "wise", "name": "Wise (TransferWise)", "color": "#00b9ff", "icon": "wise", "type": "fiat" },
+        { "id": 1003, "code": "revolut", "name": "Revolut", "color": "#0075eb", "icon": "revolut", "type": "fiat" },
+        { "id": 1004, "code": "paypal", "name": "PayPal", "color": "#003087", "icon": "paypal", "type": "fiat" },
+        { "id": 1005, "code": "zelle", "name": "Zelle", "color": "#6d1ed4", "icon": "zelle", "type": "fiat" },
+        { "id": 1006, "code": "venmo", "name": "Venmo", "color": "#008cff", "icon": "venmo", "type": "fiat" },
+        { "id": 1007, "code": "cash_app", "name": "Cash App", "color": "#00d632", "icon": "cashapp", "type": "fiat" }
+      ]
+    },
+    "crypto": {
+      "label": "Crypto",
+      "methods": [
+        { "id": 2001, "code": "btc_onchain", "name": "BTC On-chain", "color": "#f7931a", "icon": "btc", "type": "crypto" },
+        { "id": 2002, "code": "btc_lightning", "name": "Lightning Network", "color": "#792de4", "icon": "lightning", "type": "crypto" },
+        { "id": 2003, "code": "eth", "name": "ETH (Ethereum)", "color": "#627eea", "icon": "eth", "type": "crypto" },
+        { "id": 2004, "code": "usdt_erc20", "name": "USDT (ERC-20)", "color": "#26a17b", "icon": "usdt", "type": "crypto" },
+        { "id": 2005, "code": "usdt_trc20", "name": "USDT (TRC-20)", "color": "#26a17b", "icon": "usdt", "type": "crypto" },
+        { "id": 2006, "code": "usdt_bep20", "name": "USDT (BEP-20)", "color": "#26a17b", "icon": "usdt", "type": "crypto" },
+        { "id": 2007, "code": "usdc", "name": "USDC", "color": "#2775ca", "icon": "usdc", "type": "crypto" },
+        { "id": 2008, "code": "dai", "name": "DAI", "color": "#f5ac37", "icon": "dai", "type": "crypto" },
+        { "id": 2009, "code": "bnb", "name": "BNB (BSC)", "color": "#f3ba2f", "icon": "bnb", "type": "crypto" },
+        { "id": 2010, "code": "sol", "name": "SOL (Solana)", "color": "#9945ff", "icon": "sol", "type": "crypto" },
+        { "id": 2011, "code": "trx", "name": "TRX (Tron)", "color": "#ef0027", "icon": "trx", "type": "crypto" },
+        { "id": 2012, "code": "ltc", "name": "LTC (Litecoin)", "color": "#345d9d", "icon": "ltc", "type": "crypto" },
+        { "id": 2013, "code": "xmr", "name": "XMR (Monero)", "color": "#ff6600", "icon": "xmr", "type": "crypto" },
+        { "id": 2014, "code": "ton", "name": "TON (Toncoin)", "color": "#0098ea", "icon": "ton", "type": "crypto" },
+        { "id": 2015, "code": "matic", "name": "MATIC (Polygon)", "color": "#8247e5", "icon": "matic", "type": "crypto" }
+      ]
+    },
+    "russia": {
+      "label": "Russia & CIS",
+      "methods": [
+        { "id": 3001, "code": "sberbank", "name": "Sberbank", "color": "#21a038", "icon": "sberbank", "type": "fiat" },
+        { "id": 3002, "code": "tinkoff", "name": "Tinkoff", "color": "#ffdd2d", "icon": "tinkoff", "type": "fiat" },
+        { "id": 3003, "code": "alfabank", "name": "Alfa-Bank", "color": "#ef3124", "icon": "alfabank", "type": "fiat" },
+        { "id": 3004, "code": "vtb", "name": "VTB", "color": "#003087", "icon": "vtb", "type": "fiat" },
+        { "id": 3005, "code": "raiffeisen_ru", "name": "Raiffeisen (RU)", "color": "#fee600", "icon": "raiffeisen", "type": "fiat" },
+        { "id": 3006, "code": "gazprombank", "name": "Gazprombank", "color": "#0033a0", "icon": "gazprombank", "type": "fiat" },
+        { "id": 3007, "code": "rosbank", "name": "Rosbank", "color": "#e4002b", "icon": "rosbank", "type": "fiat" },
+        { "id": 3008, "code": "otkritie", "name": "Otkritie", "color": "#00aeef", "icon": "otkritie", "type": "fiat" },
+        { "id": 3009, "code": "sbp", "name": "SBP (Fast Payments)", "color": "#5c2d91", "icon": "sbp", "type": "fiat" },
+        { "id": 3010, "code": "qiwi", "name": "QIWI", "color": "#ff8c00", "icon": "qiwi", "type": "fiat" },
+        { "id": 3011, "code": "yoomoney", "name": "YooMoney (Yandex)", "color": "#8b3ffd", "icon": "yoomoney", "type": "fiat" },
+        { "id": 3012, "code": "mts_bank", "name": "MTS Bank", "color": "#e30611", "icon": "mts", "type": "fiat" },
+        { "id": 3013, "code": "pochta_bank", "name": "Pochta Bank", "color": "#005baa", "icon": "pochta", "type": "fiat" },
+        { "id": 3014, "code": "sovcombank", "name": "Sovcombank", "color": "#ffd700", "icon": "sovcom", "type": "fiat" },
+        { "id": 3015, "code": "rnkb", "name": "RNKB", "color": "#003366", "icon": "rnkb", "type": "fiat" },
+        { "id": 3016, "code": "psb", "name": "PSB (Promsvyazbank)", "color": "#f26522", "icon": "psb", "type": "fiat" },
+        { "id": 3017, "code": "ak_bars", "name": "Ak Bars Bank", "color": "#00a651", "icon": "akbars", "type": "fiat" },
+        { "id": 3018, "code": "uralsib", "name": "Uralsib", "color": "#e31e24", "icon": "uralsib", "type": "fiat" },
+        { "id": 3050, "code": "kaspi", "name": "Kaspi Bank (KZ)", "color": "#f14635", "icon": "kaspi", "type": "fiat" },
+        { "id": 3051, "code": "halyk", "name": "Halyk Bank (KZ)", "color": "#00a651", "icon": "halyk", "type": "fiat" },
+        { "id": 3052, "code": "jusan", "name": "Jusan Bank (KZ)", "color": "#7b2d8e", "icon": "jusan", "type": "fiat" },
+        { "id": 3060, "code": "monobank", "name": "Monobank (UA)", "color": "#000000", "icon": "monobank", "type": "fiat" },
+        { "id": 3061, "code": "privatbank", "name": "PrivatBank (UA)", "color": "#4fb23e", "icon": "privatbank", "type": "fiat" },
+        { "id": 3070, "code": "kapitalbank", "name": "Kapitalbank (UZ)", "color": "#00a0e3", "icon": "kapital", "type": "fiat" },
+        { "id": 3080, "code": "tbc", "name": "TBC Bank (GE)", "color": "#00a3e0", "icon": "tbc", "type": "fiat" },
+        { "id": 3081, "code": "bog", "name": "Bank of Georgia", "color": "#ff6600", "icon": "bog", "type": "fiat" }
+      ]
+    },
+    "europe": {
+      "label": "Europe",
+      "methods": [
+        { "id": 4001, "code": "sepa", "name": "SEPA Transfer", "color": "#004494", "icon": "sepa", "type": "fiat" },
+        { "id": 4002, "code": "sepa_instant", "name": "SEPA Instant", "color": "#004494", "icon": "sepa", "type": "fiat" },
+        { "id": 4003, "code": "swift", "name": "SWIFT Transfer", "color": "#00457c", "icon": "swift", "type": "fiat" },
+        { "id": 4004, "code": "n26", "name": "N26", "color": "#36a18b", "icon": "n26", "type": "fiat" },
+        { "id": 4005, "code": "monzo", "name": "Monzo", "color": "#ff5c5c", "icon": "monzo", "type": "fiat" },
+        { "id": 4006, "code": "bunq", "name": "Bunq", "color": "#3eb3e4", "icon": "bunq", "type": "fiat" },
+        { "id": 4007, "code": "paysera", "name": "Paysera", "color": "#00b4e3", "icon": "paysera", "type": "fiat" },
+        { "id": 4008, "code": "transfergo", "name": "TransferGo", "color": "#00d68f", "icon": "transfergo", "type": "fiat" },
+        { "id": 4009, "code": "skrill", "name": "Skrill", "color": "#862165", "icon": "skrill", "type": "fiat" },
+        { "id": 4010, "code": "neteller", "name": "Neteller", "color": "#87c827", "icon": "neteller", "type": "fiat" },
+        { "id": 4011, "code": "payoneer", "name": "Payoneer", "color": "#ff4800", "icon": "payoneer", "type": "fiat" }
+      ]
+    },
+    "americas": {
+      "label": "Americas",
+      "methods": [
+        { "id": 5001, "code": "ach", "name": "ACH Transfer", "color": "#1e3a5f", "icon": "ach", "type": "fiat" },
+        { "id": 5002, "code": "wire_us", "name": "US Wire Transfer", "color": "#1e3a5f", "icon": "wire", "type": "fiat" },
+        { "id": 5003, "code": "pix", "name": "PIX (Brazil)", "color": "#32bcad", "icon": "pix", "type": "fiat" },
+        { "id": 5004, "code": "spei", "name": "SPEI (Mexico)", "color": "#001d6c", "icon": "spei", "type": "fiat" },
+        { "id": 5005, "code": "interac", "name": "Interac e-Transfer", "color": "#ffcc00", "icon": "interac", "type": "fiat" },
+        { "id": 5006, "code": "mercadopago", "name": "Mercado Pago", "color": "#009ee3", "icon": "mercadopago", "type": "fiat" },
+        { "id": 5007, "code": "nequi", "name": "Nequi (Colombia)", "color": "#df0074", "icon": "nequi", "type": "fiat" },
+        { "id": 5008, "code": "bancolombia", "name": "Bancolombia", "color": "#fdda24", "icon": "bancolombia", "type": "fiat" },
+        { "id": 5009, "code": "nubank", "name": "Nubank", "color": "#820ad1", "icon": "nubank", "type": "fiat" }
+      ]
+    },
+    "asia": {
+      "label": "Asia",
+      "methods": [
+        { "id": 6001, "code": "alipay", "name": "Alipay", "color": "#1677ff", "icon": "alipay", "type": "fiat" },
+        { "id": 6002, "code": "wechat", "name": "WeChat Pay", "color": "#07c160", "icon": "wechat", "type": "fiat" },
+        { "id": 6003, "code": "upi", "name": "UPI (India)", "color": "#5f259f", "icon": "upi", "type": "fiat" },
+        { "id": 6004, "code": "paytm", "name": "Paytm", "color": "#00b9f5", "icon": "paytm", "type": "fiat" },
+        { "id": 6005, "code": "phonepe", "name": "PhonePe", "color": "#5f259f", "icon": "phonepe", "type": "fiat" },
+        { "id": 6006, "code": "gpay_india", "name": "Google Pay (India)", "color": "#4285f4", "icon": "gpay", "type": "fiat" },
+        { "id": 6007, "code": "imps", "name": "IMPS (India)", "color": "#00bcd4", "icon": "imps", "type": "fiat" },
+        { "id": 6008, "code": "promptpay", "name": "PromptPay (Thailand)", "color": "#0055b8", "icon": "promptpay", "type": "fiat" },
+        { "id": 6009, "code": "gcash", "name": "GCash (Philippines)", "color": "#0080ff", "icon": "gcash", "type": "fiat" },
+        { "id": 6010, "code": "grab_pay", "name": "GrabPay", "color": "#00b14f", "icon": "grabpay", "type": "fiat" },
+        { "id": 6011, "code": "dana", "name": "DANA (Indonesia)", "color": "#118eea", "icon": "dana", "type": "fiat" },
+        { "id": 6012, "code": "ovo", "name": "OVO (Indonesia)", "color": "#4c3494", "icon": "ovo", "type": "fiat" },
+        { "id": 6013, "code": "gopay_id", "name": "GoPay (Indonesia)", "color": "#00aa13", "icon": "gopay", "type": "fiat" },
+        { "id": 6014, "code": "line_pay", "name": "LINE Pay", "color": "#00b900", "icon": "linepay", "type": "fiat" },
+        { "id": 6015, "code": "kakao_pay", "name": "Kakao Pay (Korea)", "color": "#fee500", "icon": "kakaopay", "type": "fiat" },
+        { "id": 6016, "code": "toss", "name": "Toss (Korea)", "color": "#0064ff", "icon": "toss", "type": "fiat" },
+        { "id": 6017, "code": "paypay", "name": "PayPay (Japan)", "color": "#ff0033", "icon": "paypay", "type": "fiat" }
+      ]
+    },
+    "africa": {
+      "label": "Africa & Middle East",
+      "methods": [
+        { "id": 7001, "code": "m_pesa", "name": "M-Pesa", "color": "#7cb342", "icon": "mpesa", "type": "fiat" },
+        { "id": 7002, "code": "airtel_money", "name": "Airtel Money", "color": "#ed1c24", "icon": "airtel", "type": "fiat" },
+        { "id": 7003, "code": "mtn_momo", "name": "MTN MoMo", "color": "#ffcc00", "icon": "mtn", "type": "fiat" },
+        { "id": 7004, "code": "flutterwave", "name": "Flutterwave", "color": "#f5a623", "icon": "flutterwave", "type": "fiat" },
+        { "id": 7005, "code": "paystack", "name": "Paystack", "color": "#00c3f7", "icon": "paystack", "type": "fiat" },
+        { "id": 7006, "code": "chipper", "name": "Chipper Cash", "color": "#6c5ce7", "icon": "chipper", "type": "fiat" },
+        { "id": 7010, "code": "stcpay", "name": "STC Pay (Saudi)", "color": "#4f008c", "icon": "stcpay", "type": "fiat" },
+        { "id": 7011, "code": "adcb", "name": "ADCB (UAE)", "color": "#9a1f40", "icon": "adcb", "type": "fiat" }
+      ]
+    },
+    "other": {
+      "label": "Other",
+      "methods": [
+        { "id": 9001, "code": "western_union", "name": "Western Union", "color": "#ffdd00", "icon": "westernunion", "type": "fiat" },
+        { "id": 9002, "code": "moneygram", "name": "MoneyGram", "color": "#ff6600", "icon": "moneygram", "type": "fiat" },
+        { "id": 9003, "code": "ria", "name": "Ria Money Transfer", "color": "#ff6600", "icon": "ria", "type": "fiat" },
+        { "id": 9004, "code": "remitly", "name": "Remitly", "color": "#2dbe60", "icon": "remitly", "type": "fiat" },
+        { "id": 9005, "code": "paysafecard", "name": "Paysafecard", "color": "#0070ba", "icon": "paysafecard", "type": "fiat" },
+        { "id": 9006, "code": "gift_card", "name": "Gift Card", "color": "#ff6b6b", "icon": "giftcard", "type": "other" },
+        { "id": 9007, "code": "cash_in_person", "name": "Cash (In Person)", "color": "#2d5016", "icon": "cash", "type": "cash" },
+        { "id": 9008, "code": "cash_deposit", "name": "Cash Deposit (ATM)", "color": "#2d5016", "icon": "atm", "type": "cash" }
+      ]
+    }
+  },
+  "currencies": {
+    "popular": {
+      "label": "Popular",
+      "currencies": [
+        { "id": 840, "code": "USD", "symbol": "$", "name": "US Dollar", "flag": "US", "decimals": 2 },
+        { "id": 978, "code": "EUR", "symbol": "EUR", "name": "Euro", "flag": "EU", "decimals": 2 },
+        { "id": 826, "code": "GBP", "symbol": "GBP", "name": "British Pound", "flag": "GB", "decimals": 2 },
+        { "id": 643, "code": "RUB", "symbol": "RUB", "name": "Russian Ruble", "flag": "RU", "decimals": 2 },
+        { "id": 156, "code": "CNY", "symbol": "CNY", "name": "Chinese Yuan", "flag": "CN", "decimals": 2 },
+        { "id": 392, "code": "JPY", "symbol": "JPY", "name": "Japanese Yen", "flag": "JP", "decimals": 0 }
+      ]
+    },
+    "europe": {
+      "label": "Europe",
+      "currencies": [
+        { "id": 756, "code": "CHF", "symbol": "CHF", "name": "Swiss Franc", "flag": "CH", "decimals": 2 },
+        { "id": 752, "code": "SEK", "symbol": "SEK", "name": "Swedish Krona", "flag": "SE", "decimals": 2 },
+        { "id": 578, "code": "NOK", "symbol": "NOK", "name": "Norwegian Krone", "flag": "NO", "decimals": 2 },
+        { "id": 208, "code": "DKK", "symbol": "DKK", "name": "Danish Krone", "flag": "DK", "decimals": 2 },
+        { "id": 985, "code": "PLN", "symbol": "PLN", "name": "Polish Zloty", "flag": "PL", "decimals": 2 },
+        { "id": 203, "code": "CZK", "symbol": "CZK", "name": "Czech Koruna", "flag": "CZ", "decimals": 2 },
+        { "id": 348, "code": "HUF", "symbol": "HUF", "name": "Hungarian Forint", "flag": "HU", "decimals": 2 },
+        { "id": 946, "code": "RON", "symbol": "RON", "name": "Romanian Leu", "flag": "RO", "decimals": 2 },
+        { "id": 975, "code": "BGN", "symbol": "BGN", "name": "Bulgarian Lev", "flag": "BG", "decimals": 2 },
+        { "id": 941, "code": "RSD", "symbol": "RSD", "name": "Serbian Dinar", "flag": "RS", "decimals": 2 },
+        { "id": 980, "code": "UAH", "symbol": "UAH", "name": "Ukrainian Hryvnia", "flag": "UA", "decimals": 2 },
+        { "id": 933, "code": "BYN", "symbol": "BYN", "name": "Belarusian Ruble", "flag": "BY", "decimals": 2 },
+        { "id": 949, "code": "TRY", "symbol": "TRY", "name": "Turkish Lira", "flag": "TR", "decimals": 2 },
+        { "id": 398, "code": "KZT", "symbol": "KZT", "name": "Kazakhstani Tenge", "flag": "KZ", "decimals": 2 },
+        { "id": 860, "code": "UZS", "symbol": "UZS", "name": "Uzbekistani Som", "flag": "UZ", "decimals": 2 },
+        { "id": 981, "code": "GEL", "symbol": "GEL", "name": "Georgian Lari", "flag": "GE", "decimals": 2 },
+        { "id": 51, "code": "AMD", "symbol": "AMD", "name": "Armenian Dram", "flag": "AM", "decimals": 2 },
+        { "id": 944, "code": "AZN", "symbol": "AZN", "name": "Azerbaijani Manat", "flag": "AZ", "decimals": 2 },
+        { "id": 417, "code": "KGS", "symbol": "KGS", "name": "Kyrgyzstani Som", "flag": "KG", "decimals": 2 },
+        { "id": 972, "code": "TJS", "symbol": "TJS", "name": "Tajikistani Somoni", "flag": "TJ", "decimals": 2 },
+        { "id": 934, "code": "TMT", "symbol": "TMT", "name": "Turkmenistani Manat", "flag": "TM", "decimals": 2 },
+        { "id": 498, "code": "MDL", "symbol": "MDL", "name": "Moldovan Leu", "flag": "MD", "decimals": 2 }
+      ]
+    },
+    "asiaPacific": {
+      "label": "Asia Pacific",
+      "currencies": [
+        { "id": 410, "code": "KRW", "symbol": "KRW", "name": "South Korean Won", "flag": "KR", "decimals": 0 },
+        { "id": 356, "code": "INR", "symbol": "INR", "name": "Indian Rupee", "flag": "IN", "decimals": 2 },
+        { "id": 360, "code": "IDR", "symbol": "IDR", "name": "Indonesian Rupiah", "flag": "ID", "decimals": 0 },
+        { "id": 458, "code": "MYR", "symbol": "MYR", "name": "Malaysian Ringgit", "flag": "MY", "decimals": 2 },
+        { "id": 608, "code": "PHP", "symbol": "PHP", "name": "Philippine Peso", "flag": "PH", "decimals": 2 },
+        { "id": 704, "code": "VND", "symbol": "VND", "name": "Vietnamese Dong", "flag": "VN", "decimals": 0 },
+        { "id": 764, "code": "THB", "symbol": "THB", "name": "Thai Baht", "flag": "TH", "decimals": 2 },
+        { "id": 702, "code": "SGD", "symbol": "SGD", "name": "Singapore Dollar", "flag": "SG", "decimals": 2 },
+        { "id": 344, "code": "HKD", "symbol": "HKD", "name": "Hong Kong Dollar", "flag": "HK", "decimals": 2 },
+        { "id": 901, "code": "TWD", "symbol": "TWD", "name": "Taiwan Dollar", "flag": "TW", "decimals": 2 },
+        { "id": 36, "code": "AUD", "symbol": "AUD", "name": "Australian Dollar", "flag": "AU", "decimals": 2 },
+        { "id": 554, "code": "NZD", "symbol": "NZD", "name": "New Zealand Dollar", "flag": "NZ", "decimals": 2 },
+        { "id": 586, "code": "PKR", "symbol": "PKR", "name": "Pakistani Rupee", "flag": "PK", "decimals": 2 },
+        { "id": 50, "code": "BDT", "symbol": "BDT", "name": "Bangladeshi Taka", "flag": "BD", "decimals": 2 },
+        { "id": 144, "code": "LKR", "symbol": "LKR", "name": "Sri Lankan Rupee", "flag": "LK", "decimals": 2 },
+        { "id": 524, "code": "NPR", "symbol": "NPR", "name": "Nepalese Rupee", "flag": "NP", "decimals": 2 },
+        { "id": 104, "code": "MMK", "symbol": "MMK", "name": "Myanmar Kyat", "flag": "MM", "decimals": 0 },
+        { "id": 116, "code": "KHR", "symbol": "KHR", "name": "Cambodian Riel", "flag": "KH", "decimals": 2 },
+        { "id": 418, "code": "LAK", "symbol": "LAK", "name": "Lao Kip", "flag": "LA", "decimals": 0 },
+        { "id": 496, "code": "MNT", "symbol": "MNT", "name": "Mongolian Tugrik", "flag": "MN", "decimals": 2 }
+      ]
+    },
+    "middleEast": {
+      "label": "Middle East",
+      "currencies": [
+        { "id": 784, "code": "AED", "symbol": "AED", "name": "UAE Dirham", "flag": "AE", "decimals": 2 },
+        { "id": 682, "code": "SAR", "symbol": "SAR", "name": "Saudi Riyal", "flag": "SA", "decimals": 2 },
+        { "id": 634, "code": "QAR", "symbol": "QAR", "name": "Qatari Riyal", "flag": "QA", "decimals": 2 },
+        { "id": 414, "code": "KWD", "symbol": "KWD", "name": "Kuwaiti Dinar", "flag": "KW", "decimals": 3 },
+        { "id": 48, "code": "BHD", "symbol": "BHD", "name": "Bahraini Dinar", "flag": "BH", "decimals": 3 },
+        { "id": 512, "code": "OMR", "symbol": "OMR", "name": "Omani Rial", "flag": "OM", "decimals": 3 },
+        { "id": 400, "code": "JOD", "symbol": "JOD", "name": "Jordanian Dinar", "flag": "JO", "decimals": 3 },
+        { "id": 376, "code": "ILS", "symbol": "ILS", "name": "Israeli Shekel", "flag": "IL", "decimals": 2 },
+        { "id": 818, "code": "EGP", "symbol": "EGP", "name": "Egyptian Pound", "flag": "EG", "decimals": 2 },
+        { "id": 364, "code": "IRR", "symbol": "IRR", "name": "Iranian Rial", "flag": "IR", "decimals": 0 },
+        { "id": 368, "code": "IQD", "symbol": "IQD", "name": "Iraqi Dinar", "flag": "IQ", "decimals": 0 },
+        { "id": 422, "code": "LBP", "symbol": "LBP", "name": "Lebanese Pound", "flag": "LB", "decimals": 0 }
+      ]
+    },
+    "africa": {
+      "label": "Africa",
+      "currencies": [
+        { "id": 710, "code": "ZAR", "symbol": "ZAR", "name": "South African Rand", "flag": "ZA", "decimals": 2 },
+        { "id": 566, "code": "NGN", "symbol": "NGN", "name": "Nigerian Naira", "flag": "NG", "decimals": 2 },
+        { "id": 404, "code": "KES", "symbol": "KES", "name": "Kenyan Shilling", "flag": "KE", "decimals": 2 },
+        { "id": 834, "code": "TZS", "symbol": "TZS", "name": "Tanzanian Shilling", "flag": "TZ", "decimals": 2 },
+        { "id": 800, "code": "UGX", "symbol": "UGX", "name": "Ugandan Shilling", "flag": "UG", "decimals": 0 },
+        { "id": 936, "code": "GHS", "symbol": "GHS", "name": "Ghanaian Cedi", "flag": "GH", "decimals": 2 },
+        { "id": 504, "code": "MAD", "symbol": "MAD", "name": "Moroccan Dirham", "flag": "MA", "decimals": 2 },
+        { "id": 12, "code": "DZD", "symbol": "DZD", "name": "Algerian Dinar", "flag": "DZ", "decimals": 2 },
+        { "id": 788, "code": "TND", "symbol": "TND", "name": "Tunisian Dinar", "flag": "TN", "decimals": 3 },
+        { "id": 952, "code": "XOF", "symbol": "XOF", "name": "West African CFA", "flag": "SN", "decimals": 0 },
+        { "id": 950, "code": "XAF", "symbol": "XAF", "name": "Central African CFA", "flag": "CM", "decimals": 0 },
+        { "id": 230, "code": "ETB", "symbol": "ETB", "name": "Ethiopian Birr", "flag": "ET", "decimals": 2 },
+        { "id": 646, "code": "RWF", "symbol": "RWF", "name": "Rwandan Franc", "flag": "RW", "decimals": 0 },
+        { "id": 943, "code": "MZN", "symbol": "MZN", "name": "Mozambican Metical", "flag": "MZ", "decimals": 2 }
+      ]
+    },
+    "americas": {
+      "label": "Americas",
+      "currencies": [
+        { "id": 124, "code": "CAD", "symbol": "CAD", "name": "Canadian Dollar", "flag": "CA", "decimals": 2 },
+        { "id": 484, "code": "MXN", "symbol": "MXN", "name": "Mexican Peso", "flag": "MX", "decimals": 2 },
+        { "id": 986, "code": "BRL", "symbol": "BRL", "name": "Brazilian Real", "flag": "BR", "decimals": 2 },
+        { "id": 32, "code": "ARS", "symbol": "ARS", "name": "Argentine Peso", "flag": "AR", "decimals": 2 },
+        { "id": 170, "code": "COP", "symbol": "COP", "name": "Colombian Peso", "flag": "CO", "decimals": 0 },
+        { "id": 152, "code": "CLP", "symbol": "CLP", "name": "Chilean Peso", "flag": "CL", "decimals": 0 },
+        { "id": 604, "code": "PEN", "symbol": "PEN", "name": "Peruvian Sol", "flag": "PE", "decimals": 2 },
+        { "id": 858, "code": "UYU", "symbol": "UYU", "name": "Uruguayan Peso", "flag": "UY", "decimals": 2 },
+        { "id": 600, "code": "PYG", "symbol": "PYG", "name": "Paraguayan Guarani", "flag": "PY", "decimals": 0 },
+        { "id": 68, "code": "BOB", "symbol": "BOB", "name": "Bolivian Boliviano", "flag": "BO", "decimals": 2 },
+        { "id": 928, "code": "VES", "symbol": "VES", "name": "Venezuelan Bolivar", "flag": "VE", "decimals": 2 },
+        { "id": 188, "code": "CRC", "symbol": "CRC", "name": "Costa Rican Colon", "flag": "CR", "decimals": 0 },
+        { "id": 590, "code": "PAB", "symbol": "PAB", "name": "Panamanian Balboa", "flag": "PA", "decimals": 2 },
+        { "id": 214, "code": "DOP", "symbol": "DOP", "name": "Dominican Peso", "flag": "DO", "decimals": 2 },
+        { "id": 320, "code": "GTQ", "symbol": "GTQ", "name": "Guatemalan Quetzal", "flag": "GT", "decimals": 2 },
+        { "id": 340, "code": "HNL", "symbol": "HNL", "name": "Honduran Lempira", "flag": "HN", "decimals": 2 },
+        { "id": 558, "code": "NIO", "symbol": "NIO", "name": "Nicaraguan Cordoba", "flag": "NI", "decimals": 2 },
+        { "id": 388, "code": "JMD", "symbol": "JMD", "name": "Jamaican Dollar", "flag": "JM", "decimals": 2 },
+        { "id": 780, "code": "TTD", "symbol": "TTD", "name": "Trinidad Dollar", "flag": "TT", "decimals": 2 }
+      ]
+    }
+  }
+}

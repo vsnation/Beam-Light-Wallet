@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BEAM Confidential P2P Exchange</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="p2p.css">
+    <!-- Gun.js for P2P encrypted chat -->
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+</head>
+<body>
+    <div class="p2p-container">
+        <!-- Header -->
+        <div class="p2p-header">
+            <div class="header-title-area">
+                <h1>🛡️ Private P2P Exchange</h1>
+                <!-- Role badges (shown based on user roles) -->
+                <div class="role-badges" id="role-badges">
+                    <span class="role-badge role-owner" id="badge-owner" style="display:none;" data-tooltip="Contract Owner: Full administrative control">👑 Owner</span>
+                    <span class="role-badge role-manager" id="badge-manager" style="display:none;" data-tooltip="Manager: Can manage disputes and withdraw fees">🔧 Manager</span>
+                    <span class="role-badge role-escrow" id="badge-escrow" style="display:none;" data-tooltip="Escrow Arbiter: Can vote on disputes and earn rewards">⚖️ Arbiter</span>
+                    <span class="role-badge role-trader" id="badge-trader" style="display:none;" data-tooltip="Registered Trader: Can create and accept orders">📈 Trader</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <!-- Escrow Queue (only visible to escrow stakers) -->
+                <button class="icon-btn escrow-only" id="escrow-queue-btn" onclick="showEscrowQueue()" title="Escrow Queue" style="display:none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18M3 12h18M3 18h18"/>
+                    </svg>
+                    <span class="notification-badge" id="escrow-queue-count" style="display:none;">0</span>
+                </button>
+                <!-- Manager Menu (only visible to managers) -->
+                <button class="icon-btn manager-only" id="manager-menu-btn" onclick="showManagerPanel()" title="Manager Panel" style="display:none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+                        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                    </svg>
+                </button>
+                <button class="icon-btn" onclick="showGlobalStats()" title="Statistics">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 20V10M12 20V4M6 20v-6"/>
+                    </svg>
+                </button>
+                <button class="icon-btn" onclick="showDisputeCenter()" title="Disputes">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                </button>
+                <button class="icon-btn" onclick="showPaymentMethodsManager()" title="Payment Methods">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                        <line x1="1" y1="10" x2="23" y2="10"/>
+                    </svg>
+                </button>
+                <button class="icon-btn" onclick="showNotificationHistory()" title="Notifications">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                    <span class="notification-badge" id="notification-badge" style="display:none;">0</span>
+                </button>
+                <button class="icon-btn" onclick="showTelegramSettings()" title="Telegram Settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+                    </svg>
+                </button>
+                <button class="icon-btn" onclick="showHelp()" title="Help">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9 9a3 3 0 015.12 2.13c0 2-3 3-3 3M12 17h.01"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Contract ID (for verification) -->
+        <div class="contract-info" id="contract-info">
+            <div class="contract-id" id="contract-cid" title="Click to copy contract ID">
+                <!-- Will be filled by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Buy/Sell Toggle -->
+        <div class="trade-toggle">
+            <button class="toggle-btn active" id="btn-buy" onclick="setSide('buy')">Buy</button>
+            <button class="toggle-btn" id="btn-sell" onclick="setSide('sell')">Sell</button>
+
+            <!-- Asset Tabs -->
+            <div class="asset-tabs">
+                <button class="asset-tab active" data-asset="174" onclick="setAsset(174)">FOMO</button>
+                <button class="asset-tab" data-asset="0" onclick="setAsset(0)">BEAM</button>
+                <button class="asset-tab" data-asset="47" onclick="setAsset(47)">NPH</button>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters-row">
+            <div class="filter-group">
+                <input type="text" class="filter-input" id="amount-input" placeholder="Enter Amount">
+                <select class="filter-select" id="currency-select">
+                    <option value="ALL">All Currencies</option>
+                    <optgroup label="Popular">
+                        <option value="USD">🇺🇸 USD</option>
+                        <option value="EUR">🇪🇺 EUR</option>
+                        <option value="GBP">🇬🇧 GBP</option>
+                        <option value="RUB">🇷🇺 RUB</option>
+                        <option value="CNY">🇨🇳 CNY</option>
+                    </optgroup>
+                    <optgroup label="Asia Pacific">
+                        <option value="JPY">🇯🇵 JPY</option>
+                        <option value="KRW">🇰🇷 KRW</option>
+                        <option value="INR">🇮🇳 INR</option>
+                        <option value="IDR">🇮🇩 IDR</option>
+                        <option value="MYR">🇲🇾 MYR</option>
+                        <option value="PHP">🇵🇭 PHP</option>
+                        <option value="VND">🇻🇳 VND</option>
+                        <option value="THB">🇹🇭 THB</option>
+                        <option value="SGD">🇸🇬 SGD</option>
+                        <option value="HKD">🇭🇰 HKD</option>
+                        <option value="AUD">🇦🇺 AUD</option>
+                        <option value="NZD">🇳🇿 NZD</option>
+                        <option value="PKR">🇵🇰 PKR</option>
+                        <option value="BDT">🇧🇩 BDT</option>
+                        <option value="LKR">🇱🇰 LKR</option>
+                        <option value="NPR">🇳🇵 NPR</option>
+                    </optgroup>
+                    <optgroup label="Europe">
+                        <option value="CHF">🇨🇭 CHF</option>
+                        <option value="SEK">🇸🇪 SEK</option>
+                        <option value="NOK">🇳🇴 NOK</option>
+                        <option value="PLN">🇵🇱 PLN</option>
+                        <option value="CZK">🇨🇿 CZK</option>
+                        <option value="HUF">🇭🇺 HUF</option>
+                        <option value="RON">🇷🇴 RON</option>
+                        <option value="BGN">🇧🇬 BGN</option>
+                        <option value="UAH">🇺🇦 UAH</option>
+                        <option value="BYN">🇧🇾 BYN</option>
+                        <option value="TRY">🇹🇷 TRY</option>
+                        <option value="GEL">🇬🇪 GEL</option>
+                        <option value="KZT">🇰🇿 KZT</option>
+                        <option value="AMD">🇦🇲 AMD</option>
+                        <option value="MDL">🇲🇩 MDL</option>
+                        <option value="RSD">🇷🇸 RSD</option>
+                    </optgroup>
+                    <optgroup label="Middle East & Africa">
+                        <option value="AED">🇦🇪 AED</option>
+                        <option value="SAR">🇸🇦 SAR</option>
+                        <option value="KWD">🇰🇼 KWD</option>
+                        <option value="ILS">🇮🇱 ILS</option>
+                        <option value="EGP">🇪🇬 EGP</option>
+                        <option value="NGN">🇳🇬 NGN</option>
+                        <option value="ZAR">🇿🇦 ZAR</option>
+                        <option value="KES">🇰🇪 KES</option>
+                        <option value="GHS">🇬🇭 GHS</option>
+                        <option value="MAD">🇲🇦 MAD</option>
+                        <option value="DZD">🇩🇿 DZD</option>
+                        <option value="LBP">🇱🇧 LBP</option>
+                    </optgroup>
+                    <optgroup label="Americas">
+                        <option value="CAD">🇨🇦 CAD</option>
+                        <option value="MXN">🇲🇽 MXN</option>
+                        <option value="BRL">🇧🇷 BRL</option>
+                        <option value="ARS">🇦🇷 ARS</option>
+                        <option value="COP">🇨🇴 COP</option>
+                        <option value="CLP">🇨🇱 CLP</option>
+                        <option value="PEN">🇵🇪 PEN</option>
+                        <option value="VES">🇻🇪 VES</option>
+                        <option value="BSD">🇧🇸 BSD</option>
+                    </optgroup>
+                    <optgroup label="Other">
+                        <option value="KGS">🇰🇬 KGS</option>
+                        <option value="TJS">🇹🇯 TJS</option>
+                    </optgroup>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <div class="dropdown" id="payment-dropdown">
+                    <button class="dropdown-trigger" onclick="togglePaymentDropdown()">
+                        All Payment Methods
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                    <div class="dropdown-content" id="payment-dropdown-content">
+                        <input type="text" class="dropdown-search" placeholder="Search..." oninput="filterPaymentMethods(this.value)">
+                        <label class="dropdown-item">
+                            <input type="checkbox" checked onchange="toggleAllPayments(this.checked)">
+                            <span>All Payment Methods</span>
+                        </label>
+                        <div class="dropdown-divider"></div>
+                        <div class="dropdown-section">Popular</div>
+                        <label class="dropdown-item" data-method="wise">
+                            <input type="checkbox" name="payment" value="wise">
+                            <span>Wise</span>
+                        </label>
+                        <label class="dropdown-item" data-method="revolut">
+                            <input type="checkbox" name="payment" value="revolut">
+                            <span>Revolut</span>
+                        </label>
+                        <label class="dropdown-item" data-method="bank_transfer">
+                            <input type="checkbox" name="payment" value="bank_transfer">
+                            <span>Bank Transfer</span>
+                        </label>
+                        <label class="dropdown-item" data-method="paypal">
+                            <input type="checkbox" name="payment" value="paypal">
+                            <span>PayPal</span>
+                        </label>
+                        <div class="dropdown-divider"></div>
+                        <div class="dropdown-section">Crypto</div>
+                        <label class="dropdown-item" data-method="usdt">
+                            <input type="checkbox" name="payment" value="usdt">
+                            <span>USDT (Any Chain)</span>
+                        </label>
+                        <label class="dropdown-item" data-method="btc">
+                            <input type="checkbox" name="payment" value="btc">
+                            <span>BTC On-chain</span>
+                        </label>
+                        <div class="dropdown-actions">
+                            <button class="btn-secondary" onclick="resetPaymentFilters()">Reset</button>
+                            <button class="btn-primary" onclick="applyPaymentFilters()">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="filter-btn" onclick="toggleAdvancedFilters()">
+                Filter
+                <span class="filter-badge" id="filter-badge" style="display:none;">0</span>
+            </button>
+
+            <button class="refresh-btn" onclick="refreshOrders()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Registration Banner (shown when not registered) -->
+        <div class="registration-banner" id="registration-banner" style="display:none;">
+            <div class="banner-content">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <div class="banner-text">
+                    <strong>Register to Start Trading</strong>
+                    <span>Create your trader profile to access all marketplace features</span>
+                </div>
+            </div>
+            <button class="btn-primary" onclick="showRegistrationModal()">Register Now</button>
+        </div>
+
+        <!-- Warning Banner -->
+        <div class="warning-banner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 8v4M12 16h.01"/>
+            </svg>
+            <span>Trustless trading powered by BEAM's confidential smart contracts. Crypto secured in escrow. All transactions are private by default.</span>
+        </div>
+
+        <!-- How it Works Button -->
+        <button class="how-it-works-btn" onclick="showHelp()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9 9a3 3 0 015.12 2.13c0 2-3 3-3 3M12 17h.01"/>
+            </svg>
+            How P2P Exchange Works
+        </button>
+
+        <!-- Order List -->
+        <div class="orders-container">
+            <div class="orders-header">
+                <div class="col-advertiser">Advertiser</div>
+                <div class="col-price">Price</div>
+                <div class="col-available">Available | Limits</div>
+                <div class="col-payment">Payment Method</div>
+                <div class="col-action">Trade</div>
+            </div>
+
+            <div class="orders-list" id="orders-list">
+                <!-- Orders will be populated by JS -->
+                <div class="loading-orders">
+                    <div class="spinner"></div>
+                    <span>Loading orders...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Actions -->
+        <div class="bottom-actions">
+            <button class="action-btn action-btn-primary" onclick="showCreateOrder()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+                + New Offer
+            </button>
+            <button class="action-btn action-btn-secondary" onclick="showMyTrades()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="M3 9h18M9 21V9"/>
+                </svg>
+                Active Trades
+            </button>
+            <button class="action-btn action-btn-secondary" onclick="showEscrowStaking()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                Become Arbiter
+            </button>
+        </div>
+    </div>
+
+    <!-- Create Order Modal -->
+    <div class="modal" id="create-order-modal">
+        <div class="modal-backdrop" onclick="closeModal('create-order-modal')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Create <span id="create-order-type">Sell</span> Order</h2>
+                <button class="modal-close" onclick="closeModal('create-order-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label id="create-action-label">I want to sell:</label>
+                    <div class="input-with-select">
+                        <input type="number" id="create-amount" placeholder="0" min="0" step="any">
+                        <select id="create-asset">
+                            <option value="174">FOMO</option>
+                            <option value="0">BEAM</option>
+                            <option value="47">NPH</option>
+                        </select>
+                    </div>
+                    <div class="input-hint" id="create-balance">Available: Loading...</div>
+                </div>
+
+                <div class="form-group">
+                    <label>Price per token:</label>
+                    <div class="input-with-select">
+                        <input type="number" id="create-price" placeholder="0.00" min="0" step="0.0001">
+                        <select id="create-currency">
+                            <optgroup label="Popular">
+                                <option value="USD">🇺🇸 USD</option>
+                                <option value="EUR">🇪🇺 EUR</option>
+                                <option value="GBP">🇬🇧 GBP</option>
+                                <option value="RUB">🇷🇺 RUB</option>
+                                <option value="CNY">🇨🇳 CNY</option>
+                            </optgroup>
+                            <optgroup label="Asia Pacific">
+                                <option value="JPY">🇯🇵 JPY</option>
+                                <option value="KRW">🇰🇷 KRW</option>
+                                <option value="INR">🇮🇳 INR</option>
+                                <option value="IDR">🇮🇩 IDR</option>
+                                <option value="MYR">🇲🇾 MYR</option>
+                                <option value="PHP">🇵🇭 PHP</option>
+                                <option value="VND">🇻🇳 VND</option>
+                                <option value="THB">🇹🇭 THB</option>
+                                <option value="SGD">🇸🇬 SGD</option>
+                                <option value="HKD">🇭🇰 HKD</option>
+                                <option value="AUD">🇦🇺 AUD</option>
+                            </optgroup>
+                            <optgroup label="Europe">
+                                <option value="CHF">🇨🇭 CHF</option>
+                                <option value="SEK">🇸🇪 SEK</option>
+                                <option value="NOK">🇳🇴 NOK</option>
+                                <option value="PLN">🇵🇱 PLN</option>
+                                <option value="CZK">🇨🇿 CZK</option>
+                                <option value="TRY">🇹🇷 TRY</option>
+                                <option value="UAH">🇺🇦 UAH</option>
+                            </optgroup>
+                            <optgroup label="Americas">
+                                <option value="CAD">🇨🇦 CAD</option>
+                                <option value="MXN">🇲🇽 MXN</option>
+                                <option value="BRL">🇧🇷 BRL</option>
+                                <option value="ARS">🇦🇷 ARS</option>
+                            </optgroup>
+                            <optgroup label="Middle East">
+                                <option value="AED">🇦🇪 AED</option>
+                                <option value="SAR">🇸🇦 SAR</option>
+                                <option value="EGP">🇪🇬 EGP</option>
+                                <option value="NGN">🇳🇬 NGN</option>
+                                <option value="ZAR">🇿🇦 ZAR</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="input-hint">Market price: ~$0.005</div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Min Limit:</label>
+                        <div class="input-with-addon">
+                            <input type="number" id="create-min-limit" value="10" min="1">
+                            <span class="addon">USD</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Max Limit:</label>
+                        <div class="input-with-addon">
+                            <input type="number" id="create-max-limit" value="500" min="1">
+                            <span class="addon">USD</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Payment Methods:</label>
+                    <div class="payment-methods-dropdown" id="create-payment-dropdown">
+                        <button type="button" class="dropdown-trigger" onclick="toggleCreatePaymentDropdown()">
+                            <span id="create-payment-selected">All Payment Methods</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </button>
+                        <div class="dropdown-content" id="create-payment-dropdown-content">
+                            <input type="text" class="dropdown-search" placeholder="Search payment method..." oninput="filterCreatePaymentMethods(this.value)">
+                            <div class="dropdown-scroll" id="create-payment-methods-list">
+                                <!-- Dynamically populated from config/payment-methods.json -->
+                                <div class="loading-placeholder">Loading payment methods...</div>
+                            </div>
+                            <div class="dropdown-actions">
+                                <button type="button" class="btn-secondary" onclick="resetCreatePayments()">Reset</button>
+                                <button type="button" class="btn-primary" onclick="confirmCreatePayments()">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="selected-methods-tags" id="create-selected-tags">
+                        <!-- Selected payment method tags will appear here -->
+                    </div>
+
+                    <!-- Crypto payment methods notice -->
+                    <div class="crypto-payment-notice" id="crypto-payment-notice" style="display: none;">
+                        <div class="crypto-notice-icon">⛓</div>
+                        <div class="crypto-notice-content">
+                            <strong>Cross-chain Payment Selected</strong>
+                            <p>You've selected crypto payment method(s). The buyer will send cryptocurrency to your provided wallet address. Make sure to verify the transaction on the respective blockchain before confirming receipt.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="order-summary">
+                    <h4>🔐 Escrow Summary <span class="help-icon" data-tooltip="All funds are locked in a smart contract until the trade completes successfully. Neither party can access them unilaterally.">?</span></h4>
+                    <div class="summary-row">
+                        <span id="summary-selling-label">Selling:</span>
+                        <span id="summary-selling">0 FOMO</span>
+                    </div>
+                    <div class="summary-row">
+                        <span id="summary-receive-label">You receive:</span>
+                        <span id="summary-receive">$0.00</span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Escrow bond (10%): <span class="help-icon" data-tooltip="Security deposit returned after successful trade. Protects both parties - if you fail to fulfill your obligations, this may be forfeited.">?</span></span>
+                        <span id="summary-deposit">0 FOMO</span>
+                    </div>
+                    <div class="summary-row highlight" id="summary-total-row">
+                        <span id="summary-total-label">Locked in contract:</span>
+                        <span id="summary-total">0 FOMO</span>
+                    </div>
+                </div>
+
+                <label class="checkbox-item terms-checkbox">
+                    <input type="checkbox" id="create-terms">
+                    <span>I agree to lock funds in BEAM's confidential escrow contract until trade completion</span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('create-order-modal')">Cancel</button>
+                <button class="btn-primary" id="create-order-submit" onclick="submitCreateOrder()">🚀 Post Order</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trade Modal -->
+    <div class="modal" id="trade-modal">
+        <div class="modal-backdrop" onclick="closeModal('trade-modal')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Buy <span id="trade-asset-name">FOMO</span></h2>
+                <button class="modal-close" onclick="closeModal('trade-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="trader-info">
+                    <div class="trader-avatar" id="trade-avatar">E</div>
+                    <div class="trader-details">
+                        <div class="trader-name" id="trade-seller-name">Elcrypto</div>
+                        <div class="trader-stats">
+                            <span class="trust-score" id="trade-trust" data-tooltip="Trust Score: Calculated from completed trades, dispute outcomes, and feedback ratings. 90%+ is highly trusted.">98.5%</span>
+                            <span class="separator">|</span>
+                            <span id="trade-count" data-tooltip="Total completed trades by this trader">209 trades</span>
+                            <span class="separator">|</span>
+                            <span id="trade-time" data-tooltip="Average response time for this trader">~30m</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="trade-inputs">
+                    <div class="trade-input-group">
+                        <label>I want to pay:</label>
+                        <div class="input-with-select">
+                            <input type="number" id="trade-pay-amount" placeholder="0" oninput="calculateTradeReceive()">
+                            <span class="static-currency" id="trade-currency">USD</span>
+                        </div>
+                    </div>
+                    <div class="trade-arrow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </div>
+                    <div class="trade-input-group">
+                        <label>I will receive:</label>
+                        <div class="input-with-select">
+                            <input type="number" id="trade-receive-amount" placeholder="0" readonly>
+                            <span class="static-currency" id="trade-receive-asset">FOMO</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="trade-details">
+                    <div class="detail-row">
+                        <span>Price:</span>
+                        <span id="trade-price">$0.005 per FOMO</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>Limits:</span>
+                        <span id="trade-limits">$10 - $500</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>Payment Method:</span>
+                        <span id="trade-payment">Bank Transfer</span>
+                    </div>
+                    <div class="detail-row">
+                        <span>Trade Fee: <span class="help-icon" data-tooltip="Small fee distributed to escrow stakers who help secure and resolve disputes on the platform.">?</span></span>
+                        <span id="trade-fee">0.5%</span>
+                    </div>
+                </div>
+
+                <div class="deposit-warning">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        <path d="M12 9v4M12 17h.01"/>
+                    </svg>
+                    <div>
+                        <strong>Security Deposit Required: <span id="trade-deposit">500 FOMO</span> <span class="help-icon" data-tooltip="Both buyer and seller lock deposits. This ensures both parties are committed. Your deposit is returned when you complete your part of the trade.">?</span></strong>
+                        <p>This deposit will be returned after a successful trade.</p>
+                    </div>
+                </div>
+
+                <label class="checkbox-item terms-checkbox">
+                    <input type="checkbox" id="trade-agree-time">
+                    <span>I agree to complete payment within 30 minutes</span>
+                </label>
+                <label class="checkbox-item terms-checkbox">
+                    <input type="checkbox" id="trade-agree-deposit">
+                    <span>I understand my deposit is forfeited if I don't pay</span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('trade-modal')">Cancel</button>
+                <button class="btn-primary" id="trade-submit" onclick="startTrade()">Start Trade</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Trades Modal -->
+    <div class="modal" id="my-trades-modal">
+        <div class="modal-backdrop" onclick="closeModal('my-trades-modal')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>My Trades</h2>
+                <button class="modal-close" onclick="closeModal('my-trades-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="trades-tabs">
+                    <button class="trades-tab active" onclick="showTradesTab('active')">Active</button>
+                    <button class="trades-tab" onclick="showTradesTab('completed')">Completed</button>
+                    <button class="trades-tab" onclick="showTradesTab('my-orders')">My Orders</button>
+                </div>
+
+                <!-- Active Trades List -->
+                <div class="trades-section" id="active-trades-section">
+                    <h4 style="margin-bottom:12px;color:var(--text-secondary);">Active Trades</h4>
+                    <div class="trades-list" id="active-trades-list">
+                        <p class="empty-msg">No active trades</p>
+                    </div>
+                </div>
+
+                <!-- Completed Trades List -->
+                <div class="trades-section" id="completed-trades-section" style="display:none;">
+                    <h4 style="margin-bottom:12px;color:var(--text-secondary);">Completed Trades</h4>
+                    <div class="trades-list" id="completed-trades-list">
+                        <p class="empty-msg">No completed trades yet</p>
+                    </div>
+                </div>
+
+                <!-- My Orders List -->
+                <div class="trades-section" id="my-orders-section" style="display:none;">
+                    <h4 style="margin-bottom:12px;color:var(--text-secondary);">My Orders</h4>
+                    <div class="trades-list" id="my-orders-list">
+                        <p class="empty-msg">No orders created yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Escrow Staking Modal -->
+    <div class="modal" id="escrow-modal">
+        <div class="modal-backdrop" onclick="closeModal('escrow-modal')"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Escrow Staking</h2>
+                <button class="modal-close" onclick="closeModal('escrow-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="escrow-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="escrow-total-staked">0</div>
+                        <div class="stat-label">Total FOMO Staked</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="escrow-stakers">0</div>
+                        <div class="stat-label">Active Escrows</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="escrow-apy">~15%</div>
+                        <div class="stat-label">Est. APY</div>
+                    </div>
+                </div>
+
+                <div class="escrow-info">
+                    <h4>Become an Escrow</h4>
+                    <p>Stake FOMO to become eligible to resolve disputes and earn fees from every trade.</p>
+                    <ul>
+                        <li>Minimum stake: 10,000 FOMO</li>
+                        <li>Lock period: 180 days</li>
+                        <li>Earn 40% of dispute resolution fees</li>
+                        <li>Share of 0.5% trade fees</li>
+                    </ul>
+                </div>
+
+                <div class="form-group">
+                    <label>Stake Amount:</label>
+                    <div class="input-with-addon">
+                        <input type="number" id="escrow-stake-amount" placeholder="10000" min="10000">
+                        <span class="addon">FOMO</span>
+                    </div>
+                    <div class="input-hint">Available: <span id="escrow-available">0</span> FOMO</div>
+                </div>
+
+                <div class="my-stake-info" id="my-stake-info" style="display:none;">
+                    <h4>Your Stake</h4>
+                    <div class="stake-details">
+                        <div class="detail-row">
+                            <span>Staked:</span>
+                            <span id="my-staked-amount">0 FOMO</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Earnings:</span>
+                            <span id="my-stake-earnings">0 FOMO</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Disputes Resolved:</span>
+                            <span id="my-disputes-resolved">0</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Unlock Date:</span>
+                            <span id="my-unlock-date">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('escrow-modal')">Close</button>
+                <button class="btn-primary" onclick="stakeForEscrow()">Stake FOMO</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Trade View Modal -->
+    <div class="modal" id="active-trade-modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Trade #<span id="active-trade-id">A7F3</span></h2>
+                <div class="trade-header-actions">
+                    <button class="icon-btn" onclick="openTradeChat()" title="Open Chat">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                        </svg>
+                    </button>
+                    <button class="modal-close" onclick="closeModal('active-trade-modal')" title="Close">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="trade-status-banner" id="trade-status-banner">
+                    <div class="status-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </div>
+                    <div class="status-text">
+                        <strong id="active-trade-status">Awaiting Payment</strong>
+                        <span id="active-trade-timer">Time remaining: 28:45</span>
+                    </div>
+                    <div class="status-progress">
+                        <div class="progress-bar" id="active-trade-progress" style="width: 65%"></div>
+                    </div>
+                </div>
+
+                <div class="trade-summary-box">
+                    <div class="summary-left">
+                        <div class="summary-label">You are <span id="active-trade-role">BUYING</span></div>
+                        <div class="summary-amount" id="active-trade-amount">10,000 FOMO</div>
+                        <div class="summary-fiat">for <span id="active-trade-fiat">$50.00 USD</span></div>
+                    </div>
+                    <div class="summary-right">
+                        <div class="summary-label">From</div>
+                        <div class="trader-mini">
+                            <span class="trader-avatar-sm" id="active-trader-avatar">E</span>
+                            <span id="active-trader-name">Elcrypto</span>
+                        </div>
+                        <div class="trader-trust" id="active-trader-trust">98.5% | 209 trades</div>
+                    </div>
+                </div>
+
+                <!-- Payment Details Section -->
+                <div class="payment-details-box" id="payment-details-box">
+                    <h4>Payment Details</h4>
+                    <div class="payment-detail-row">
+                        <span class="detail-label">Payment Method:</span>
+                        <span class="detail-value" id="active-payment-method">Bank Transfer</span>
+                    </div>
+                    <div class="payment-detail-row">
+                        <span class="detail-label">Amount to Pay:</span>
+                        <span class="detail-value highlight" id="active-pay-amount">$50.00 USD</span>
+                    </div>
+                    <div class="payment-detail-row">
+                        <span class="detail-label">Bank/Service:</span>
+                        <span class="detail-value" id="active-bank-name">--</span>
+                    </div>
+                    <div class="payment-detail-row">
+                        <span class="detail-label">Account:</span>
+                        <span class="detail-value" id="active-account">--</span>
+                    </div>
+                    <div class="payment-detail-row">
+                        <span class="detail-label">Account Holder:</span>
+                        <span class="detail-value" id="active-holder-name">--</span>
+                    </div>
+                    <div class="payment-detail-row reference-row">
+                        <span class="detail-label">Reference Code:</span>
+                        <span class="detail-value reference-code" id="active-reference">BEAM-A7F3</span>
+                        <button class="copy-btn" onclick="copyReference()" title="Copy reference">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="payment-warning">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span>Include the reference code in your payment memo!</span>
+                    </div>
+                </div>
+
+                <!-- Private E2E Encrypted Trade Chat (moved to top) -->
+                <div class="trade-chat" id="trade-chat">
+                    <div class="trade-chat-header">
+                        <h4>
+                            💬 Private Chat
+                            <span class="encryption-badge" data-tooltip="End-to-end encrypted: Only you and your trade partner can read these messages. Not even the platform can see them.">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                                E2E Encrypted
+                            </span>
+                        </h4>
+                    </div>
+                    <div id="trade-chat-messages">
+                        <!-- System messages will be injected here -->
+                    </div>
+                    <div class="trade-chat-input">
+                        <input type="text" id="chat-input" placeholder="Type a message..." onkeypress="handleChatKeyPress(event)">
+                        <button class="chat-send-btn" onclick="sendChatMessage()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"/>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Trade Rules Warning -->
+                <div class="trade-rules-warning">
+                    <div class="rule-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                        <span><strong>Response timeout:</strong> If either party doesn't respond within the time limit, they may lose their security deposit.</span>
+                    </div>
+                    <div class="rule-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        <span><strong>Disputes:</strong> If you can't reach an agreement, open a dispute. 3 escrow arbiters will review the case.</span>
+                    </div>
+                </div>
+
+                <div class="trade-timeline">
+                    <h4>Trade Timeline <span class="help-icon" data-tooltip="Trades complete in two steps: seller confirms fiat received, then buyer claims crypto. This protects both parties.">?</span></h4>
+                    <div class="timeline">
+                        <div class="timeline-item completed" data-step="accepted">
+                            <div class="timeline-dot"></div>
+                            <div class="timeline-content">
+                                <span class="time">--:--</span>
+                                <span class="text">Trade accepted, deposits locked</span>
+                                <div class="timeline-annotation">Both parties' security deposits are now safely locked in the smart contract.</div>
+                            </div>
+                        </div>
+                        <div class="timeline-item" data-step="details">
+                            <div class="timeline-dot"></div>
+                            <div class="timeline-content">
+                                <span class="time">--:--</span>
+                                <span class="text">Payment details shared</span>
+                                <div class="timeline-annotation">Seller shares their bank/payment account details in the encrypted chat.</div>
+                            </div>
+                        </div>
+                        <div class="timeline-item active" data-step="payment_sent">
+                            <div class="timeline-dot"></div>
+                            <div class="timeline-content">
+                                <span class="time">--:--</span>
+                                <span class="text">Waiting for buyer to pay...</span>
+                                <div class="timeline-annotation">Buyer sends fiat payment and clicks "I've Paid" button. Include the reference code!</div>
+                            </div>
+                        </div>
+                        <div class="timeline-item" data-step="seller_confirmed">
+                            <div class="timeline-dot"></div>
+                            <div class="timeline-content">
+                                <span class="time">--:--</span>
+                                <span class="text">Seller confirms receipt (deposit returned)</span>
+                                <div class="timeline-annotation">Step 1 of 2: Seller confirms receiving fiat payment. Seller's deposit is released.</div>
+                            </div>
+                        </div>
+                        <div class="timeline-item" data-step="completed">
+                            <div class="timeline-dot"></div>
+                            <div class="timeline-content">
+                                <span class="time">--:--</span>
+                                <span class="text">Buyer claims crypto + deposit</span>
+                                <div class="timeline-annotation">Step 2 of 2: Buyer claims their purchased crypto plus their deposit. Trade complete!</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer" id="active-trade-footer">
+                <button class="btn-danger" onclick="cancelActiveTrade()">Cancel Trade</button>
+                <button class="btn-primary btn-lg" onclick="markPaymentSent()">I've Sent The Payment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trader Registration Modal -->
+    <div class="modal" id="register-modal">
+        <div class="modal-backdrop" onclick="closeModal('register-modal')"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Register as Trader</h2>
+                <button class="modal-close" onclick="closeModal('register-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="register-intro">
+                    <p>Create your trading profile to start buying and selling on the P2P marketplace.</p>
+                </div>
+
+                <div class="form-group">
+                    <label>Nickname:</label>
+                    <input type="text" id="register-nickname" placeholder="Enter nickname (3-20 chars)" maxlength="20">
+                    <div class="input-hint">This will be visible to other traders</div>
+                </div>
+
+                <div class="form-group">
+                    <label>Your Trader ID:</label>
+                    <div class="trader-id-display">
+                        <span id="register-trader-id">Loading...</span>
+                        <button class="copy-btn" onclick="copyToClipboard('register-trader-id')">Copy</button>
+                    </div>
+                    <div class="input-hint">Auto-generated from your wallet address</div>
+                </div>
+
+                <div class="register-benefits">
+                    <h4>Benefits of Registration:</h4>
+                    <ul>
+                        <li>✓ Create and manage orders on-chain</li>
+                        <li>✓ Build reputation and trust score</li>
+                        <li>✓ Earn badges for trading activity</li>
+                        <li>✓ Access verified feedback system</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('register-modal')">Cancel</button>
+                <button class="btn-primary" onclick="submitRegistration()">Register</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Method Manager Modal -->
+    <div class="modal" id="payment-methods-modal">
+        <div class="modal-backdrop" onclick="closeModal('payment-methods-modal')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>My Payment Methods</h2>
+                <button class="modal-close" onclick="closeModal('payment-methods-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="payment-methods-list" id="saved-payment-methods-list">
+                    <!-- Populated by JS -->
+                    <p class="empty-msg">No payment methods saved yet</p>
+                </div>
+
+                <button class="btn-primary btn-block" onclick="showAddPaymentMethod()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Add Payment Method
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Payment Method Modal - Simplified -->
+    <div class="modal" id="add-payment-modal">
+        <div class="modal-backdrop" onclick="closeModal('add-payment-modal')"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Payment Details</h2>
+                <button class="modal-close" onclick="closeModal('add-payment-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Enter your payment information that will be shared with buyers. Include all necessary details for them to send you payment.</p>
+
+                <div class="form-group">
+                    <label>Payment Method Name:</label>
+                    <input type="text" id="add-payment-name" placeholder="e.g., Bank Transfer, PayPal, Wise...">
+                </div>
+
+                <div class="form-group">
+                    <label>Payment Details:</label>
+                    <textarea id="add-payment-details" rows="6" placeholder="Enter your payment information here...&#10;&#10;Example:&#10;Bank: Chase Bank&#10;Account Name: John Doe&#10;Account Number: 1234567890&#10;Routing: 021000021&#10;&#10;Or for crypto: Your wallet address"></textarea>
+                </div>
+
+                <div class="privacy-note">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                    <span>Payment details are only shared with your trade counterparty after they start a trade with you.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('add-payment-modal')">Cancel</button>
+                <button class="btn-primary" onclick="savePaymentMethod()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dispute Center Modal -->
+    <div class="modal" id="dispute-modal">
+        <div class="modal-backdrop" onclick="closeModal('dispute-modal')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Dispute Center</h2>
+                <button class="modal-close" onclick="closeModal('dispute-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="dispute-tabs">
+                    <button class="dispute-tab active" data-tab="my-disputes" onclick="showDisputeTab('my-disputes')">My Disputes</button>
+                    <button class="dispute-tab" data-tab="arbitration" onclick="showDisputeTab('arbitration')">Arbitration Queue</button>
+                </div>
+
+                <div id="my-disputes-section" class="dispute-section">
+                    <div class="disputes-list" id="my-disputes-list">
+                        <p class="empty-msg">No active disputes</p>
+                    </div>
+                </div>
+
+                <div id="arbitration-section" class="dispute-section" style="display:none;">
+                    <div class="arbitration-info">
+                        <p>As an escrow staker, you can vote on dispute resolutions.</p>
+                        <div class="arbitration-stats">
+                            <span><strong id="arb-pending">0</strong> pending</span>
+                            <span><strong id="arb-resolved">0</strong> resolved by you</span>
+                        </div>
+                    </div>
+                    <div class="disputes-list" id="arbitration-list">
+                        <p class="empty-msg">No disputes available for arbitration</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Open Dispute Modal -->
+    <div class="modal" id="open-dispute-modal">
+        <div class="modal-backdrop" onclick="closeModal('open-dispute-modal')"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Open Dispute</h2>
+                <button class="modal-close" onclick="closeModal('open-dispute-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="dispute-warning-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        <path d="M12 9v4M12 17h.01"/>
+                    </svg>
+                    <p>Opening a dispute will freeze the trade. 3 escrow arbitrators will review the evidence and decide the outcome.</p>
+                </div>
+
+                <div class="form-group">
+                    <label>Reason for Dispute</label>
+                    <select id="dispute-reason">
+                        <option value="">Select reason...</option>
+                        <option value="no_payment">Buyer didn't pay</option>
+                        <option value="wrong_amount">Wrong payment amount</option>
+                        <option value="no_release">Seller didn't release crypto</option>
+                        <option value="fraud">Suspected fraud</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Describe the Issue</label>
+                    <textarea id="dispute-description" rows="4" placeholder="Describe the issue in detail..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Evidence (optional)</label>
+                    <p class="input-hint" style="margin-bottom:8px;">Upload screenshots of payment confirmation, chat logs, etc.</p>
+                    <input type="file" id="dispute-evidence" accept="image/*,.pdf" multiple>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('open-dispute-modal')">Cancel</button>
+                <button class="btn-danger-filled" onclick="submitDispute()" style="background:#ef4444;color:#fff;border:1px solid #ef4444;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;">Open Dispute</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trader Profile Modal -->
+    <div class="modal" id="trader-profile-modal">
+        <div class="modal-backdrop" onclick="closeModal('trader-profile-modal')"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Trader Profile</h2>
+                <button class="modal-close" onclick="closeModal('trader-profile-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="profile-header">
+                    <div class="profile-avatar" id="profile-avatar">?</div>
+                    <div class="profile-info">
+                        <h3 id="profile-nickname">Loading...</h3>
+                        <span class="profile-id" id="profile-short-id">[xxxxxxxx]</span>
+                        <div class="profile-badges" id="profile-badges"></div>
+                    </div>
+                </div>
+
+                <div class="trust-score-display">
+                    <div class="trust-score-circle">
+                        <svg viewBox="0 0 36 36">
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                fill="none" stroke="var(--bg-tertiary)" stroke-width="3"/>
+                            <path id="profile-trust-arc" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                fill="none" stroke="var(--accent-primary)" stroke-width="3"
+                                stroke-dasharray="0, 100"/>
+                        </svg>
+                        <span id="profile-trust-score">--</span>
+                    </div>
+                    <span class="trust-label">Trust Score</span>
+                </div>
+
+                <div class="profile-stats">
+                    <div class="profile-stat">
+                        <span class="stat-value" id="profile-trades">0</span>
+                        <span class="stat-label">Trades</span>
+                    </div>
+                    <div class="profile-stat">
+                        <span class="stat-value" id="profile-success">0%</span>
+                        <span class="stat-label">Success</span>
+                    </div>
+                    <div class="profile-stat">
+                        <span class="stat-value" id="profile-volume">0</span>
+                        <span class="stat-label">Volume</span>
+                    </div>
+                    <div class="profile-stat">
+                        <span class="stat-value" id="profile-avg-time">-</span>
+                        <span class="stat-label">Avg Time</span>
+                    </div>
+                </div>
+
+                <div class="profile-feedback">
+                    <h4>Recent Feedback</h4>
+                    <div id="profile-feedback-list">
+                        <p class="empty-msg">No feedback yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Escrow Stats Section (Global Stats Dashboard) -->
+    <div class="modal" id="global-stats-modal">
+        <div class="modal-backdrop" onclick="closeModal('global-stats-modal')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Marketplace Statistics</h2>
+                <button class="modal-close" onclick="closeModal('global-stats-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="global-stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-value" id="stats-total-volume">0</div>
+                        <div class="stat-label">Total Volume</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🔄</div>
+                        <div class="stat-value" id="stats-total-trades">0</div>
+                        <div class="stat-label">Total Trades</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📝</div>
+                        <div class="stat-value" id="stats-active-orders">0</div>
+                        <div class="stat-label">Active Orders</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⏳</div>
+                        <div class="stat-value" id="stats-active-trades">0</div>
+                        <div class="stat-label">Active Trades</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-value" id="stats-success-rate">0%</div>
+                        <div class="stat-label">Success Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⚖️</div>
+                        <div class="stat-value" id="stats-open-disputes">0</div>
+                        <div class="stat-label">Open Disputes</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🛡️</div>
+                        <div class="stat-value" id="stats-escrow-stakers">0</div>
+                        <div class="stat-label">Escrow Stakers</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-value" id="stats-reward-pool">0</div>
+                        <div class="stat-label">Reward Pool</div>
+                    </div>
+                </div>
+
+                <div class="stats-section">
+                    <h4>Top Traders (30d)</h4>
+                    <div class="leaderboard" id="stats-leaderboard">
+                        <p class="empty-msg">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Confirmation Modal -->
+    <div class="modal" id="tx-confirm-modal">
+        <div class="modal-backdrop" onclick="closeModal('tx-confirm-modal')"></div>
+        <div class="modal-content modal-sm">
+            <button class="modal-close" onclick="closeModal('tx-confirm-modal')">&times;</button>
+            <h2 id="tx-confirm-title" class="modal-title-center">Confirm Transaction</h2>
+            <div class="tx-confirm-body">
+                <div class="tx-confirm-action" id="tx-confirm-action"></div>
+                <div class="tx-confirm-details">
+                    <div class="tx-detail-row" id="tx-confirm-fiat-row" style="display:none;">
+                        <span class="tx-detail-label">You will pay:</span>
+                        <span class="tx-detail-value" id="tx-confirm-fiat"></span>
+                    </div>
+                    <div class="tx-detail-row" id="tx-confirm-amount-row">
+                        <span class="tx-detail-label">You will lock:</span>
+                        <span class="tx-detail-value" id="tx-confirm-amount"></span>
+                    </div>
+                    <div class="tx-detail-row" id="tx-confirm-deposit-row" style="display:none;">
+                        <span class="tx-detail-label">Security deposit:</span>
+                        <span class="tx-detail-value" id="tx-confirm-deposit"></span>
+                    </div>
+                    <div class="tx-detail-row" id="tx-confirm-fee-row">
+                        <span class="tx-detail-label">Network fee:</span>
+                        <span class="tx-detail-value" id="tx-confirm-fee">~0.01 BEAM</span>
+                    </div>
+                    <div class="tx-detail-row tx-total-row">
+                        <span class="tx-detail-label">Total:</span>
+                        <span class="tx-detail-value" id="tx-confirm-total"></span>
+                    </div>
+                </div>
+                <div class="tx-confirm-warning" id="tx-confirm-warning"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeModal('tx-confirm-modal')">Cancel</button>
+                <button class="btn-primary" id="tx-confirm-btn" onclick="confirmTransaction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Claim Modal (for claiming funds from completed trades) -->
+    <div class="modal" id="claim-modal">
+        <div class="modal-backdrop" onclick="closeModal('claim-modal')"></div>
+        <div class="modal-content modal-sm">
+            <button class="modal-close" onclick="closeModal('claim-modal')">&times;</button>
+            <div class="claim-modal-content" id="claim-modal-body">
+                <!-- Content populated by JS -->
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeModal('claim-modal')">Cancel</button>
+                <button class="btn-primary btn-claim" id="claim-confirm-btn" onclick="confirmClaim()">Claim</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manager Panel Modal (only visible to managers) -->
+    <div class="modal" id="manager-panel-modal">
+        <div class="modal-backdrop" onclick="closeModal('manager-panel-modal')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>⚙️ Manager Panel</h2>
+                <button class="modal-close" onclick="closeModal('manager-panel-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="manager-tabs">
+                    <button class="manager-tab active" data-tab="overview" onclick="showManagerTab('overview')">Overview</button>
+                    <button class="manager-tab" data-tab="fees" onclick="showManagerTab('fees')">Fees</button>
+                    <button class="manager-tab" data-tab="disputes" onclick="showManagerTab('disputes')">Disputes</button>
+                    <button class="manager-tab" data-tab="escrows" onclick="showManagerTab('escrows')">Escrows</button>
+                    <button class="manager-tab" data-tab="managers" onclick="showManagerTab('managers')">Managers</button>
+                    <button class="manager-tab" data-tab="settings" onclick="showManagerTab('settings')">Settings</button>
+                </div>
+
+                <!-- Overview Tab -->
+                <div class="manager-section" id="manager-overview-section">
+                    <h4>Contract Overview</h4>
+                    <div class="manager-stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="mgr-total-trades">0</div>
+                            <div class="stat-label">Total Trades</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="mgr-total-volume">0</div>
+                            <div class="stat-label">Total Volume</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="mgr-active-orders">0</div>
+                            <div class="stat-label">Active Orders</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="mgr-open-disputes">0</div>
+                            <div class="stat-label">Open Disputes</div>
+                        </div>
+                    </div>
+                    <div class="contract-details">
+                        <div class="detail-row">
+                            <span>Contract ID:</span>
+                            <span class="mono" id="mgr-contract-id">Loading...</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Trade Fee:</span>
+                            <span id="mgr-trade-fee">0.5%</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Min Escrow Stake:</span>
+                            <span id="mgr-min-stake">10,000 FOMO</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fees Tab -->
+                <div class="manager-section" id="manager-fees-section" style="display:none;">
+                    <h4>Fee Management</h4>
+                    <div class="fee-balances">
+                        <div class="fee-balance-card">
+                            <span class="fee-asset">BEAM</span>
+                            <span class="fee-amount" id="mgr-fees-beam">0.00</span>
+                        </div>
+                        <div class="fee-balance-card">
+                            <span class="fee-asset">FOMO</span>
+                            <span class="fee-amount" id="mgr-fees-fomo">0.00</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Withdraw Amount:</label>
+                        <div class="input-with-select">
+                            <input type="number" id="mgr-withdraw-amount" placeholder="0">
+                            <select id="mgr-withdraw-asset">
+                                <option value="0">BEAM</option>
+                                <option value="174">FOMO</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn-primary" onclick="managerWithdrawFees()">Withdraw Fees</button>
+                </div>
+
+                <!-- Disputes Tab -->
+                <div class="manager-section" id="manager-disputes-section" style="display:none;">
+                    <h4>Pending Disputes</h4>
+                    <p class="info-text">Assign escrows to resolve pending disputes.</p>
+                    <div class="disputes-list" id="mgr-disputes-list">
+                        <p class="empty-msg">No pending disputes</p>
+                    </div>
+                </div>
+
+                <!-- Escrows Tab -->
+                <div class="manager-section" id="manager-escrows-section" style="display:none;">
+                    <h4>Escrow Stakers</h4>
+                    <div class="escrow-summary">
+                        <span>Total Staked: <strong id="mgr-total-staked">0 FOMO</strong></span>
+                        <span>Active Escrows: <strong id="mgr-active-escrows">0</strong></span>
+                    </div>
+                    <div class="escrows-list" id="mgr-escrows-list">
+                        <p class="empty-msg">Loading escrows...</p>
+                    </div>
+                </div>
+
+                <!-- Managers Tab -->
+                <div class="manager-section" id="manager-managers-section" style="display:none;">
+                    <h4>Contract Managers</h4>
+                    <p class="info-text">Only the owner can add or remove managers.</p>
+                    <div class="managers-list" id="mgr-managers-list">
+                        <p class="empty-msg">Loading managers...</p>
+                    </div>
+                    <div class="add-manager-form" id="add-manager-form" style="display:none;">
+                        <div class="form-group">
+                            <label>New Manager Public Key:</label>
+                            <input type="text" id="mgr-new-manager-pk" placeholder="Enter public key">
+                        </div>
+                        <button class="btn-primary" onclick="managerAddManager()">Add Manager</button>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div class="manager-section" id="manager-settings-section" style="display:none;">
+                    <h4>Contract Settings</h4>
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <label>Trade Fee (basis points):</label>
+                            <input type="number" id="mgr-setting-fee-bps" value="50" min="0" max="1000">
+                            <div class="input-hint">50 = 0.5%</div>
+                        </div>
+                        <div class="form-group">
+                            <label>Min Escrow Stake (FOMO):</label>
+                            <input type="number" id="mgr-setting-min-stake" value="10000" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Default Deposit %:</label>
+                            <input type="number" id="mgr-setting-deposit-pct" value="10" min="1" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label>Payment Timeout (seconds):</label>
+                            <input type="number" id="mgr-setting-payment-timeout" value="1800" min="60">
+                        </div>
+                        <button class="btn-primary" onclick="managerUpdateSettings()">Update Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help & Education Modal -->
+    <div class="modal" id="help-modal">
+        <div class="modal-backdrop" onclick="closeModal('help-modal')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>📚 P2P Trading Guide</h2>
+                <button class="modal-close" onclick="closeModal('help-modal')">&times;</button>
+            </div>
+            <div class="modal-body help-modal-content">
+                <!-- How It Works -->
+                <div class="help-section">
+                    <h3><span class="section-icon">🔐</span> How P2P Trading Works</h3>
+                    <p>This is a decentralized peer-to-peer marketplace where you can buy and sell BEAM tokens directly with other users. All trades are protected by smart contract escrow - your funds are locked safely until both parties complete their obligations.</p>
+                    <div class="education-box">
+                        <h4>🛡️ Escrow Protection</h4>
+                        <p>When a trade starts, the seller's tokens AND both parties' security deposits are locked in a smart contract. No one can access these funds until the trade is properly completed or resolved by arbitrators.</p>
+                    </div>
+                </div>
+
+                <!-- Trust Score -->
+                <div class="help-section">
+                    <h3><span class="section-icon">📊</span> Trust Score Explained</h3>
+                    <p>The trust score (0-100%) indicates how reliable a trader is based on their history:</p>
+                    <ul>
+                        <li><strong>90%+</strong> = Highly trusted, many successful trades</li>
+                        <li><strong>70-90%</strong> = Good reputation, some experience</li>
+                        <li><strong>50-70%</strong> = Average, newer trader</li>
+                        <li><strong>Below 50%</strong> = Proceed with caution</li>
+                    </ul>
+                    <p>Trust score is calculated from: successful trades, dispute outcomes, and feedback ratings. New traders start at 50%.</p>
+                </div>
+
+                <!-- Security Deposit -->
+                <div class="help-section">
+                    <h3><span class="section-icon">💰</span> Security Deposit (Escrow Bond)</h3>
+                    <p>Both buyer and seller must lock a 10% security deposit when starting a trade. This ensures both parties have "skin in the game."</p>
+                    <div class="escrow-info-card">
+                        <h4>⚠️ Important</h4>
+                        <p>Your deposit is returned when the trade completes successfully. If you fail to fulfill your obligations (buyer doesn't pay, seller doesn't release), your deposit may be forfeited to the other party through dispute resolution.</p>
+                    </div>
+                </div>
+
+                <!-- Two-Step Completion -->
+                <div class="help-section">
+                    <h3><span class="section-icon">✅</span> Two-Step Trade Completion</h3>
+                    <p>Trades complete in two steps to protect both parties:</p>
+                    <ul>
+                        <li><strong>Step 1 - Seller Confirms:</strong> After receiving fiat payment, the seller confirms and their deposit is returned</li>
+                        <li><strong>Step 2 - Buyer Claims:</strong> The buyer then claims the crypto + their deposit</li>
+                    </ul>
+                    <p>This prevents scenarios where either party can run off with both the crypto AND the fiat payment.</p>
+                </div>
+
+                <!-- Badges -->
+                <div class="help-section">
+                    <h3><span class="section-icon">🏆</span> Trader Badges</h3>
+                    <div class="badge-explain">
+                        <span class="badge">✓</span>
+                        <div class="badge-info">
+                            <div class="badge-name">Verified</div>
+                            <div class="badge-desc">Identity verified through additional checks</div>
+                        </div>
+                    </div>
+                    <div class="badge-explain">
+                        <span class="badge">🔥</span>
+                        <div class="badge-info">
+                            <div class="badge-name">Hot Trader</div>
+                            <div class="badge-desc">95%+ trust score with 50+ completed trades</div>
+                        </div>
+                    </div>
+                    <div class="badge-explain">
+                        <span class="badge">💎</span>
+                        <div class="badge-info">
+                            <div class="badge-name">Diamond</div>
+                            <div class="badge-desc">500+ completed trades - elite status</div>
+                        </div>
+                    </div>
+                    <div class="badge-explain">
+                        <span class="badge">⚖️</span>
+                        <div class="badge-info">
+                            <div class="badge-name">Arbiter</div>
+                            <div class="badge-desc">Staked FOMO to help resolve disputes</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dispute Process -->
+                <div class="help-section">
+                    <h3><span class="section-icon">⚖️</span> Dispute Resolution</h3>
+                    <p>If something goes wrong, either party can open a dispute. Here's how it works:</p>
+                    <ul>
+                        <li><strong>1. Open Dispute:</strong> Provide evidence (screenshots, payment proof)</li>
+                        <li><strong>2. Escrow Assignment:</strong> 3 impartial arbiters are assigned from staked escrows</li>
+                        <li><strong>3. Review & Vote:</strong> Arbiters review evidence and vote (2/3 majority wins)</li>
+                        <li><strong>4. Resolution:</strong> Winner receives the trade amount + loser's deposit</li>
+                    </ul>
+                    <p>Arbiters are randomly selected from users who have staked FOMO tokens. They earn rewards for honest judging.</p>
+                </div>
+
+                <!-- FAQ -->
+                <div class="help-section">
+                    <h3><span class="section-icon">❓</span> Frequently Asked Questions</h3>
+
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="toggleFaq(this)">
+                            What if the buyer doesn't pay?
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </div>
+                        <div class="faq-answer">
+                            <p>If the buyer marks payment sent but the seller doesn't receive it, the seller can open a dispute. Arbiters will review the evidence. If the buyer lied, they lose their security deposit which goes to the seller.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="toggleFaq(this)">
+                            What if the seller doesn't release crypto?
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </div>
+                        <div class="faq-answer">
+                            <p>The buyer can open a dispute with proof of payment. If arbiters side with the buyer, they receive the crypto AND the seller's deposit as compensation.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="toggleFaq(this)">
+                            How do I share payment details?
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </div>
+                        <div class="faq-answer">
+                            <p>Use the encrypted chat within the trade! After a trade starts, the seller should share their bank details, PayPal email, or crypto address directly in the chat. This is end-to-end encrypted - only you and your trade partner can see it.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="toggleFaq(this)">
+                            Why do I need to register?
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </div>
+                        <div class="faq-answer">
+                            <p>Registration creates your on-chain trader identity. This allows the system to track your reputation, display your feedback, and award badges. It's a one-time on-chain transaction.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="toggleFaq(this)">
+                            What is an escrow staker?
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </div>
+                        <div class="faq-answer">
+                            <p>Escrow stakers lock FOMO tokens as collateral to become arbiters. When disputes arise, they're randomly selected to judge. They earn a share of trade fees for honest service. Bad actors who vote unfairly lose their stake.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Links -->
+                <div class="help-section">
+                    <h3><span class="section-icon">🔗</span> Quick Actions</h3>
+                    <div class="quick-help-links">
+                        <span class="quick-help-link" onclick="closeModal('help-modal'); showRegistrationModal()">📝 Register as Trader</span>
+                        <span class="quick-help-link" onclick="closeModal('help-modal'); showEscrowStaking()">⚖️ Become an Arbiter</span>
+                        <span class="quick-help-link" onclick="closeModal('help-modal'); showCreateOrder()">➕ Create First Order</span>
+                        <span class="quick-help-link" onclick="closeModal('help-modal'); showDisputeCenter()">🎯 View Disputes</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Telegram settings: showTelegramSettings() displays a toast directing users to main wallet settings -->
+
+    <script src="p2p.js"></script>
+</body>
+</html>

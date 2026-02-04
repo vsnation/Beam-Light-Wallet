@@ -9,7 +9,7 @@ BUILD_DIR="$SCRIPT_DIR"
 PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 APP_NAME="BEAM Light Wallet"
 DMG_NAME="BEAM-LightWallet"
-VERSION="1.0.2"
+VERSION="1.0.3"
 BEAM_VERSION="7.5.13882"
 
 echo "=== BEAM Light Wallet DMG Builder ==="
