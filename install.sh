@@ -106,6 +106,9 @@ if [ "$NEEDS_BINARIES" = true ]; then
     echo "Downloading BEAM binaries v${BEAM_VERSION}..."
     echo ""
 
+    # Create directories if they don't exist
+    mkdir -p "$INSTALL_DIR/binaries/$PLATFORM" "$INSTALL_DIR/wallets" "$INSTALL_DIR/logs"
+
     GITHUB_BASE="https://github.com/BeamMW/beam/releases/download/beam-${BEAM_VERSION}"
     cd "$INSTALL_DIR/binaries/$PLATFORM"
 
