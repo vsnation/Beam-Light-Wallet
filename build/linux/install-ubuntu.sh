@@ -201,14 +201,20 @@ Keywords=beam;crypto;wallet;privacy;
 StartupNotify=true
 EOF
 
-# Download icon
+# Use bundled icon (included in package)
 echo ""
 echo -e "${CYAN}Setting up desktop shortcut...${NC}"
-curl -L -s "https://beam.mw/svg/logo.svg" -o icon.svg 2>/dev/null || true
-
-# Convert SVG to PNG if possible
-if command -v convert &> /dev/null && [ -f icon.svg ]; then
-    convert icon.svg -resize 256x256 icon.png 2>/dev/null || true
+if [ -f "$SCRIPT_DIR/../icon.png" ]; then
+    cp "$SCRIPT_DIR/../icon.png" "$INSTALL_DIR/icon.png"
+    echo -e "  ${GREEN}✓ Icon installed${NC}"
+elif [ -f "icon.png" ]; then
+    echo -e "  ${GREEN}✓ Icon already present${NC}"
+else
+    # Fallback: download icon
+    curl -L -s "https://beam.mw/svg/logo.svg" -o icon.svg 2>/dev/null || true
+    if command -v convert &> /dev/null && [ -f icon.svg ]; then
+        convert icon.svg -resize 256x256 icon.png 2>/dev/null || true
+    fi
 fi
 
 # Create systemd service (optional)

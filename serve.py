@@ -38,9 +38,11 @@ PLATFORM = platform.system().lower()
 if PLATFORM == "darwin":
     PLATFORM = "macos"
 
-WALLET_CLI_BINARY = BINARIES_DIR / PLATFORM / "beam-wallet"
-WALLET_API_BINARY = BINARIES_DIR / PLATFORM / "wallet-api"
-BEAM_NODE_BINARY = BINARIES_DIR / PLATFORM / "beam-node"
+# Add .exe extension for Windows
+EXE_EXT = ".exe" if PLATFORM == "windows" else ""
+WALLET_CLI_BINARY = BINARIES_DIR / PLATFORM / f"beam-wallet{EXE_EXT}"
+WALLET_API_BINARY = BINARIES_DIR / PLATFORM / f"wallet-api{EXE_EXT}"
+BEAM_NODE_BINARY = BINARIES_DIR / PLATFORM / f"beam-node{EXE_EXT}"
 
 # Default nodes
 DEFAULT_NODE = "eu-node01.mainnet.beam.mw:8100"
@@ -51,6 +53,9 @@ LOCAL_NODE_PORT = 10005
 DEX_CONTRACT_ID = "729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf"
 MINTER_CONTRACT_ID = "295fe749dc12c55213d1bd16ced174dc8780c020f59cb17749e900bb0c15d868"
 BLACKHOLE_CONTRACT_ID = "5ab408982b148210e88f180114f10222a2235eafeede0a3a224fda0e523e17b7"
+# P2P Escrow Contract V7 - Deployed 2026-01-30
+# Features: SetZero fix for cancel_order, confirm_payment & claim_trade require rating (1-5)
+P2P_ESCROW_CONTRACT_ID = "2145205e91c3c0a68b0f439b8afd7a0b4729fb232768dfdf5ab421da864d76f7"
 
 # Load DEX shader bytes for contract calls
 DEX_SHADER = None
@@ -85,11 +90,33 @@ try:
 except Exception as e:
     print(f"Warning: Could not load BlackHole shader: {e}")
 
+# Load P2P Escrow shader bytes for P2P marketplace contract calls
+P2P_ESCROW_SHADER = None
+try:
+    shader_path = BASE_DIR / "shaders" / "p2p_escrow_app.wasm"
+    if shader_path.exists():
+        with open(shader_path, "rb") as f:
+            P2P_ESCROW_SHADER = list(f.read())
+        print(f"Loaded P2P Escrow shader: {len(P2P_ESCROW_SHADER)} bytes")
+except Exception as e:
+    print(f"Warning: Could not load P2P Escrow shader: {e}")
+
 # Track state
 wallet_api_process = None
 beam_beam_node_process = None
 active_wallet = None
-node_mode = "public"  # "public" or "local"
+
+# Load saved node_mode or default to "public"
+node_mode_file = BASE_DIR / ".node_mode"
+if node_mode_file.exists():
+    try:
+        node_mode = node_mode_file.read_text().strip()
+        if node_mode not in ("public", "local"):
+            node_mode = "public"
+    except:
+        node_mode = "public"
+else:
+    node_mode = "public"
 
 # Price cache (CoinGecko)
 price_cache = {"beam_usd": 0, "last_update": 0}
@@ -169,11 +196,12 @@ def list_wallets():
 
 
 def kill_process_on_port(port):
-    """Kill any process using the specified port"""
+    """Kill any process LISTENING on the specified port (not outgoing connections)"""
     try:
-        # Use lsof to find process on port (works on macOS and Linux)
+        # Use lsof with -sTCP:LISTEN to only find processes listening on the port
+        # This prevents killing beam-node which has outgoing connections to peers on port 10000
         result = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
+            ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
             capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -362,9 +390,11 @@ def start_beam_node(owner_key=None, password=None):
     log_file = LOGS_DIR / "beam-node.log"
 
     # Build command with fast_sync enabled
+    node_db_path = NODE_DATA_DIR / "node.db"
     cmd = [
         str(BEAM_NODE_BINARY),
         f"--port={LOCAL_NODE_PORT}",
+        f"--storage={node_db_path}",  # Explicit storage path
         f"--log_level=info",
         "--fast_sync=1",  # Enable fast sync
         "--peer=eu-node01.mainnet.beam.mw:8100",
@@ -422,44 +452,56 @@ def switch_to_local_node(password, wallet_name=None):
     if not target_wallet:
         return {"error": "No wallet specified and no active wallet"}
 
-    print(f"[switch_to_local_node] Switching wallet '{target_wallet}' to local node...")
+    print(f"[switch_to_local_node] === STEP 0: Starting switch for '{target_wallet}' ===")
 
     # Step 1: Export owner key (this stops wallet-api temporarily)
+    print(f"[switch_to_local_node] === STEP 1: Exporting owner key ===")
     owner_result = export_owner_key(target_wallet, password)
     if not owner_result.get("success"):
         print(f"[switch_to_local_node] Failed to export owner key: {owner_result}")
         return owner_result
 
     owner_key = owner_result.get("owner_key")
-    print(f"[switch_to_local_node] Owner key exported successfully")
+    print(f"[switch_to_local_node] Owner key exported: {owner_key[:20]}...")
+    print(f"[switch_to_local_node] Node running after export? {is_node_running()}")
 
     # Step 2: Stop any existing node
+    print(f"[switch_to_local_node] === STEP 2: Stopping existing node ===")
     stop_beam_node()
     time.sleep(1)
+    print(f"[switch_to_local_node] Node running after stop? {is_node_running()}")
 
     # Step 3: Start node with owner key
-    print(f"[switch_to_local_node] Starting node with owner key...")
+    print(f"[switch_to_local_node] === STEP 3: Starting node with owner key ===")
     node_result = start_beam_node(owner_key, password)
+    print(f"[switch_to_local_node] start_beam_node result: {node_result}")
+    print(f"[switch_to_local_node] Node running after start? {is_node_running()}")
+
     if "error" in node_result:
         # Fallback: start without owner key
-        print(f"[switch_to_local_node] Warning: Could not start with owner key: {node_result.get('error')}")
+        print(f"[switch_to_local_node] Warning: Could not start with owner key, trying without...")
         node_result = start_beam_node()
+        print(f"[switch_to_local_node] start_beam_node (no key) result: {node_result}")
         if "error" in node_result:
             return node_result
 
     # Step 4: Wait for node to initialize
-    print(f"[switch_to_local_node] Waiting for node to initialize...")
+    print(f"[switch_to_local_node] === STEP 4: Waiting 3s for node ===")
     time.sleep(3)
+    print(f"[switch_to_local_node] Node running after wait? {is_node_running()}")
 
     # Step 5: Start wallet-api with local node
-    print(f"[switch_to_local_node] Starting wallet-api with local node...")
+    print(f"[switch_to_local_node] === STEP 5: Starting wallet-api with {LOCAL_NODE_ADDR} ===")
     result = start_wallet_api(target_wallet, password, LOCAL_NODE_ADDR)
+    print(f"[switch_to_local_node] start_wallet_api result: {result}")
+    print(f"[switch_to_local_node] Node running after wallet-api start? {is_node_running()}")
+
     if result.get("success"):
         node_mode = "local"
         (BASE_DIR / ".node_mode").write_text("local")
-        print(f"[switch_to_local_node] Successfully switched to local node!")
+        print(f"[switch_to_local_node] === SUCCESS: Switched to local node! ===")
     else:
-        print(f"[switch_to_local_node] Failed to start wallet-api: {result}")
+        print(f"[switch_to_local_node] === FAILED: {result} ===")
 
     return result
 
@@ -739,20 +781,9 @@ def rescan_wallet(wallet_name, password):
     # Step 2: Restart local node with owner key
     print(f"[rescan] Restarting local node with owner key...")
 
-    # Stop existing node
-    if beam_beam_node_process:
-        try:
-            beam_beam_node_process.terminate()
-            beam_beam_node_process.wait(timeout=5)
-        except:
-            beam_beam_node_process.kill()
-
-    # Also kill any orphaned node processes
-    try:
-        subprocess.run(["pkill", "-f", "beam-node"], capture_output=True)
-        time.sleep(1)
-    except:
-        pass
+    # Stop existing node using the proper function (doesn't kill all nodes)
+    stop_beam_node()
+    time.sleep(1)
 
     # Start node with owner key
     node_binary = BASE_DIR / "binaries" / PLATFORM / "beam-node"
@@ -833,6 +864,16 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.handle_node_status()
         elif self.path == "/api/price":
             self.handle_price()
+        elif self.path.startswith("/api/p2p/orders"):
+            self.handle_p2p_get_orders()
+        elif self.path.startswith("/api/p2p/trades/") and "/messages" in self.path:
+            self.handle_p2p_get_messages()
+        elif self.path.startswith("/api/p2p/trades"):
+            self.handle_p2p_get_trades()
+        elif self.path.startswith("/api/p2p/reputation"):
+            self.handle_p2p_get_reputation()
+        elif self.path.startswith("/api/p2p/feedbacks"):
+            self.handle_p2p_get_feedbacks()
         elif self.path.startswith("/css/") or self.path.startswith("/js/"):
             # Redirect CSS/JS requests to src/ directory
             self.path = "/src" + self.path
@@ -843,7 +884,11 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         elif self.path.startswith("/config/"):
             # Serve config files
             super().do_GET()
-        elif self.path.startswith("/explorer") or self.path in ["/", "/dashboard", "/assets", "/transactions", "/addresses", "/dex", "/settings", "/donate"]:
+        elif self.path.startswith("/p2p/"):
+            # Serve P2P module files
+            self.path = "/src" + self.path
+            super().do_GET()
+        elif self.path.startswith("/explorer") or self.path in ["/", "/dashboard", "/assets", "/transactions", "/addresses", "/dex", "/p2p", "/settings", "/donate"]:
             # Handle all frontend routes - serve index.html with route info
             self.serve_with_route()
         elif self.path == "/index.html":
@@ -882,6 +927,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 "transactions": "transactions",
                 "addresses": "addresses",
                 "dex": "dex",
+                "p2p": "p2p",
                 "explorer": "explorer",
                 "settings": "settings",
                 "donate": "donate"
@@ -943,6 +989,18 @@ window.APP_ROUTE = {json.dumps(app_route)};
             self.handle_shutdown()
         elif self.path == "/api/update":
             self.handle_update()
+        elif self.path == "/api/p2p/orders":
+            self.handle_p2p_create_order()
+        elif self.path == "/api/p2p/trades":
+            self.handle_p2p_create_trade()
+        elif self.path == "/api/p2p/feedback":
+            self.handle_p2p_submit_feedback()
+        elif self.path.startswith("/api/p2p/trades/") and "/messages" in self.path:
+            self.handle_p2p_send_message()
+        elif self.path.startswith("/api/p2p/trades/") and "/confirm" in self.path:
+            self.handle_p2p_confirm_trade()
+        elif self.path.startswith("/api/p2p/trades/") and "/dispute" in self.path:
+            self.handle_p2p_open_dispute()
         elif self.path.startswith("/api/wallet"):
             self.proxy_to_wallet_api()
         else:
@@ -1116,6 +1174,7 @@ window.APP_ROUTE = {json.dumps(app_route)};
 
     def handle_unlock(self):
         try:
+            global node_mode
             body = self.get_json_body()
             wallet_name = body.get("wallet")
             password = body.get("password")
@@ -1126,6 +1185,15 @@ window.APP_ROUTE = {json.dumps(app_route)};
                 return
             if not password:
                 self.send_json({"error": "Missing password"}, 400)
+                return
+
+            # If node_mode is local and no explicit node_addr, use switch_to_local_node
+            # which properly exports owner key and starts node with it
+            if node_mode == "local" and not node_addr:
+                print(f"[handle_unlock] Local mode detected, using switch_to_local_node...")
+                result = switch_to_local_node(password, wallet_name)
+                status = 401 if "password" in result.get("error", "").lower() else (200 if "success" in result else 500)
+                self.send_json(result, status)
                 return
 
             result = start_wallet_api(wallet_name, password, node_addr)
@@ -1306,7 +1374,7 @@ window.APP_ROUTE = {json.dumps(app_route)};
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length) if content_length > 0 else b""
 
-            # Inject shader for invoke_contract calls (DEX, Minter, or BlackHole)
+            # Inject shader for invoke_contract calls (DEX, Minter, BlackHole, P2P)
             if body:
                 try:
                     data = json.loads(body)
@@ -1324,6 +1392,12 @@ window.APP_ROUTE = {json.dumps(app_route)};
                         # Inject BlackHole shader for burn operations
                         elif BLACKHOLE_SHADER and BLACKHOLE_CONTRACT_ID in args:
                             data["params"]["contract"] = BLACKHOLE_SHADER
+                            body = json.dumps(data).encode()
+                        # Inject P2P Escrow shader for P2P marketplace
+                        elif P2P_ESCROW_SHADER and P2P_ESCROW_CONTRACT_ID in args:
+                            data["params"]["contract"] = P2P_ESCROW_SHADER
+                            # NOTE: fee parameter is ignored by wallet-api (known issue)
+                            # See /Beam/ISSUES_AND_SOLUTIONS.md for details
                             body = json.dumps(data).encode()
                 except json.JSONDecodeError:
                     pass
@@ -1356,6 +1430,644 @@ window.APP_ROUTE = {json.dumps(app_route)};
                 "id": None,
                 "error": {"code": -32603, "message": str(e)}
             }, 500)
+
+    # ============================================
+    # P2P MARKETPLACE HANDLERS
+    # ============================================
+
+    def handle_p2p_get_orders(self):
+        """Get P2P orders list with optional filters"""
+        try:
+            # Parse query parameters
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+
+            # Load orders from JSON file
+            orders_file = BASE_DIR / "p2p_data" / "orders.json"
+            if orders_file.exists():
+                with open(orders_file, "r") as f:
+                    data = json.load(f)
+                orders = data.get("orders", [])
+            else:
+                orders = []
+
+            # Apply filters
+            asset = params.get("asset", [None])[0]
+            side = params.get("side", [None])[0]
+            currency = params.get("currency", [None])[0]
+
+            if asset:
+                orders = [o for o in orders if str(o.get("asset")) == asset]
+            if side:
+                orders = [o for o in orders if o.get("type") == side]
+            if currency:
+                orders = [o for o in orders if o.get("currency") == currency]
+
+            self.send_json({"orders": orders, "total": len(orders)})
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_create_order(self):
+        """Create a new P2P order"""
+        try:
+            body = self.get_json_body()
+
+            # Validate required fields
+            required = ["asset", "amount", "price", "currency", "paymentMethods"]
+            for field in required:
+                if field not in body:
+                    self.send_json({"error": f"Missing required field: {field}"}, 400)
+                    return
+
+            # Generate order ID
+            import uuid
+            order_id = str(uuid.uuid4())[:8]
+
+            # Create order object
+            order = {
+                "id": order_id,
+                "type": body.get("type", "sell"),
+                "asset": body["asset"],
+                "amount": body["amount"],
+                "price": body["price"],
+                "currency": body["currency"],
+                "minLimit": body.get("minLimit", 10),
+                "maxLimit": body.get("maxLimit", 500),
+                "paymentMethods": body["paymentMethods"],
+                "paymentDetails": body.get("paymentDetails", ""),
+                "status": "open",
+                "seller": body.get("seller", {}),
+                "createdAt": int(time.time() * 1000)
+            }
+
+            # Load existing orders
+            orders_file = BASE_DIR / "p2p_data" / "orders.json"
+            if orders_file.exists():
+                with open(orders_file, "r") as f:
+                    data = json.load(f)
+            else:
+                data = {"orders": [], "lastUpdated": 0}
+
+            # Add new order
+            data["orders"].append(order)
+            data["lastUpdated"] = int(time.time() * 1000)
+
+            # Save
+            with open(orders_file, "w") as f:
+                json.dump(data, f, indent=2)
+
+            self.send_json({"success": True, "order": order})
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_get_trades(self):
+        """Get P2P trades list"""
+        try:
+            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            if trades_file.exists():
+                with open(trades_file, "r") as f:
+                    data = json.load(f)
+                trades = data.get("trades", [])
+            else:
+                trades = []
+
+            self.send_json({"trades": trades, "total": len(trades)})
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_create_trade(self):
+        """Start a new P2P trade"""
+        try:
+            body = self.get_json_body()
+
+            if "orderId" not in body:
+                self.send_json({"error": "Missing orderId"}, 400)
+                return
+
+            # Load order
+            orders_file = BASE_DIR / "p2p_data" / "orders.json"
+            if not orders_file.exists():
+                self.send_json({"error": "Order not found"}, 404)
+                return
+
+            with open(orders_file, "r") as f:
+                orders_data = json.load(f)
+
+            order = next((o for o in orders_data["orders"] if o["id"] == body["orderId"]), None)
+            if not order:
+                self.send_json({"error": "Order not found"}, 404)
+                return
+
+            # Generate trade ID
+            import uuid
+            trade_id = str(uuid.uuid4())[:4].upper()
+
+            # Create trade object
+            trade = {
+                "id": trade_id,
+                "orderId": body["orderId"],
+                "asset": order["asset"],
+                "amount": body.get("amount", order["amount"]),
+                "price": order["price"],
+                "currency": order["currency"],
+                "payAmount": body.get("payAmount", 0),
+                "seller": order.get("seller", {}),
+                "buyer": body.get("buyer", {}),
+                "status": "awaiting_payment",
+                "createdAt": int(time.time() * 1000),
+                "paymentDeadline": int(time.time() * 1000) + 30 * 60 * 1000  # 30 min
+            }
+
+            # Load trades
+            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            if trades_file.exists():
+                with open(trades_file, "r") as f:
+                    trades_data = json.load(f)
+            else:
+                trades_data = {"trades": [], "lastUpdated": 0}
+
+            trades_data["trades"].append(trade)
+            trades_data["lastUpdated"] = int(time.time() * 1000)
+
+            with open(trades_file, "w") as f:
+                json.dump(trades_data, f, indent=2)
+
+            # Update order status
+            for o in orders_data["orders"]:
+                if o["id"] == body["orderId"]:
+                    o["status"] = "in_trade"
+            with open(orders_file, "w") as f:
+                json.dump(orders_data, f, indent=2)
+
+            self.send_json({"success": True, "trade": trade})
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_get_reputation(self):
+        """Get trader reputation"""
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(self.path)
+            # Extract address from path: /api/p2p/reputation/{address}
+            parts = parsed.path.split("/")
+            address = parts[-1] if len(parts) > 4 else None
+
+            rep_file = BASE_DIR / "p2p_data" / "reputation.json"
+            if rep_file.exists():
+                with open(rep_file, "r") as f:
+                    data = json.load(f)
+                traders = data.get("traders", {})
+            else:
+                traders = {}
+
+            if address and address in traders:
+                self.send_json({"reputation": traders[address]})
+            elif address:
+                # Return default reputation for new trader
+                self.send_json({
+                    "reputation": {
+                        "address": address,
+                        "trustScore": 0,
+                        "totalTrades": 0,
+                        "successfulTrades": 0,
+                        "avgReleaseTime": 0,
+                        "disputesWon": 0,
+                        "disputesLost": 0,
+                        "feedbackCount": 0,
+                        "avgRating": 0,
+                        "feedbacks": []
+                    }
+                })
+            else:
+                self.send_json({"traders": traders})
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_submit_feedback(self):
+        """Submit verified feedback for a trade"""
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode()
+            data = json.loads(body)
+
+            trade_id = data.get("tradeId")
+            target_address = data.get("targetAddress")
+            rating = data.get("rating", 5)
+            comment = data.get("comment", "")
+            from_address = data.get("fromAddress")
+
+            if not trade_id or not target_address:
+                self.send_json({"error": "Missing tradeId or targetAddress"}, 400)
+                return
+
+            if rating < 1 or rating > 5:
+                self.send_json({"error": "Rating must be 1-5"}, 400)
+                return
+
+            # Load trades to verify the trade exists and is completed
+            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            if trades_file.exists():
+                with open(trades_file, "r") as f:
+                    trades_data = json.load(f)
+                trades = trades_data.get("trades", [])
+            else:
+                trades = []
+
+            # Find the trade
+            trade = next((t for t in trades if t.get("id") == trade_id), None)
+            if not trade:
+                self.send_json({"error": "Trade not found"}, 404)
+                return
+
+            if trade.get("status") != "completed":
+                self.send_json({"error": "Can only submit feedback for completed trades"}, 400)
+                return
+
+            # Verify the caller was part of the trade
+            buyer = trade.get("buyer", {}).get("address")
+            seller = trade.get("seller", {}).get("address")
+            if from_address and from_address not in [buyer, seller]:
+                self.send_json({"error": "Only trade participants can submit feedback"}, 403)
+                return
+
+            # Verify target is the OTHER party
+            if from_address == target_address:
+                self.send_json({"error": "Cannot leave feedback for yourself"}, 400)
+                return
+
+            # Load reputation file
+            rep_file = BASE_DIR / "p2p_data" / "reputation.json"
+            if rep_file.exists():
+                with open(rep_file, "r") as f:
+                    rep_data = json.load(f)
+            else:
+                rep_data = {"traders": {}, "feedbacks": [], "lastUpdated": 0}
+
+            # Check if feedback already submitted for this trade by this user
+            existing = [f for f in rep_data.get("feedbacks", [])
+                       if f.get("tradeId") == trade_id and f.get("from") == from_address]
+            if existing:
+                self.send_json({"error": "Already submitted feedback for this trade"}, 400)
+                return
+
+            # Create feedback entry
+            feedback = {
+                "id": f"fb_{int(time.time())}_{trade_id[:8]}",
+                "tradeId": trade_id,
+                "from": from_address,
+                "to": target_address,
+                "rating": rating,
+                "comment": comment,
+                "createdAt": int(time.time()),
+                "verified": True
+            }
+
+            # Add to feedbacks list
+            if "feedbacks" not in rep_data:
+                rep_data["feedbacks"] = []
+            rep_data["feedbacks"].append(feedback)
+
+            # Update trader reputation
+            if target_address not in rep_data["traders"]:
+                rep_data["traders"][target_address] = {
+                    "address": target_address,
+                    "trustScore": 50,
+                    "totalTrades": 0,
+                    "successfulTrades": 0,
+                    "avgReleaseTime": 0,
+                    "disputesWon": 0,
+                    "disputesLost": 0,
+                    "feedbackCount": 0,
+                    "totalRating": 0,
+                    "avgRating": 0
+                }
+
+            trader = rep_data["traders"][target_address]
+            trader["feedbackCount"] = trader.get("feedbackCount", 0) + 1
+            trader["totalRating"] = trader.get("totalRating", 0) + rating
+            trader["avgRating"] = round(trader["totalRating"] / trader["feedbackCount"], 2)
+
+            # Recalculate trust score based on feedback
+            base_score = 50 + (trader["avgRating"] - 3) * 10  # 3 stars = 50%, 5 stars = 70%
+            trade_bonus = min(30, trader.get("successfulTrades", 0) * 0.5)  # Up to 30% from trades
+            trader["trustScore"] = min(100, max(0, round(base_score + trade_bonus)))
+
+            rep_data["lastUpdated"] = int(time.time())
+
+            # Save
+            with open(rep_file, "w") as f:
+                json.dump(rep_data, f, indent=4)
+
+            self.send_json({
+                "success": True,
+                "feedback": feedback,
+                "traderReputation": trader
+            })
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_get_feedbacks(self):
+        """Get feedbacks for a trader"""
+        try:
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query)
+
+            address = query.get("address", [None])[0]
+            skip = int(query.get("skip", [0])[0])
+            limit = int(query.get("limit", [20])[0])
+
+            rep_file = BASE_DIR / "p2p_data" / "reputation.json"
+            if rep_file.exists():
+                with open(rep_file, "r") as f:
+                    rep_data = json.load(f)
+                feedbacks = rep_data.get("feedbacks", [])
+            else:
+                feedbacks = []
+
+            # Filter by address if provided
+            if address:
+                feedbacks = [f for f in feedbacks if f.get("to") == address]
+
+            # Sort by date descending
+            feedbacks.sort(key=lambda x: x.get("createdAt", 0), reverse=True)
+
+            total = len(feedbacks)
+            feedbacks = feedbacks[skip:skip + limit]
+
+            # Calculate average
+            if feedbacks:
+                avg_rating = sum(f.get("rating", 0) for f in feedbacks) / len(feedbacks)
+            else:
+                avg_rating = 0
+
+            self.send_json({
+                "feedbacks": feedbacks,
+                "totalCount": total,
+                "avgRating": round(avg_rating, 2)
+            })
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_get_messages(self):
+        """Get chat messages for a trade"""
+        try:
+            from urllib.parse import urlparse, parse_qs
+            # Extract trade_id from path: /api/p2p/trades/{trade_id}/messages
+            parts = self.path.split("/")
+            trade_id = parts[4] if len(parts) > 4 else None
+
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query)
+            after_id = int(query.get("after", [0])[0])
+
+            messages_file = BASE_DIR / "p2p_data" / "messages.json"
+            if messages_file.exists():
+                with open(messages_file, "r") as f:
+                    all_messages = json.load(f)
+            else:
+                all_messages = {}
+
+            trade_messages = all_messages.get(trade_id, [])
+
+            # Filter by after_id if provided
+            if after_id > 0:
+                trade_messages = [m for m in trade_messages if m.get("id", 0) > after_id]
+
+            self.send_json({"messages": trade_messages})
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_send_message(self):
+        """Send chat message in a trade"""
+        try:
+            # Extract trade_id from path
+            parts = self.path.split("/")
+            trade_id = parts[4] if len(parts) > 4 else None
+
+            if not trade_id:
+                self.send_json({"error": "Missing trade_id"}, 400)
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode()
+            data = json.loads(body)
+
+            text = data.get("text", "").strip()
+            sender = data.get("sender", "")
+
+            if not text:
+                self.send_json({"error": "Message text required"}, 400)
+                return
+
+            messages_file = BASE_DIR / "p2p_data" / "messages.json"
+            if messages_file.exists():
+                with open(messages_file, "r") as f:
+                    all_messages = json.load(f)
+            else:
+                all_messages = {}
+
+            if trade_id not in all_messages:
+                all_messages[trade_id] = []
+
+            message = {
+                "id": int(time.time() * 1000),
+                "tradeId": trade_id,
+                "sender": sender,
+                "text": text,
+                "timestamp": int(time.time() * 1000)
+            }
+
+            all_messages[trade_id].append(message)
+
+            with open(messages_file, "w") as f:
+                json.dump(all_messages, f, indent=2)
+
+            self.send_json({"success": True, "message": message})
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_confirm_trade(self):
+        """Confirm payment received and complete trade"""
+        try:
+            # Extract trade_id from path
+            parts = self.path.split("/")
+            trade_id = parts[4] if len(parts) > 4 else None
+
+            if not trade_id:
+                self.send_json({"error": "Missing trade_id"}, 400)
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode()
+            data = json.loads(body)
+
+            confirmed_by = data.get("confirmedBy", "")
+
+            # Load trades
+            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            if trades_file.exists():
+                with open(trades_file, "r") as f:
+                    trades_data = json.load(f)
+            else:
+                trades_data = {"trades": [], "lastUpdated": 0}
+
+            # Find and update trade
+            trade = None
+            for t in trades_data.get("trades", []):
+                if t.get("id") == trade_id:
+                    trade = t
+                    break
+
+            if not trade:
+                self.send_json({"error": "Trade not found"}, 404)
+                return
+
+            # Update trade status
+            trade["status"] = "completed"
+            trade["completedAt"] = int(time.time())
+            trade["confirmedBy"] = confirmed_by
+
+            trades_data["lastUpdated"] = int(time.time())
+
+            with open(trades_file, "w") as f:
+                json.dump(trades_data, f, indent=4)
+
+            # Update reputation stats
+            self._update_trade_reputation(trade)
+
+            self.send_json({
+                "success": True,
+                "trade": trade
+            })
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_p2p_open_dispute(self):
+        """Open dispute for a trade"""
+        try:
+            # Extract trade_id from path
+            parts = self.path.split("/")
+            trade_id = parts[4] if len(parts) > 4 else None
+
+            if not trade_id:
+                self.send_json({"error": "Missing trade_id"}, 400)
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode()
+            data = json.loads(body)
+
+            reason = data.get("reason", "")
+            description = data.get("description", "")
+            opened_by = data.get("openedBy", "")
+
+            # Load trades
+            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            if trades_file.exists():
+                with open(trades_file, "r") as f:
+                    trades_data = json.load(f)
+            else:
+                self.send_json({"error": "Trade not found"}, 404)
+                return
+
+            # Find and update trade
+            trade = None
+            for t in trades_data.get("trades", []):
+                if t.get("id") == trade_id:
+                    trade = t
+                    break
+
+            if not trade:
+                self.send_json({"error": "Trade not found"}, 404)
+                return
+
+            # Create dispute
+            dispute_id = f"D{int(time.time())}"
+            trade["status"] = "disputed"
+            trade["dispute"] = {
+                "id": dispute_id,
+                "reason": reason,
+                "description": description,
+                "openedBy": opened_by,
+                "openedAt": int(time.time()),
+                "status": "pending",
+                "escrows": [],  # Will be assigned by contract
+                "votes": {}
+            }
+
+            trades_data["lastUpdated"] = int(time.time())
+
+            with open(trades_file, "w") as f:
+                json.dump(trades_data, f, indent=4)
+
+            self.send_json({
+                "success": True,
+                "disputeId": dispute_id,
+                "trade": trade
+            })
+
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def _update_trade_reputation(self, trade):
+        """Update reputation after trade completion"""
+        try:
+            rep_file = BASE_DIR / "p2p_data" / "reputation.json"
+            if rep_file.exists():
+                with open(rep_file, "r") as f:
+                    rep_data = json.load(f)
+            else:
+                rep_data = {"traders": {}, "feedbacks": [], "lastUpdated": 0}
+
+            # Update both parties
+            for party in ["buyer", "seller"]:
+                address = trade.get(party, {}).get("address")
+                if not address:
+                    continue
+
+                if address not in rep_data["traders"]:
+                    rep_data["traders"][address] = {
+                        "address": address,
+                        "trustScore": 50,
+                        "totalTrades": 0,
+                        "successfulTrades": 0,
+                        "avgReleaseTime": 0,
+                        "disputesWon": 0,
+                        "disputesLost": 0,
+                        "feedbackCount": 0,
+                        "totalRating": 0,
+                        "avgRating": 0
+                    }
+
+                trader = rep_data["traders"][address]
+                trader["totalTrades"] = trader.get("totalTrades", 0) + 1
+                trader["successfulTrades"] = trader.get("successfulTrades", 0) + 1
+
+                # Recalculate trust score
+                base = 50
+                trade_bonus = min(30, trader["successfulTrades"] * 0.5)
+                rating_bonus = (trader.get("avgRating", 3) - 3) * 5
+                trader["trustScore"] = min(100, max(0, round(base + trade_bonus + rating_bonus)))
+
+            rep_data["lastUpdated"] = int(time.time())
+
+            with open(rep_file, "w") as f:
+                json.dump(rep_data, f, indent=4)
+
+        except Exception as e:
+            print(f"Failed to update reputation: {e}")
 
     def send_json(self, data, status=200):
         self.send_response(status)

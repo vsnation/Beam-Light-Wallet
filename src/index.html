@@ -73,6 +73,14 @@
                         <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
                     </svg>
                 </div>
+                <div class="nav-item" data-page="p2p" data-tooltip="P2P Trading">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="6" cy="6" r="3"/>
+                        <circle cx="18" cy="18" r="3"/>
+                        <path d="M6 21V9a9 9 0 009 9h6"/>
+                        <path d="M18 3v12a9 9 0 01-9-9H3"/>
+                    </svg>
+                </div>
                 <div class="nav-item" data-page="explorer" data-tooltip="Explorer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"/>
@@ -591,6 +599,11 @@
                     </section>
                 </div>
 
+                <!-- P2P Marketplace Page -->
+                <div class="page" id="page-p2p">
+                    <iframe id="p2p-iframe" src="/p2p/p2p.html" style="width: 100%; height: calc(100vh - 80px); border: none; background: transparent;"></iframe>
+                </div>
+
                 <!-- Explorer Page -->
                 <div class="page" id="page-explorer">
                     <!-- Explorer Header Banner -->
@@ -1061,33 +1074,35 @@
                             </div>
 
                             <div style="background: var(--void); border-radius: 12px; padding: 24px; margin-bottom: 24px;">
-                                <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px;">DONATION ADDRESS</div>
-                                <div id="donate-address" class="mono-text" style="font-size: 11px; word-break: break-all; color: var(--beam-cyan); margin-bottom: 16px; padding: 12px; background: var(--bg-primary); border-radius: 8px;">
+                                <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 8px; text-align: center;">DONATION ADDRESS</div>
+                                <div id="donate-address" class="mono-text" style="font-size: 11px; word-break: break-all; color: var(--beam-cyan); margin-bottom: 16px; padding: 12px; background: var(--bg-primary); border-radius: 8px; text-align: center;">
                                     e17cc06481d9ae88e1e0181efee407fa8c36a861b9df723845eddc8fb1ba552048
                                 </div>
-                                <button class="quick-btn quick-btn-primary" onclick="copyDonateAddress()" style="margin-right: 8px;">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="margin-right: 6px;">
-                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-                                    </svg>
-                                    Copy Address
-                                </button>
-                                <button class="quick-btn" onclick="sendDonation()">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="margin-right: 6px;">
-                                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-                                    </svg>
-                                    Send Donation
-                                </button>
+                                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                                    <button class="quick-btn quick-btn-primary" onclick="copyDonateAddress()">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="margin-right: 6px;">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                                        </svg>
+                                        Copy Address
+                                    </button>
+                                    <button class="quick-btn quick-btn-secondary" onclick="sendDonation()">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="margin-right: 6px;">
+                                            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                                        </svg>
+                                        Send Donation
+                                    </button>
+                                </div>
                             </div>
 
                             <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
-                                <button class="quick-btn" onclick="sendDonationAmount(1)" style="min-width: 100px;">
+                                <button class="quick-btn quick-btn-secondary" onclick="sendDonationAmount(1)" style="min-width: 100px;">
                                     1 BEAM
                                 </button>
-                                <button class="quick-btn" onclick="sendDonationAmount(5)" style="min-width: 100px;">
+                                <button class="quick-btn quick-btn-secondary" onclick="sendDonationAmount(5)" style="min-width: 100px;">
                                     5 BEAM
                                 </button>
-                                <button class="quick-btn" onclick="sendDonationAmount(10)" style="min-width: 100px;">
+                                <button class="quick-btn quick-btn-secondary" onclick="sendDonationAmount(10)" style="min-width: 100px;">
                                     10 BEAM
                                 </button>
                                 <button class="quick-btn quick-btn-primary" onclick="sendDonationAmount(50)" style="min-width: 100px;">
@@ -1351,6 +1366,120 @@
                                     GitHub Releases
                                 </a>
                             </div>
+                        </div>
+
+                        <!-- Telegram Notifications -->
+                        <div class="balances-card" style="padding: 24px; margin-top: 20px;">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                                <h3>🔔 Telegram Notifications</h3>
+                                <span id="telegram-status" style="display: flex; align-items: center; gap: 6px; font-size: 12px;">
+                                    <span class="status-dot" id="telegram-status-dot"></span>
+                                    <span id="telegram-status-text">Not configured</span>
+                                </span>
+                            </div>
+                            <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 16px 0;">
+                                Receive real-time notifications for incoming transactions, P2P trades, and other wallet activities via Telegram.
+                            </p>
+
+                            <!-- Bot Token -->
+                            <div style="margin-bottom: 16px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <label style="color: var(--text-muted); font-size: 13px;">Bot Token</label>
+                                    <span class="info-trigger">?
+                                        <div class="info-panel">
+                                            <div class="info-panel-title">How to get a Bot Token</div>
+                                            <div class="info-panel-text">
+                                                1. Open Telegram and search for <strong>@BotFather</strong><br>
+                                                2. Send <code>/newbot</code> command<br>
+                                                3. Choose a name for your bot (e.g., "My BEAM Wallet")<br>
+                                                4. Choose a username ending with "bot" (e.g., "my_beam_wallet_bot")<br>
+                                                5. BotFather will send you the token (looks like: <code>123456789:ABC-DEF...</code>)<br>
+                                                6. Copy and paste the token here
+                                            </div>
+                                        </div>
+                                    </span>
+                                </div>
+                                <input type="password" id="telegram-bot-token" class="search-input" placeholder="123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+                                    style="width: 100%; font-family: var(--font-mono); font-size: 12px;">
+                            </div>
+
+                            <!-- User ID -->
+                            <div style="margin-bottom: 16px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <label style="color: var(--text-muted); font-size: 13px;">Your Telegram User ID</label>
+                                    <span class="info-trigger">?
+                                        <div class="info-panel">
+                                            <div class="info-panel-title">How to get your User ID</div>
+                                            <div class="info-panel-text">
+                                                1. Open Telegram and search for <strong>@userinfobot</strong> or <strong>@getmyid_bot</strong><br>
+                                                2. Send any message to the bot<br>
+                                                3. The bot will reply with your User ID (a number like: <code>123456789</code>)<br>
+                                                4. Copy and paste your ID here<br><br>
+                                                <em>Your User ID ensures only YOU receive notifications from your bot.</em>
+                                            </div>
+                                        </div>
+                                    </span>
+                                </div>
+                                <input type="text" id="telegram-user-id" class="search-input" placeholder="123456789"
+                                    style="width: 100%; font-family: var(--font-mono); font-size: 14px;">
+                            </div>
+
+                            <!-- Notification Types -->
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 12px; color: var(--text-muted); font-size: 13px;">Notification Types</label>
+                                <div style="display: flex; flex-direction: column; gap: 10px;">
+                                    <label style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--void); border-radius: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="notify-incoming" checked style="width: 18px; height: 18px; accent-color: var(--beam-cyan);">
+                                        <div>
+                                            <span style="color: var(--text-primary); font-size: 14px;">💰 Incoming Transactions</span>
+                                            <span style="display: block; color: var(--text-muted); font-size: 12px;">Get notified when you receive BEAM or other assets</span>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--void); border-radius: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="notify-p2p-trade" checked style="width: 18px; height: 18px; accent-color: var(--beam-cyan);">
+                                        <div>
+                                            <span style="color: var(--text-primary); font-size: 14px;">🤝 P2P Trade Updates</span>
+                                            <span style="display: block; color: var(--text-muted); font-size: 12px;">Trade accepted, payment sent, payment confirmed, disputes</span>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--void); border-radius: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="notify-escrow" style="width: 18px; height: 18px; accent-color: var(--beam-cyan);">
+                                        <div>
+                                            <span style="color: var(--text-primary); font-size: 14px;">⚖️ Escrow Assignments</span>
+                                            <span style="display: block; color: var(--text-muted); font-size: 12px;">Get notified when you're assigned as arbiter in a dispute</span>
+                                        </div>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--void); border-radius: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="notify-tx-confirmed" style="width: 18px; height: 18px; accent-color: var(--beam-cyan);">
+                                        <div>
+                                            <span style="color: var(--text-primary); font-size: 14px;">✅ Transaction Confirmations</span>
+                                            <span style="display: block; color: var(--text-muted); font-size: 12px;">Get notified when your sent transactions are confirmed</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Save & Test Buttons -->
+                            <div style="display: flex; gap: 12px;">
+                                <button class="quick-btn quick-btn-primary" onclick="saveTelegramSettings()" style="flex: 1;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                                        <polyline points="17 21 17 13 7 13 7 21"/>
+                                        <polyline points="7 3 7 8 15 8"/>
+                                    </svg>
+                                    Save Settings
+                                </button>
+                                <button class="quick-btn quick-btn-secondary" onclick="testTelegramNotification()" style="flex: 1;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M22 2L11 13"/>
+                                        <path d="M22 2L15 22l-4-9-9-4 20-7z"/>
+                                    </svg>
+                                    Send Test
+                                </button>
+                            </div>
+
+                            <!-- Status Message -->
+                            <div id="telegram-message" style="display: none; margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 13px;"></div>
                         </div>
                     </section>
                 </div>

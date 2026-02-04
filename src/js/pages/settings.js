@@ -222,14 +222,36 @@ function updateNodeSyncStatus(status) {
 /**
  * Select node type
  */
-export function selectNodeType(type, triggerChange = false) {
+export async function selectNodeType(type, triggerChange = false) {
+    const publicBtn = document.getElementById('node-public-btn');
+    const localBtn = document.getElementById('node-local-btn');
+
+    // Early return if already on this node type (prevent duplicate clicks)
+    if (triggerChange && type === currentNodeType) {
+        return;
+    }
+
     currentNodeType = type;
 
-    document.getElementById('node-public-btn').classList.toggle('active', type === 'public');
-    document.getElementById('node-local-btn').classList.toggle('active', type === 'local');
+    publicBtn.classList.toggle('active', type === 'public');
+    localBtn.classList.toggle('active', type === 'local');
+
+    // Update button disabled states - disable the active one
+    publicBtn.disabled = (type === 'public');
+    localBtn.disabled = (type === 'local');
 
     if (triggerChange) {
-        changeNode();
+        // Disable both buttons during switch operation
+        publicBtn.disabled = true;
+        localBtn.disabled = true;
+
+        try {
+            await changeNode();
+        } finally {
+            // Re-enable the non-active button after switch completes
+            publicBtn.disabled = (currentNodeType === 'public');
+            localBtn.disabled = (currentNodeType === 'local');
+        }
     }
 }
 
