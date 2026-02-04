@@ -6,11 +6,11 @@
     One-click installer for BEAM Light Wallet on Windows.
     Downloads binaries, sets up directories, creates shortcuts.
 .NOTES
-    To convert to .exe: Install-Module ps2exe; Invoke-PS2EXE .\BEAM-LightWallet-Setup.ps1 .\BEAM-LightWallet-Setup.exe
+    To convert to .exe: Install-Module ps2exe; Invoke-PS2EXE .\Beam-Light-Wallet-Setup.ps1 .\Beam-Light-Wallet-Setup.exe
 #>
 
 param(
-    [string]$InstallDir = "$env:USERPROFILE\BEAM-LightWallet",
+    [string]$InstallDir = "$env:USERPROFILE\Beam-Light-Wallet",
     [int]$Port = 9080,
     [switch]$Silent
 )
@@ -201,7 +201,7 @@ if (-not (Test-Path "$InstallDir\serve.py")) {
     Write-Warning "serve.py not found!"
     Write-Host ""
     Write-Host "  Please download the wallet files from:" -ForegroundColor Yellow
-    Write-Host "  https://github.com/user/BEAM-LightWallet/releases" -ForegroundColor Cyan
+    Write-Host "  https://github.com/user/Beam-Light-Wallet/releases" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  And extract to: $InstallDir" -ForegroundColor Gray
 }

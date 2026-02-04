@@ -11,28 +11,44 @@ const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/lat
 
 // Check for updates on startup
 async function checkForUpdates(showNoUpdateMsg = false) {
+    // Show loading indicator if manually checking
+    if (showNoUpdateMsg) {
+        showToast('Checking for updates...', 'info');
+    }
+
     try {
-        const response = await fetch(GITHUB_API_URL);
+        const response = await fetch(GITHUB_API_URL, { cache: 'no-store' });
         if (!response.ok) {
             console.log('Could not check for updates');
+            if (showNoUpdateMsg) {
+                showToast('Could not check for updates', 'error');
+            }
             return null;
         }
 
         const release = await response.json();
-        const latestVersion = release.tag_name.replace(/^v/, '');
+        const latestVersion = (release.tag_name || '').replace(/^v/, '').trim();
+        const currentVersion = APP_VERSION.trim();
 
-        console.log(`Current version: ${APP_VERSION}, Latest: ${latestVersion}`);
+        console.log(`Current version: "${currentVersion}", Latest: "${latestVersion}"`);
 
-        if (compareVersions(latestVersion, APP_VERSION) > 0) {
+        // Compare versions - only show update if latest is strictly greater
+        const comparison = compareVersions(latestVersion, currentVersion);
+        console.log(`Version comparison result: ${comparison} (1 = update available, 0 = same, -1 = older)`);
+
+        if (comparison > 0) {
             showUpdateNotification(latestVersion, release.html_url, release.body);
             return { updateAvailable: true, version: latestVersion, url: release.html_url };
         } else if (showNoUpdateMsg) {
-            showToast('You are running the latest version!', 'success');
+            showToast(`You are running the latest version (v${currentVersion})`, 'success');
         }
 
-        return { updateAvailable: false, version: APP_VERSION };
+        return { updateAvailable: false, version: currentVersion };
     } catch (e) {
         console.error('Update check failed:', e);
+        if (showNoUpdateMsg) {
+            showToast('Update check failed: ' + e.message, 'error');
+        }
         return null;
     }
 }
@@ -3321,7 +3337,7 @@ function showLockedOverlay(message) {
                     <div class="welcome-network">
                         <span>mainnet</span>
                     </div>
-                    <div class="welcome-version">v1.0.0</div>
+                    <div class="welcome-version">v${APP_VERSION}</div>
                 </div>
                 <div class="welcome-content">
                     <div class="welcome-brand">
@@ -3726,15 +3742,50 @@ async function welcomeUnlock() {
         storedWalletPassword = password;
         sessionStorage.setItem('walletPassword', password);
 
-        // Check if local node is already synced
+        // Check current server status and if local node is synced
+        const serverStatus = await checkServerStatus();
         const nodeSynced = await isLocalNodeSynced();
-        console.log('Node synced check:', nodeSynced);
-        debugLog('info', 'isLocalNodeSynced', { synced: nodeSynced });
+        const alreadyOnLocal = serverStatus?.node_mode === 'local';
 
-        if (nodeSynced) {
-            // Local node is synced - use it directly with owner key
+        console.log('Node check:', { synced: nodeSynced, alreadyOnLocal, nodeMode: serverStatus?.node_mode });
+        debugLog('info', 'nodeCheck', { synced: nodeSynced, alreadyOnLocal });
+
+        if (nodeSynced && alreadyOnLocal) {
+            // Already on local node and synced - just unlock, no switch needed
+            btn.innerHTML = '<div class="welcome-spinner"></div> Unlocking...';
+            console.log('Already on local node, unlocking directly');
+
+            const unlockRes = await fetch('/api/wallet/unlock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ wallet: welcomeSelectedWallet, password: password })
+            });
+            const unlockResult = await unlockRes.json();
+
+            if (unlockResult.success) {
+                currentNodeType = 'local';
+                hideLockedOverlay();
+                const connected = await loadWalletData();
+                if (connected) {
+                    renderAssetCards();
+                    renderBalancesTable();
+                    renderUtxos();
+                    showToastAdvanced('Wallet Unlocked', 'Connected to local node (DEX ready)', 'success');
+                    loadDexPools().catch(e => console.log('DEX pools not available:', e.message));
+                }
+            } else {
+                if (isPasswordError(unlockResult.error)) {
+                    showWelcomeError('', PASSWORD_ERROR_MESSAGE);
+                } else {
+                    showWelcomeError('', unlockResult.error || 'Failed to unlock wallet');
+                }
+                resetButton();
+                return;
+            }
+        } else if (nodeSynced) {
+            // Node is synced but not on local - switch to local node
             btn.innerHTML = '<div class="welcome-spinner"></div> Connecting to local node...';
-            console.log('Attempting local node switch for wallet:', welcomeSelectedWallet);
+            console.log('Switching to local node for wallet:', welcomeSelectedWallet);
 
             const switchRes = await fetch('/api/node/switch', {
                 method: 'POST',
@@ -3746,6 +3797,7 @@ async function welcomeUnlock() {
             debugLog('response', 'node/switch', switchResult);
 
             if (switchResult.success) {
+                currentNodeType = 'local';
                 hideLockedOverlay();
                 const connected = await loadWalletData();
                 if (connected) {
@@ -3753,7 +3805,6 @@ async function welcomeUnlock() {
                     renderBalancesTable();
                     renderUtxos();
                     showToastAdvanced('Wallet Unlocked', 'Connected to local node (DEX ready)', 'success');
-                    // Load DEX pools in background for LP dual icons
                     loadDexPools().catch(e => console.log('DEX pools not available:', e.message));
                 }
             } else {

@@ -22,7 +22,7 @@ if %errorlevel% neq 0 (
 
 :: Configuration
 set "BEAM_VERSION=7.5.13882"
-set "INSTALL_DIR=%USERPROFILE%\BEAM-LightWallet"
+set "INSTALL_DIR=%USERPROFILE%\Beam-Light-Wallet"
 set "PORT=9080"
 set "GITHUB_BASE=https://github.com/BeamMW/beam/releases/download/beam-%BEAM_VERSION%"
 

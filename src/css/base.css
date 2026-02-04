@@ -99,23 +99,21 @@ body {
 .font-mono { font-family: 'JetBrains Mono', monospace; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Scrollbar Styling */
+/* Scrollbar Styling - Hidden by default */
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 0;
+    height: 0;
+    display: none;
 }
 
-::-webkit-scrollbar-track {
-    background: var(--void-light);
+/* Firefox */
+* {
+    scrollbar-width: none;
 }
 
-::-webkit-scrollbar-thumb {
-    background: var(--glass-border);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
+/* IE/Edge */
+* {
+    -ms-overflow-style: none;
 }
 
 /* Selection */
