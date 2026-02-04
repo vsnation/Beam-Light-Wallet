@@ -489,10 +489,10 @@ DEX requires local node with shader support. Public nodes don't support DEX oper
 
 ## Version
 
-- **Wallet Version:** 1.0.3
+- **Wallet Version:** 1.0.4
 - **BEAM Binaries:** 7.5.13882
 
-### What's New in v1.0.3
+### What's New in v1.0.4
 
 - **Improved UI** - Larger, more visible dropdown icons with hover effects
 - **Better Error Messages** - Clear guidance when features require Local Node

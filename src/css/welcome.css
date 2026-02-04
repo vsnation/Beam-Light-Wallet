@@ -94,15 +94,14 @@
 .welcome-select {
     cursor: pointer;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%2325c2a0' d='M10 13L4 7h12z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 14px center;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: var(--glass) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%2325c2a0' d='M10 13L4 7h12z'/%3E%3C/svg%3E") no-repeat right 14px center !important;
     padding-right: 44px;
-    transition: all 0.2s ease;
 }
 
 .welcome-select:hover {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23f8fafc' d='M10 13L4 7h12z'/%3E%3C/svg%3E");
+    background: var(--glass-hover) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23f8fafc' d='M10 13L4 7h12z'/%3E%3C/svg%3E") no-repeat right 14px center !important;
 }
 
 .welcome-select option {

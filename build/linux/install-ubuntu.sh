@@ -23,7 +23,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 BEAM_VERSION="7.5.13882"
-INSTALL_DIR="$HOME/BEAM-LightWallet"
+INSTALL_DIR="$HOME/Beam-Light-Wallet"
 PORT=9080
 GITHUB_BASE="https://github.com/BeamMW/beam/releases/download/beam-${BEAM_VERSION}"
 

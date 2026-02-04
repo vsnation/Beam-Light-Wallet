@@ -185,6 +185,13 @@ export async function loadSettings() {
                 if (serverStatus.node_running) {
                     document.getElementById('local-node-section').style.display = 'block';
                     updateNodeSyncStatus(serverStatus);
+
+                    // Disable Local Node button when node is already running
+                    const localBtn = document.getElementById('node-local-btn');
+                    if (localBtn && currentNodeType === 'local') {
+                        localBtn.disabled = true;
+                        localBtn.title = 'Local node is already running';
+                    }
                 }
             }
 

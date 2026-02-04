@@ -43,13 +43,13 @@ The installer will automatically install missing dependencies.
 - Desktop shortcut (GNOME/KDE)
 - Systemd service (optional)
 
-Default installation directory: `~/BEAM-LightWallet`
+Default installation directory: `~/Beam-Light-Wallet`
 
 ## Usage
 
 ### Start Wallet (Terminal)
 ```bash
-cd ~/BEAM-LightWallet
+cd ~/Beam-Light-Wallet
 ./beam-wallet.sh
 ```
 
@@ -106,7 +106,7 @@ http://100.x.x.x:9080
 ## Files & Directories
 
 ```
-~/BEAM-LightWallet/
+~/Beam-Light-Wallet/
 ├── serve.py              # Main server
 ├── beam-wallet.sh        # Launcher script
 ├── stop-wallet.sh        # Stop script
@@ -136,7 +136,7 @@ systemctl --user stop beam-wallet
 systemctl --user disable beam-wallet
 
 # Remove files
-rm -rf ~/BEAM-LightWallet
+rm -rf ~/Beam-Light-Wallet
 rm -f ~/.local/share/applications/beam-lightwallet.desktop
 rm -f ~/.config/systemd/user/beam-wallet.service
 ```
@@ -152,7 +152,7 @@ sudo lsof -i :9080
 pkill -f serve.py
 
 # Check logs
-cat ~/BEAM-LightWallet/logs/*.log
+cat ~/Beam-Light-Wallet/logs/*.log
 ```
 
 ### Browser can't connect
@@ -167,8 +167,8 @@ The wallet will automatically use local node when synced.
 
 ### Permission denied
 ```bash
-chmod +x ~/BEAM-LightWallet/beam-wallet.sh
-chmod +x ~/BEAM-LightWallet/binaries/linux/*
+chmod +x ~/Beam-Light-Wallet/beam-wallet.sh
+chmod +x ~/Beam-Light-Wallet/binaries/linux/*
 ```
 
 ## Support
