@@ -489,17 +489,19 @@ DEX requires local node with shader support. Public nodes don't support DEX oper
 
 ## Version
 
-- **Wallet Version:** 1.0.4
+- **Wallet Version:** 1.0.3
 - **BEAM Binaries:** 7.5.13882
 
-### What's New in v1.0.4
+### What's New in v1.0.3
 
 - **Improved UI** - Larger, more visible dropdown icons with hover effects
 - **Better Error Messages** - Clear guidance when features require Local Node
 - **Auto-Switch to Local Node** - Automatically switches when node syncs for full DEX support
 - **Protected Settings** - Prevents duplicate clicks on node switch buttons
 - **Cleaner Password Errors** - User-friendly messages with recovery instructions
-- **Comprehensive Remote Access Guide** - Secure mobile access via Tailscale, SSH, WireGuard, or Cloudflare
+- **Hidden Scrollbars** - Cleaner dashboard appearance
+- **Consistent Folder Naming** - Windows-compatible folder names across all platforms
+- **P2P Marketplace** - Alpha version (may have bugs)
 
 ---
 
