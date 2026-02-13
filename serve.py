@@ -27,10 +27,22 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
 WALLET_API_URL = "http://127.0.0.1:10000/api/wallet"
 WALLET_API_PORT = 10000
 BASE_DIR = Path(__file__).parent.absolute()
-WALLETS_DIR = BASE_DIR / "wallets"
-BINARIES_DIR = BASE_DIR / "binaries"
-LOGS_DIR = BASE_DIR / "logs"
-NODE_DATA_DIR = BASE_DIR / "node_data"
+
+# Detect if running inside macOS .app bundle
+# If so, use ~/Library/Application Support/BEAM Light Wallet for writable data
+_IN_APP_BUNDLE = ".app/Contents" in str(BASE_DIR)
+if _IN_APP_BUNDLE:
+    _DATA_DIR = Path.home() / "Library" / "Application Support" / "BEAM Light Wallet"
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    WALLETS_DIR = _DATA_DIR / "wallets"
+    BINARIES_DIR = _DATA_DIR / "binaries"
+    LOGS_DIR = _DATA_DIR / "logs"
+    NODE_DATA_DIR = _DATA_DIR / "node_data"
+else:
+    WALLETS_DIR = BASE_DIR / "wallets"
+    BINARIES_DIR = BASE_DIR / "binaries"
+    LOGS_DIR = BASE_DIR / "logs"
+    NODE_DATA_DIR = BASE_DIR / "node_data"
 
 # Detect platform
 import platform
@@ -136,8 +148,11 @@ wallet_api_process = None
 beam_beam_node_process = None
 active_wallet = None
 
+# State files directory (must be writable - use data dir for .app bundles)
+STATE_DIR = _DATA_DIR if _IN_APP_BUNDLE else BASE_DIR
+
 # Load saved node_mode or default to "public"
-node_mode_file = BASE_DIR / ".node_mode"
+node_mode_file = STATE_DIR / ".node_mode"
 if node_mode_file.exists():
     try:
         node_mode = node_mode_file.read_text().strip()
@@ -277,7 +292,7 @@ def stop_wallet_api():
     # Also kill any process using the wallet API port
     kill_process_on_port(WALLET_API_PORT)
 
-    state_file = BASE_DIR / ".active_wallet"
+    state_file = STATE_DIR / ".active_wallet"
     if state_file.exists():
         state_file.unlink()
 
@@ -396,7 +411,7 @@ def stop_beam_node():
     kill_process_on_port(LOCAL_NODE_PORT)
 
     # Remove PID file
-    pid_file = BASE_DIR / ".node.pid"
+    pid_file = STATE_DIR / ".node.pid"
     if pid_file.exists():
         pid_file.unlink()
 
@@ -441,6 +456,13 @@ def start_beam_node(owner_key=None, password=None):
             cmd.append(f"--pass={password}")
 
     try:
+        # Check binary is executable
+        if not os.access(str(BEAM_NODE_BINARY), os.X_OK):
+            return {"error": f"beam-node binary is not executable: {BEAM_NODE_BINARY}. Try: chmod +x {BEAM_NODE_BINARY}"}
+
+        print(f"[start_beam_node] cmd: {' '.join(cmd)}")
+        print(f"[start_beam_node] cwd: {NODE_DATA_DIR}")
+
         with open(log_file, "w") as lf:
             beam_beam_node_process = subprocess.Popen(
                 cmd,
@@ -453,18 +475,28 @@ def start_beam_node(owner_key=None, password=None):
         time.sleep(3)
         if is_node_running():
             node_mode = "local"
-            (BASE_DIR / ".node.pid").write_text(str(beam_beam_node_process.pid))
-            (BASE_DIR / ".node_mode").write_text("local")
+            (STATE_DIR / ".node.pid").write_text(str(beam_beam_node_process.pid))
+            (STATE_DIR / ".node_mode").write_text("local")
             print(f"Started beam-node (PID: {beam_beam_node_process.pid})")
             return {"success": True, "pid": beam_beam_node_process.pid}
         else:
-            # Check log for errors
+            # Check if process exited immediately (common with Gatekeeper blocks)
+            exit_code = beam_beam_node_process.poll()
+            error_msg = ""
             if log_file.exists():
                 log_content = log_file.read_text()
-                if "error" in log_content.lower():
-                    return {"error": log_content[-500:]}
-            return {"error": "Node failed to start"}
+                error_msg = log_content[-500:] if log_content else ""
+            if exit_code is not None:
+                error_msg = f"beam-node exited immediately with code {exit_code}. {error_msg}"
+                if exit_code == -9 or exit_code == 137:
+                    error_msg += " (Killed - possibly macOS Gatekeeper. Try: xattr -dr com.apple.quarantine " + str(BEAM_NODE_BINARY) + ")"
+            if not error_msg:
+                error_msg = "Node failed to start - check logs"
+            print(f"[start_beam_node] FAILED: {error_msg}")
+            return {"error": error_msg}
 
+    except PermissionError as e:
+        return {"error": f"Permission denied running beam-node: {e}. Try: chmod +x {BEAM_NODE_BINARY}"}
     except Exception as e:
         return {"error": str(e)}
 
@@ -529,7 +561,7 @@ def switch_to_local_node(password, wallet_name=None):
 
     if result.get("success"):
         node_mode = "local"
-        (BASE_DIR / ".node_mode").write_text("local")
+        (STATE_DIR / ".node_mode").write_text("local")
         print(f"[switch_to_local_node] === SUCCESS: Switched to local node! ===")
     else:
         print(f"[switch_to_local_node] === FAILED: {result} ===")
@@ -582,7 +614,7 @@ def start_wallet_api(wallet_name, password, node_addr=None):
             time.sleep(1)
             if is_wallet_api_running():
                 active_wallet = wallet_name
-                (BASE_DIR / ".active_wallet").write_text(wallet_name)
+                (STATE_DIR / ".active_wallet").write_text(wallet_name)
                 return {"success": True, "wallet": wallet_name}
 
         if log_file.exists():
@@ -1064,7 +1096,7 @@ window.APP_ROUTE = {json.dumps(app_route)};
         running = is_wallet_api_running()
         wallet = None
 
-        state_file = BASE_DIR / ".active_wallet"
+        state_file = STATE_DIR / ".active_wallet"
         if state_file.exists():
             wallet = state_file.read_text().strip()
 
@@ -1203,7 +1235,7 @@ window.APP_ROUTE = {json.dumps(app_route)};
                     result = start_wallet_api(target_wallet, password, target_node)
                     if result.get("success"):
                         node_mode = "public"
-                        (BASE_DIR / ".node_mode").write_text("public")
+                        (STATE_DIR / ".node_mode").write_text("public")
                         result["node"] = target_node
                 else:
                     result = {"error": "No wallet specified and no active wallet"}
@@ -2153,7 +2185,7 @@ def main():
     LOGS_DIR.mkdir(exist_ok=True)
 
     running = is_wallet_api_running()
-    state_file = BASE_DIR / ".active_wallet"
+    state_file = STATE_DIR / ".active_wallet"
     wallet_name = state_file.read_text().strip() if state_file.exists() else "none"
 
     print(f"""

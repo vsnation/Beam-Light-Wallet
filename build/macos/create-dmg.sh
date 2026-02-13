@@ -141,9 +141,13 @@ download_binaries() {
         echo "Downloading beam-node..."
         curl -L -# "${GITHUB_BASE}/mac-beam-node-${BEAM_VERSION}.zip" -o beam-node.zip
         unzip -o beam-node.zip 2>/dev/null || true
-        rm -f beam-node.zip
+        [ -f beam-node.tar ] && tar -xf beam-node.tar 2>/dev/null || true
+        rm -f beam-node.zip beam-node.tar
         [ -f "beam-node" ] && chmod +x beam-node
     fi
+
+    # Remove macOS quarantine flags (prevents Gatekeeper blocking)
+    xattr -dr com.apple.quarantine wallet-api beam-wallet beam-node 2>/dev/null || true
 
     cd "$RESOURCES_DIR"
     echo "Binaries downloaded successfully!"
@@ -183,6 +187,10 @@ tell application "Terminal"
         unzip -o beam-node.zip 2>/dev/null && tar -xf beam-node.tar 2>/dev/null || true
         rm -f beam-node.zip beam-node.tar
         [ -f beam-node ] && chmod +x beam-node && echo \"beam-node downloaded!\"
+
+        echo \"\"
+        echo \"Removing quarantine flags...\"
+        xattr -dr com.apple.quarantine wallet-api beam-wallet beam-node 2>/dev/null || true
 
         echo \"\"
         echo \"=== Setup Complete! ===\"
