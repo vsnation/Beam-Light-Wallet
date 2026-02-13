@@ -153,24 +153,24 @@ cat > beam-wallet.sh << 'EOF'
 cd "$(dirname "$0")"
 PORT=${1:-9080}
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                  BEAM Light Wallet                           ║"
-echo "║                  Developed by @vsnation                      ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-echo "Starting wallet server on port $PORT..."
-echo "Access URL: http://127.0.0.1:$PORT"
-echo ""
-echo "Press Ctrl+C to stop"
-echo ""
+# Smart relaunch: if already running, just open browser
+if curl -s "http://127.0.0.1:$PORT/api/status" > /dev/null 2>&1; then
+    xdg-open "http://127.0.0.1:$PORT" 2>/dev/null
+    exit 0
+fi
 
-# Open browser after 2 seconds
-(sleep 2 && xdg-open "http://127.0.0.1:$PORT" 2>/dev/null || {
-    echo "Open http://127.0.0.1:$PORT in your browser"
-}) &
+# Start server in background
+mkdir -p logs
+nohup python3 serve.py $PORT > logs/serve.log 2>&1 &
+disown
 
-# Start server
-python3 serve.py $PORT
+# Wait for server
+for i in $(seq 1 10); do
+    curl -s "http://127.0.0.1:$PORT/api/status" > /dev/null 2>&1 && break
+    sleep 0.5
+done
+
+xdg-open "http://127.0.0.1:$PORT" 2>/dev/null
 EOF
 chmod +x beam-wallet.sh
 
@@ -193,12 +193,12 @@ Version=1.0
 Type=Application
 Name=BEAM Light Wallet
 Comment=Privacy-focused cryptocurrency wallet
-Exec=gnome-terminal -- bash -c "cd $INSTALL_DIR && ./beam-wallet.sh; exec bash"
+Exec=$INSTALL_DIR/beam-wallet.sh
 Icon=$INSTALL_DIR/icon.png
 Terminal=false
 Categories=Finance;Network;
 Keywords=beam;crypto;wallet;privacy;
-StartupNotify=true
+StartupNotify=false
 EOF
 
 # Use bundled icon (included in package)

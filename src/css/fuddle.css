@@ -1,0 +1,2564 @@
+/* =============================================================================
+   FUDDLE — On-Chain Word Game for BEAM
+   Design System: "Obsidian Arcade"
+   Warm charcoal void · lime phosphor · 3D depth keys · chunky tiles
+   ============================================================================= */
+
+/* === Display Font — Syne for bold headings === */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
+
+/* === Local Fonts — Space Mono for game elements === */
+@font-face {
+    font-family: 'Space Mono';
+    src: url('../fonts/SpaceMono-Regular-latin.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Space Mono';
+    src: url('../fonts/SpaceMono-Bold-latin.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* === Color System — Obsidian Arcade === */
+:root {
+    --fuddle-bg: #0C0A09;
+    --fuddle-card: rgba(28, 25, 23, 0.88);
+    --fuddle-card-solid: #1C1917;
+    --fuddle-border: rgba(168, 162, 158, 0.07);
+    --fuddle-border-hover: rgba(168, 162, 158, 0.18);
+    --fuddle-correct: #10B981;
+    --fuddle-correct-dim: rgba(16, 185, 129, 0.10);
+    --fuddle-present: #F59E0B;
+    --fuddle-present-dim: rgba(245, 158, 11, 0.10);
+    --fuddle-absent: #1C1917;
+    --fuddle-accent: #BFFF00;
+    --fuddle-accent-dim: rgba(191, 255, 0, 0.08);
+    --fuddle-cta: linear-gradient(135deg, #F43F5E, #E11D48);
+    --fuddle-purple: #A78BFA;
+    --fuddle-purple-dark: #7C3AED;
+    --fuddle-cyan: #38BDF8;
+    --fuddle-surface: rgba(28, 25, 23, 0.55);
+    --fuddle-glass-border: rgba(255, 255, 255, 0.03);
+    --fuddle-glow-correct: 0 0 22px rgba(16, 185, 129, 0.4), 0 0 4px rgba(16, 185, 129, 0.6);
+    --fuddle-glow-present: 0 0 22px rgba(245, 158, 11, 0.35), 0 0 4px rgba(245, 158, 11, 0.5);
+    --fuddle-glow-accent: 0 0 20px rgba(191, 255, 0, 0.2);
+    --fuddle-font-display: 'Syne', 'Space Mono', system-ui, sans-serif;
+    --fuddle-font-game: 'Space Mono', 'JetBrains Mono', monospace;
+    --fuddle-tier-beam: #25c2a0;
+    --fuddle-tier-fomo: #F43F5E;
+    --fuddle-tier-beamx: #A78BFA;
+}
+
+/* === Root Container === */
+
+#fuddle-root {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 24px 40px;
+    position: relative;
+    min-height: 60vh;
+}
+
+/* Subtle radial warmth */
+#fuddle-root::before {
+    content: '';
+    position: fixed;
+    top: -120px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 700px;
+    height: 500px;
+    background: radial-gradient(ellipse, rgba(191, 255, 0, 0.02) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* === Header === */
+
+.fuddle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 0 18px;
+    margin-bottom: 24px;
+    border-bottom: 2px solid rgba(191, 255, 0, 0.06);
+}
+
+.fuddle-back-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    letter-spacing: 0.3px;
+}
+
+.fuddle-back-btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.fuddle-title {
+    font-family: var(--fuddle-font-display);
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+}
+
+.fuddle-help-btn {
+    background: rgba(191, 255, 0, 0.06);
+    border: 1px solid rgba(191, 255, 0, 0.12);
+    color: var(--fuddle-accent);
+    cursor: pointer;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    letter-spacing: 0.3px;
+}
+
+.fuddle-help-btn:hover {
+    background: rgba(191, 255, 0, 0.12);
+    border-color: rgba(191, 255, 0, 0.25);
+    box-shadow: 0 0 16px rgba(191, 255, 0, 0.08);
+}
+
+/* === App Store === */
+
+.appstore-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.appstore-featured {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    min-height: 210px;
+    border: 1px solid rgba(191, 255, 0, 0.08);
+}
+
+.appstore-featured:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 32px rgba(191, 255, 0, 0.06);
+}
+
+.appstore-featured-bg {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #1C1917 0%, #292524 50%, #1C1917 100%);
+    z-index: 0;
+}
+
+/* Dot grid texture on featured card */
+.appstore-featured-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(191, 255, 0, 0.04) 1px, transparent 1px);
+    background-size: 16px 16px;
+    pointer-events: none;
+}
+
+.appstore-featured-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    padding: 36px;
+}
+
+.appstore-featured-icon {
+    flex-shrink: 0;
+}
+
+.fuddle-block-icon {
+    width: 84px;
+    height: 84px;
+    background: rgba(191, 255, 0, 0.06);
+    border: 2px solid rgba(191, 255, 0, 0.2);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+    font-weight: 700;
+    color: var(--fuddle-accent);
+    font-family: var(--fuddle-font-display);
+    letter-spacing: 2px;
+    box-shadow: 0 0 30px rgba(191, 255, 0, 0.06);
+}
+
+.appstore-featured-info {
+    flex: 1;
+}
+
+.appstore-featured-info h2 {
+    font-family: var(--fuddle-font-display);
+    font-size: 30px;
+    font-weight: 800;
+    color: #fff;
+    margin: 0 0 4px;
+    letter-spacing: 4px;
+}
+
+.appstore-featured-info p {
+    color: rgba(255, 255, 255, 0.65);
+    margin: 0 0 4px;
+    font-size: 14px;
+}
+
+.appstore-featured-desc {
+    font-size: 13px !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+    margin-bottom: 18px !important;
+}
+
+.appstore-featured-info .btn-accent {
+    background: var(--fuddle-cta);
+    border: none;
+    color: #fff;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    transition: all 0.15s ease;
+    box-shadow: 0 4px 20px rgba(244, 63, 94, 0.3);
+}
+
+.appstore-featured-info .btn-accent:hover {
+    box-shadow: 0 6px 28px rgba(244, 63, 94, 0.4);
+    transform: translateY(-1px);
+}
+
+.appstore-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 14px;
+}
+
+.appstore-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px;
+    background: var(--fuddle-card);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.appstore-card:hover {
+    border-color: var(--fuddle-border-hover);
+    background: rgba(28, 25, 23, 0.95);
+    transform: translateY(-1px);
+}
+
+.appstore-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.appstore-card-info h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.appstore-card-info p {
+    margin: 3px 0 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* === CID Display === */
+
+.fuddle-cid-display {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    margin-bottom: 24px;
+    background: rgba(191, 255, 0, 0.03);
+    border: 1px solid rgba(191, 255, 0, 0.06);
+    border-left: 3px solid rgba(191, 255, 0, 0.3);
+    border-radius: 4px 8px 8px 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: var(--fuddle-font-game);
+    font-size: 11px;
+}
+
+.fuddle-cid-display:hover {
+    border-color: rgba(191, 255, 0, 0.12);
+    border-left-color: var(--fuddle-accent);
+    background: rgba(191, 255, 0, 0.05);
+}
+
+.fuddle-cid-display .cid-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+}
+
+.fuddle-cid-display .cid-value {
+    color: var(--text-secondary);
+    font-weight: 400;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-cid-display .cid-copy {
+    color: var(--fuddle-accent);
+    font-size: 14px;
+    margin-left: auto;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+}
+
+.fuddle-cid-display:hover .cid-copy {
+    opacity: 1;
+}
+
+/* === Lobby Sections === */
+
+.fuddle-lobby-section {
+    margin-bottom: 32px;
+    animation: fuddleFadeUp 0.35s ease both;
+}
+
+.fuddle-lobby-section:nth-child(2) { animation-delay: 0.04s; }
+.fuddle-lobby-section:nth-child(3) { animation-delay: 0.08s; }
+.fuddle-lobby-section:nth-child(4) { animation-delay: 0.12s; }
+.fuddle-lobby-section:nth-child(5) { animation-delay: 0.16s; }
+
+.fuddle-lobby-section h3 {
+    font-family: var(--fuddle-font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin: 0 0 16px;
+}
+
+/* === Stats Row === */
+
+.fuddle-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+.fuddle-stat-card {
+    background: var(--fuddle-card);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 10px;
+    padding: 16px 12px;
+    text-align: center;
+    transition: border-color 0.15s ease;
+    position: relative;
+}
+
+.fuddle-stat-card:hover {
+    border-color: var(--fuddle-border-hover);
+}
+
+.fuddle-stat-val {
+    font-family: var(--fuddle-font-game);
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 6px;
+}
+
+.fuddle-stat-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+
+/* === Tournament Cards — The Centerpiece === */
+
+.fuddle-tournaments-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.fuddle-tournament-card {
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 14px;
+    padding: 20px 16px 16px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Bold left accent stripe per tier */
+.fuddle-tournament-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 4px;
+}
+
+.fuddle-tournament-card.tier-beam::before {
+    background: linear-gradient(180deg, #25c2a0, #1a9a7e);
+}
+
+.fuddle-tournament-card.tier-fomo::before {
+    background: linear-gradient(180deg, #F43F5E, #E11D48);
+}
+
+.fuddle-tournament-card.tier-beamx::before {
+    background: linear-gradient(180deg, #A78BFA, #7C3AED);
+}
+
+/* Subtle tier-colored background glow */
+.fuddle-tournament-card.tier-beam {
+    background: linear-gradient(135deg, rgba(37, 194, 160, 0.04) 0%, var(--fuddle-card-solid) 50%);
+}
+
+.fuddle-tournament-card.tier-fomo {
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.04) 0%, var(--fuddle-card-solid) 50%);
+}
+
+.fuddle-tournament-card.tier-beamx {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.04) 0%, var(--fuddle-card-solid) 50%);
+}
+
+.fuddle-tournament-card:hover {
+    border-color: var(--fuddle-border-hover);
+    transform: translateY(-2px);
+}
+
+.fuddle-tournament-card.tier-beam:hover {
+    box-shadow: 0 8px 28px rgba(37, 194, 160, 0.08);
+    border-color: rgba(37, 194, 160, 0.15);
+}
+
+.fuddle-tournament-card.tier-fomo:hover {
+    box-shadow: 0 8px 28px rgba(244, 63, 94, 0.08);
+    border-color: rgba(244, 63, 94, 0.15);
+}
+
+.fuddle-tournament-card.tier-beamx:hover {
+    box-shadow: 0 8px 28px rgba(167, 139, 250, 0.08);
+    border-color: rgba(167, 139, 250, 0.15);
+}
+
+/* Tier badge */
+.fuddle-tournament-tier-badge {
+    font-family: var(--fuddle-font-display);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    padding-left: 4px;
+}
+
+.tier-beam .fuddle-tournament-tier-badge {
+    color: var(--fuddle-tier-beam);
+}
+
+.tier-fomo .fuddle-tournament-tier-badge {
+    color: var(--fuddle-tier-fomo);
+}
+
+.tier-beamx .fuddle-tournament-tier-badge {
+    color: var(--fuddle-tier-beamx);
+}
+
+.fuddle-tournament-letters {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: -6px;
+    letter-spacing: 0.5px;
+    padding-left: 4px;
+}
+
+/* Prize pool */
+.fuddle-tournament-prize {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 4px;
+}
+
+.fuddle-tournament-prize .prize-amount {
+    font-family: var(--fuddle-font-game);
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+}
+
+.tier-beam .fuddle-tournament-prize .prize-amount {
+    color: var(--fuddle-tier-beam);
+}
+
+.tier-fomo .fuddle-tournament-prize .prize-amount {
+    color: var(--fuddle-tier-fomo);
+}
+
+.tier-beamx .fuddle-tournament-prize .prize-amount {
+    color: var(--fuddle-tier-beamx);
+}
+
+.fuddle-tournament-prize .prize-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+/* Tournament meta */
+.fuddle-tournament-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    padding: 8px 0;
+    border-top: 1px solid var(--fuddle-border);
+    border-bottom: 1px solid var(--fuddle-border);
+}
+
+.fuddle-tournament-meta .meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+}
+
+.fuddle-tournament-meta .meta-val {
+    font-family: var(--fuddle-font-game);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.fuddle-tournament-meta .meta-val.score {
+    color: var(--fuddle-accent);
+}
+
+.fuddle-tournament-meta .meta-val.countdown {
+    font-size: 12px;
+    color: var(--fuddle-present);
+    font-weight: 700;
+}
+
+.fuddle-tournament-meta .meta-val.countdown.ended {
+    color: var(--fuddle-correct);
+    animation: fuddlePulseText 2s ease-in-out infinite;
+}
+
+.fuddle-tournament-meta .meta-item.meta-reward {
+    grid-column: 1 / -1;
+    padding-top: 6px;
+    border-top: 1px solid var(--fuddle-border);
+}
+
+.fuddle-tournament-meta .meta-val.reward {
+    color: var(--fuddle-correct);
+    font-size: 14px;
+}
+
+.fuddle-tournament-meta .meta-label {
+    font-size: 8px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+}
+
+/* Round badge */
+.fuddle-tournament-round {
+    font-family: var(--fuddle-font-game);
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+/* Action buttons */
+.fuddle-tournament-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+}
+
+.fuddle-tournament-play {
+    flex: 1;
+    padding: 10px 10px;
+    background: var(--fuddle-cta);
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    letter-spacing: 0.5px;
+    box-shadow: 0 3px 14px rgba(244, 63, 94, 0.25);
+}
+
+.fuddle-tournament-play:hover {
+    box-shadow: 0 5px 22px rgba(244, 63, 94, 0.35);
+    transform: translateY(-1px);
+}
+
+.fuddle-tournament-play:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(244, 63, 94, 0.2);
+}
+
+.fuddle-tournament-claim {
+    flex: 1;
+    padding: 10px 10px;
+    background: linear-gradient(135deg, #10B981, #059669);
+    border: none;
+    color: #fff;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    letter-spacing: 0.5px;
+    box-shadow: 0 3px 14px rgba(16, 185, 129, 0.25);
+    animation: fuddleClaimPulse 2.5s ease-in-out infinite;
+}
+
+.fuddle-tournament-claim:hover {
+    box-shadow: 0 5px 22px rgba(16, 185, 129, 0.4);
+    transform: translateY(-1px);
+}
+
+@keyframes fuddleClaimPulse {
+    0%, 100% { box-shadow: 0 3px 14px rgba(16, 185, 129, 0.25); }
+    50% { box-shadow: 0 5px 24px rgba(16, 185, 129, 0.45); }
+}
+
+.fuddle-tournament-donate {
+    padding: 10px 12px;
+    background: transparent;
+    border: 1px solid var(--fuddle-border);
+    color: var(--text-muted);
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+}
+
+.fuddle-tournament-donate:hover {
+    border-color: var(--fuddle-accent);
+    color: var(--fuddle-accent);
+    background: var(--fuddle-accent-dim);
+}
+
+/* === Letters Inventory === */
+
+.fuddle-letters-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 14px;
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 10px;
+}
+
+.fuddle-letter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 5px 9px;
+    background: rgba(191, 255, 0, 0.04);
+    border: 1px solid rgba(191, 255, 0, 0.08);
+    border-radius: 6px;
+    font-family: var(--fuddle-font-game);
+    font-size: 12px;
+    font-weight: 700;
+    transition: all 0.1s ease;
+}
+
+.fuddle-letter-chip:hover {
+    background: rgba(191, 255, 0, 0.1);
+    border-color: rgba(191, 255, 0, 0.2);
+}
+
+.fuddle-letter-chip .char {
+    color: #fff;
+}
+
+.fuddle-letter-chip .count {
+    color: var(--fuddle-accent);
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.8;
+}
+
+/* === Action Buttons Row === */
+
+.fuddle-shop-btns {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+/* Buy Letters — primary CTA */
+.fuddle-btn-shop {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--fuddle-cta);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-family: var(--fuddle-font-display);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(244, 63, 94, 0.25);
+    transition: all 0.2s ease;
+}
+
+.fuddle-btn-shop:hover {
+    box-shadow: 0 6px 22px rgba(244, 63, 94, 0.35);
+    transform: translateY(-1px);
+}
+
+.fuddle-btn-shop:active {
+    transform: translateY(0);
+}
+
+/* Leaderboard — accent outline */
+.fuddle-btn-lb {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(191, 255, 0, 0.06);
+    border: 1px solid rgba(191, 255, 0, 0.2);
+    border-radius: 10px;
+    color: var(--fuddle-accent);
+    font-family: var(--fuddle-font-display);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.fuddle-btn-lb:hover {
+    background: rgba(191, 255, 0, 0.12);
+    border-color: rgba(191, 255, 0, 0.35);
+}
+
+/* Admin — purple, subtle */
+.fuddle-btn-admin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 14px;
+    background: rgba(167, 139, 250, 0.06);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 10px;
+    color: var(--fuddle-purple);
+    font-family: var(--fuddle-font-display);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.fuddle-btn-admin:hover {
+    background: rgba(167, 139, 250, 0.12);
+    border-color: rgba(167, 139, 250, 0.35);
+}
+
+/* === Game Board === */
+
+.fuddle-game-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.fuddle-game-prize {
+    font-family: var(--fuddle-font-game);
+    font-size: 14px;
+    color: var(--fuddle-accent);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-game-info {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-board {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding: 28px 0;
+    position: relative;
+}
+
+/* Subtle spotlight behind board */
+.fuddle-board::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 360px;
+    height: 360px;
+    background: radial-gradient(circle, rgba(191, 255, 0, 0.02) 0%, transparent 65%);
+    pointer-events: none;
+    border-radius: 50%;
+}
+
+.fuddle-row {
+    display: flex;
+    gap: 8px;
+}
+
+/* === Tiles — The Hero Element === */
+
+.fuddle-tile {
+    width: 60px;
+    height: 60px;
+    border: 3px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--fuddle-font-game);
+    font-size: 26px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.15);
+    text-transform: uppercase;
+    background: rgba(28, 25, 23, 0.6);
+    transition: all 0.12s ease;
+    perspective: 600px;
+}
+
+.fuddle-tile.filled {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.fuddle-tile.current-row {
+    border-color: rgba(191, 255, 0, 0.15);
+    border-style: dashed;
+}
+
+.fuddle-tile.current-row.filled {
+    border-style: solid;
+    border-color: var(--fuddle-accent);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(191, 255, 0, 0.1);
+}
+
+.fuddle-tile.correct {
+    background: var(--fuddle-correct);
+    border-color: var(--fuddle-correct);
+    color: #fff;
+    box-shadow: var(--fuddle-glow-correct);
+}
+
+.fuddle-tile.present {
+    background: var(--fuddle-present);
+    border-color: var(--fuddle-present);
+    color: #fff;
+    box-shadow: var(--fuddle-glow-present);
+}
+
+.fuddle-tile.absent {
+    background: var(--fuddle-absent);
+    border-color: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.35);
+}
+
+/* Tile flip — quick snap */
+.fuddle-tile.flip {
+    animation: fuddleFlip 0.5s ease forwards;
+}
+
+@keyframes fuddleFlip {
+    0%   { transform: rotateX(0deg); }
+    40%  { transform: rotateX(90deg); }
+    60%  { transform: rotateX(90deg); }
+    100% { transform: rotateX(0deg); }
+}
+
+/* Tile pop on input */
+.fuddle-tile.pop {
+    animation: fuddlePop 0.1s ease;
+}
+
+@keyframes fuddlePop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.1); border-color: var(--fuddle-accent); }
+    100% { transform: scale(1); }
+}
+
+/* === Keyboard — 3D Depth Keys === */
+
+.fuddle-keyboard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin: 16px 0;
+    padding: 16px;
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 12px;
+}
+
+.fuddle-kb-row {
+    display: flex;
+    gap: 5px;
+}
+
+.fuddle-key {
+    min-width: 38px;
+    height: 52px;
+    border: none;
+    border-radius: 6px;
+    background: #292524;
+    color: var(--text-primary);
+    font-family: var(--fuddle-font-game);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.08s ease;
+    position: relative;
+    /* 3D depth effect */
+    box-shadow: 0 4px 0 #0C0A09, 0 5px 8px rgba(0, 0, 0, 0.3);
+}
+
+.fuddle-key:hover {
+    background: #44403C;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #0C0A09, 0 7px 12px rgba(0, 0, 0, 0.3);
+}
+
+.fuddle-key:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 #0C0A09, 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.fuddle-key.wide {
+    min-width: 62px;
+    font-size: 16px;
+    background: #3B3530;
+    color: var(--fuddle-accent);
+}
+
+.fuddle-key.wide:hover {
+    background: #4A453F;
+}
+
+.fuddle-key .key-count {
+    font-size: 9px;
+    color: var(--fuddle-accent);
+    font-weight: 400;
+    margin-top: 1px;
+    opacity: 0.7;
+}
+
+/* Keyboard feedback colors */
+.fuddle-key.correct {
+    background: var(--fuddle-correct);
+    color: #fff;
+    box-shadow: 0 4px 0 #065F46, 0 5px 12px rgba(16, 185, 129, 0.2);
+}
+
+.fuddle-key.correct .key-count { color: rgba(255,255,255,0.6); }
+
+.fuddle-key.present {
+    background: var(--fuddle-present);
+    color: #fff;
+    box-shadow: 0 4px 0 #92400E, 0 5px 12px rgba(245, 158, 11, 0.15);
+}
+
+.fuddle-key.present .key-count { color: rgba(255,255,255,0.6); }
+
+.fuddle-key.absent {
+    background: #1C1917;
+    color: rgba(255, 255, 255, 0.25);
+    box-shadow: 0 4px 0 #0C0A09, 0 5px 8px rgba(0, 0, 0, 0.3);
+    opacity: 0.6;
+}
+
+.fuddle-key.absent .key-count { color: rgba(255, 255, 255, 0.15); }
+
+/* === Submit Guess Button === */
+
+.fuddle-submit-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 14px;
+    margin: 12px 0;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-family: var(--fuddle-font-display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: not-allowed;
+    transition: all 0.2s ease;
+}
+
+.fuddle-submit-btn.ready {
+    background: var(--fuddle-cta);
+    border-color: transparent;
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 4px 18px rgba(244, 63, 94, 0.3);
+    animation: fuddleSubmitReady 1.5s ease-in-out infinite;
+}
+
+.fuddle-submit-btn.ready:hover {
+    box-shadow: 0 6px 26px rgba(244, 63, 94, 0.4);
+    transform: translateY(-1px);
+}
+
+.fuddle-submit-btn.ready:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px rgba(244, 63, 94, 0.2);
+}
+
+@keyframes fuddleSubmitReady {
+    0%, 100% { box-shadow: 0 4px 18px rgba(244, 63, 94, 0.3); }
+    50% { box-shadow: 0 4px 24px rgba(244, 63, 94, 0.45); }
+}
+
+.fuddle-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: fuddleSpinLoader 0.7s linear infinite;
+}
+
+/* === ENTER key on virtual keyboard === */
+
+.fuddle-key.enter-key {
+    background: rgba(244, 63, 94, 0.15);
+    color: #F43F5E;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.fuddle-key.enter-key:hover {
+    background: rgba(244, 63, 94, 0.25);
+}
+
+.fuddle-key.del-key {
+    background: #3B3530;
+    color: var(--fuddle-present);
+}
+
+.fuddle-key.del-key:hover {
+    background: #4A453F;
+}
+
+/* === Confirmation Progress === */
+
+.fuddle-confirm-progress {
+    padding: 16px 18px;
+    margin: 0 0 16px;
+    background: rgba(191, 255, 0, 0.03);
+    border: 1px solid rgba(191, 255, 0, 0.08);
+    border-radius: 12px;
+}
+
+.fuddle-confirm-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.fuddle-confirm-step {
+    font-family: var(--fuddle-font-game);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    position: relative;
+    padding-left: 16px;
+}
+
+.fuddle-confirm-step::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--text-muted);
+    background: transparent;
+}
+
+.fuddle-confirm-step.done {
+    color: var(--fuddle-correct);
+}
+
+.fuddle-confirm-step.done::before {
+    background: var(--fuddle-correct);
+    border-color: var(--fuddle-correct);
+}
+
+.fuddle-confirm-step.active {
+    color: var(--fuddle-accent);
+}
+
+.fuddle-confirm-step.active::before {
+    border-color: var(--fuddle-accent);
+    animation: fuddleBreath 1.5s ease-in-out infinite;
+}
+
+.fuddle-confirm-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.fuddle-confirm-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--fuddle-correct), var(--fuddle-accent));
+    border-radius: 2px;
+    transition: width 1s linear;
+}
+
+.fuddle-confirm-text {
+    font-family: var(--fuddle-font-game);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    letter-spacing: 0.3px;
+}
+
+/* Legacy confirming banner (kept for fallback) */
+.fuddle-confirming {
+    text-align: center;
+    padding: 14px 20px;
+    margin: 0 0 16px;
+    background: rgba(191, 255, 0, 0.04);
+    border: 1px solid rgba(191, 255, 0, 0.1);
+    border-left: 3px solid var(--fuddle-accent);
+    border-radius: 4px 10px 10px 4px;
+    color: var(--fuddle-accent);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    animation: fuddleBreath 2s ease-in-out infinite;
+}
+
+@keyframes fuddleBreath {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+/* === Status Bar === */
+
+.fuddle-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 8px;
+    font-family: var(--fuddle-font-game);
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 12px;
+    letter-spacing: 0.3px;
+}
+
+/* === Letter Shop === */
+
+.fuddle-shop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+    gap: 6px;
+    margin: 16px 0;
+}
+
+.fuddle-shop-letter {
+    width: 100%;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    position: relative;
+}
+
+.fuddle-shop-letter:hover {
+    border-color: var(--fuddle-accent);
+    background: rgba(191, 255, 0, 0.04);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(191, 255, 0, 0.06);
+}
+
+.fuddle-shop-letter:active {
+    transform: translateY(0);
+}
+
+.fuddle-shop-letter .letter {
+    font-family: var(--fuddle-font-game);
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+}
+
+.fuddle-shop-letter .owned {
+    font-family: var(--fuddle-font-game);
+    font-size: 10px;
+    color: var(--fuddle-accent);
+    margin-top: 3px;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+/* === Loot Boxes === */
+
+.fuddle-lootbox-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.fuddle-lootbox {
+    padding: 24px 16px;
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Animated gradient border sweep */
+.fuddle-lootbox::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--fuddle-accent), transparent);
+    background-size: 200% 100%;
+    animation: fuddleSweep 3s ease-in-out infinite;
+}
+
+@keyframes fuddleSweep {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.fuddle-lootbox:hover {
+    border-color: var(--fuddle-border-hover);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+
+.fuddle-lootbox-emoji {
+    font-size: 40px;
+    margin-bottom: 10px;
+    filter: drop-shadow(0 2px 8px rgba(191, 255, 0, 0.15));
+}
+
+.fuddle-lootbox-name {
+    font-family: var(--fuddle-font-display);
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+}
+
+.fuddle-lootbox-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 5px 0 12px;
+}
+
+.fuddle-lootbox-price {
+    font-family: var(--fuddle-font-game);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--fuddle-accent);
+}
+
+/* === Result Modals === */
+
+.fuddle-result-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 10, 9, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(12px);
+    animation: fuddleFadeIn 0.2s ease;
+}
+
+.fuddle-result-modal {
+    background: #1C1917;
+    border: 1px solid var(--fuddle-border-hover);
+    border-radius: 16px;
+    padding: 36px;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+    animation: fuddleModalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fuddle-result-title {
+    font-family: var(--fuddle-font-display);
+    font-size: 30px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+}
+
+.fuddle-result-title.win {
+    color: var(--fuddle-correct);
+    text-shadow: 0 0 24px rgba(16, 185, 129, 0.3);
+}
+
+.fuddle-result-title.loss {
+    color: var(--text-secondary);
+}
+
+.fuddle-result-score {
+    font-family: var(--fuddle-font-display);
+    font-size: 56px;
+    font-weight: 800;
+    color: var(--fuddle-accent);
+    margin: 16px 0;
+    text-shadow: 0 0 30px rgba(191, 255, 0, 0.25);
+}
+
+.fuddle-result-breakdown {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    line-height: 1.7;
+}
+
+.fuddle-result-btns {
+    display: flex;
+    gap: 10px;
+}
+
+.fuddle-result-btns .btn {
+    flex: 1;
+    padding: 13px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+/* === Buy Letter Modal (in-game) === */
+
+.fuddle-buy-letter-modal {
+    max-width: 380px;
+    text-align: left;
+}
+
+.fuddle-buy-letter-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.fuddle-buy-letter-tile {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--fuddle-font-game);
+    font-size: 28px;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(145deg, rgba(244, 63, 94, 0.3), rgba(244, 63, 94, 0.12));
+    border: 2px solid rgba(244, 63, 94, 0.5);
+    border-radius: 12px;
+    flex-shrink: 0;
+    text-shadow: 0 0 12px rgba(244, 63, 94, 0.4);
+}
+
+.fuddle-buy-letter-title {
+    font-family: var(--fuddle-font-display);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.5px;
+}
+
+.fuddle-buy-letter-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    line-height: 1.5;
+}
+
+.fuddle-buy-letter-sub strong {
+    color: var(--fuddle-accent);
+}
+
+.fuddle-buy-letter-form {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.fuddle-buy-letter-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.fuddle-buy-letter-row label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.fuddle-buy-letter-qty {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border: 1px solid var(--fuddle-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.fuddle-qty-btn {
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.04);
+    border: none;
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-family: inherit;
+}
+
+.fuddle-qty-btn:hover {
+    background: rgba(191, 255, 0, 0.08);
+    color: var(--fuddle-accent);
+}
+
+.fuddle-qty-btn:active {
+    background: rgba(191, 255, 0, 0.15);
+}
+
+.fuddle-buy-letter-qty input {
+    width: 48px;
+    height: 36px;
+    text-align: center;
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--fuddle-border);
+    border-right: 1px solid var(--fuddle-border);
+    color: var(--text-primary);
+    font-family: var(--fuddle-font-game);
+    font-size: 16px;
+    font-weight: 700;
+    outline: none;
+    -moz-appearance: textfield;
+}
+
+.fuddle-buy-letter-qty input::-webkit-inner-spin-button,
+.fuddle-buy-letter-qty input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.fuddle-buy-letter-cost {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 14px;
+    border-top: 1px solid var(--fuddle-border);
+    font-size: 14px;
+}
+
+.fuddle-buy-letter-cost span:first-child {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.fuddle-buy-letter-cost span:last-child {
+    color: var(--fuddle-accent);
+    font-family: var(--fuddle-font-game);
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.fuddle-buy-letter-unit {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: 4px;
+}
+
+.fuddle-buy-confirm-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1;
+    padding: 13px 16px;
+    background: var(--fuddle-cta);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    font-family: inherit;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 3px 14px rgba(244, 63, 94, 0.25);
+}
+
+.fuddle-buy-confirm-btn:hover {
+    box-shadow: 0 5px 22px rgba(244, 63, 94, 0.35);
+    transform: translateY(-1px);
+}
+
+.fuddle-buy-confirm-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(244, 63, 94, 0.15);
+}
+
+.fuddle-buy-confirm-btn svg {
+    flex-shrink: 0;
+}
+
+/* === Leaderboard === */
+
+.fuddle-leaderboard {
+    margin-top: 16px;
+}
+
+.fuddle-lb-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--fuddle-border);
+    transition: background 0.1s ease;
+}
+
+.fuddle-lb-row:hover {
+    background: rgba(191, 255, 0, 0.02);
+}
+
+.fuddle-lb-row:last-child {
+    border-bottom: none;
+}
+
+.fuddle-lb-rank {
+    width: 32px;
+    text-align: center;
+    font-family: var(--fuddle-font-game);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.fuddle-lb-rank.top {
+    font-size: 18px;
+}
+
+.fuddle-lb-player {
+    flex: 1;
+    font-family: var(--fuddle-font-game);
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.fuddle-lb-score {
+    font-family: var(--fuddle-font-game);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--fuddle-accent);
+}
+
+.fuddle-lb-wins {
+    font-size: 12px;
+    color: var(--text-muted);
+    min-width: 56px;
+    text-align: right;
+    font-weight: 600;
+}
+
+/* === Leaderboard — Current Player Highlight === */
+
+.fuddle-lb-row.fuddle-lb-me {
+    background: rgba(191, 255, 0, 0.04);
+    border-left: 3px solid var(--fuddle-accent);
+    padding-left: 11px;
+}
+
+.fuddle-lb-row.fuddle-lb-me .fuddle-lb-player {
+    color: var(--fuddle-accent);
+    font-weight: 700;
+}
+
+.fuddle-lb-you {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--fuddle-accent);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* === Admin CLI Warning === */
+
+.fuddle-admin-cli-warning {
+    margin-bottom: 24px;
+    padding: 16px 18px;
+    background: rgba(245, 158, 11, 0.04);
+    border: 1px solid rgba(245, 158, 11, 0.15);
+    border-left: 3px solid var(--fuddle-present);
+    border-radius: 4px 10px 10px 4px;
+    animation: fuddleFadeUp 0.35s ease both;
+}
+
+.fuddle-cli-warning-title {
+    font-family: var(--fuddle-font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--fuddle-present);
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-admin-cli-warning p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 10px;
+}
+
+.fuddle-admin-cli-warning details {
+    margin-top: 8px;
+}
+
+.fuddle-admin-cli-warning summary {
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fuddle-cyan);
+    letter-spacing: 0.3px;
+}
+
+.fuddle-admin-cli-warning summary:hover {
+    color: #fff;
+}
+
+.fuddle-admin-cli-warning pre {
+    margin-top: 10px;
+    padding: 14px;
+    background: #0C0A09;
+    border: 1px solid var(--fuddle-border);
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.fuddle-admin-cli-warning code {
+    font-family: var(--fuddle-font-game);
+    color: var(--text-secondary);
+}
+
+/* === How To Play === */
+
+.fuddle-htp-section {
+    text-align: left;
+    margin-bottom: 18px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--fuddle-border);
+}
+
+.fuddle-htp-section:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.fuddle-htp-section h4 {
+    font-family: var(--fuddle-font-display);
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 8px;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-htp-section p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0 0 4px;
+}
+
+.fuddle-htp-examples {
+    display: flex;
+    gap: 7px;
+    margin: 12px 0;
+}
+
+.fuddle-htp-tile {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-family: var(--fuddle-font-game);
+    font-weight: 700;
+    font-size: 20px;
+    color: #fff;
+}
+
+/* === Admin Panel === */
+
+.fuddle-admin-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+}
+
+.fuddle-admin-stat {
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Left accent bar instead of top */
+.fuddle-admin-stat::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--fuddle-accent);
+}
+
+.fuddle-admin-stat:nth-child(1)::before { background: var(--fuddle-accent); }
+.fuddle-admin-stat:nth-child(2)::before { background: var(--fuddle-correct); }
+.fuddle-admin-stat:nth-child(3)::before { background: var(--fuddle-cyan); }
+.fuddle-admin-stat:nth-child(4)::before { background: var(--fuddle-present); }
+
+.fuddle-admin-stat .label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+}
+
+.fuddle-admin-stat .value {
+    font-family: var(--fuddle-font-game);
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.fuddle-admin-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.fuddle-admin-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fuddle-admin-field label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 700;
+}
+
+/* Input styling */
+.fuddle-admin-input,
+#fuddle-root input[type="text"],
+#fuddle-root input[type="number"],
+#fuddle-root select {
+    padding: 11px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--fuddle-border);
+    background: #0C0A09;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: var(--fuddle-font-game);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    outline: none;
+}
+
+#fuddle-root input:focus,
+#fuddle-root select:focus {
+    border-color: var(--fuddle-accent);
+    box-shadow: 0 0 0 2px rgba(191, 255, 0, 0.08);
+}
+
+/* === Loading State === */
+
+.fuddle-loading {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-muted);
+    font-size: 14px;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-loading::after {
+    content: '';
+    display: block;
+    width: 28px;
+    height: 28px;
+    margin: 16px auto 0;
+    border: 2px solid rgba(191, 255, 0, 0.1);
+    border-top-color: var(--fuddle-accent);
+    border-radius: 50%;
+    animation: fuddleSpinLoader 0.7s linear infinite;
+}
+
+@keyframes fuddleSpinLoader {
+    to { transform: rotate(360deg); }
+}
+
+/* === Utility Buttons (scoped to Fuddle) === */
+
+#fuddle-root .btn-accent {
+    background: var(--fuddle-cta);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 8px;
+    font-weight: 700;
+    font-family: inherit;
+    letter-spacing: 0.5px;
+    transition: all 0.15s ease;
+    box-shadow: 0 3px 14px rgba(244, 63, 94, 0.2);
+}
+
+#fuddle-root .btn-accent:hover {
+    box-shadow: 0 5px 22px rgba(244, 63, 94, 0.3);
+    transform: translateY(-1px);
+}
+
+#fuddle-root .btn-accent:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(244, 63, 94, 0.15);
+}
+
+#fuddle-root .btn-outline {
+    background: transparent;
+    border: 1px solid var(--fuddle-border);
+    color: var(--text-primary);
+    cursor: pointer;
+    border-radius: 8px;
+    font-weight: 600;
+    font-family: inherit;
+    letter-spacing: 0.3px;
+    transition: all 0.15s ease;
+}
+
+#fuddle-root .btn-outline:hover {
+    border-color: var(--fuddle-accent);
+    color: var(--fuddle-accent);
+    background: var(--fuddle-accent-dim);
+}
+
+/* === Game Cards (legacy, kept for compat) === */
+
+.fuddle-games-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+    gap: 12px;
+}
+
+.fuddle-game-card {
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 12px;
+    padding: 18px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.fuddle-game-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--fuddle-accent), var(--fuddle-correct));
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.fuddle-game-card:hover {
+    border-color: var(--fuddle-border-hover);
+    transform: translateY(-2px);
+}
+
+.fuddle-game-card:hover::before {
+    opacity: 1;
+}
+
+.fuddle-game-card-type {
+    font-family: var(--fuddle-font-game);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--fuddle-accent);
+    margin-bottom: 6px;
+}
+
+.fuddle-game-card-diff {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.fuddle-game-card-prize {
+    font-family: var(--fuddle-font-game);
+    font-size: 13px;
+    color: var(--fuddle-correct);
+    font-weight: 700;
+    margin: 10px 0 4px;
+}
+
+.fuddle-game-card-players {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.fuddle-game-card .btn {
+    margin-top: 14px;
+    width: 100%;
+    padding: 9px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* === Create Game Buttons === */
+
+.fuddle-create-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.fuddle-create-btn {
+    width: 100%;
+    padding: 16px 12px;
+    background: var(--fuddle-card-solid);
+    border: 1px dashed rgba(191, 255, 0, 0.12);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    line-height: 1.4;
+}
+
+.fuddle-create-btn:hover {
+    border-color: var(--fuddle-accent);
+    border-style: solid;
+    color: var(--fuddle-accent);
+    background: var(--fuddle-accent-dim);
+}
+
+/* === Difficulty Picker === */
+
+.fuddle-diff-picker {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.fuddle-diff-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 20px 12px;
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.fuddle-diff-btn:hover {
+    border-color: var(--fuddle-accent);
+    background: rgba(191, 255, 0, 0.04);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.fuddle-diff-btn:active {
+    transform: translateY(0);
+}
+
+.fuddle-diff-btn .diff-num {
+    font-family: var(--fuddle-font-display);
+    font-size: 32px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+}
+
+.fuddle-diff-btn .diff-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-diff-btn .diff-mult {
+    font-family: var(--fuddle-font-game);
+    font-size: 10px;
+    color: var(--fuddle-accent);
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    margin-top: 4px;
+}
+
+/* === Transaction Table (matches Airdrop pattern) === */
+
+.fuddle-tx-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-family: var(--fuddle-font-game);
+}
+
+.fuddle-tx-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--fuddle-border);
+}
+
+.fuddle-tx-row:last-child {
+    border-bottom: none;
+}
+
+/* Status icon — 32px square with colored bg */
+.fuddle-tx-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fuddle-tx-row.tx-success .fuddle-tx-icon {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--fuddle-correct);
+}
+
+.fuddle-tx-row.tx-failed .fuddle-tx-icon {
+    background: rgba(239, 68, 68, 0.12);
+    color: #EF4444;
+}
+
+.fuddle-tx-row.tx-pending .fuddle-tx-icon {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--fuddle-present);
+}
+
+.fuddle-tx-row.tx-cancelled .fuddle-tx-icon {
+    background: rgba(168, 162, 158, 0.10);
+    color: var(--text-muted);
+}
+
+/* Info column — label + meta */
+.fuddle-tx-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.fuddle-tx-label {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fuddle-tx-meta {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-top: 2px;
+    font-family: var(--fuddle-font-game);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 4px;
+    align-items: center;
+}
+
+/* Right column — badge + fee + txid */
+.fuddle-tx-right {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+}
+
+.fuddle-tx-badge {
+    font-family: var(--fuddle-font-game);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: capitalize;
+}
+
+.fuddle-tx-badge.tx-success {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--fuddle-correct);
+}
+
+.fuddle-tx-badge.tx-failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: #EF4444;
+}
+
+.fuddle-tx-badge.tx-pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--fuddle-present);
+    animation: fuddlePulseText 2s infinite;
+}
+
+.fuddle-tx-badge.tx-cancelled {
+    background: rgba(168, 162, 158, 0.12);
+    color: var(--text-muted);
+}
+
+.fuddle-tx-fee {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--fuddle-font-game);
+}
+
+.fuddle-tx-id {
+    font-family: var(--fuddle-font-game);
+    font-size: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    letter-spacing: 0.3px;
+}
+
+.fuddle-tx-id:hover {
+    color: var(--fuddle-accent);
+}
+
+/* Amount chips inside meta row */
+.fuddle-tx-amount {
+    font-family: var(--fuddle-font-game);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.fuddle-tx-amount.out {
+    color: #EF4444;
+}
+
+.fuddle-tx-amount.in {
+    color: var(--fuddle-correct);
+}
+
+/* === How to Play — Enhancements === */
+
+.fuddle-htp-modal {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(191, 255, 0, 0.15) transparent;
+}
+
+.fuddle-htp-modal::-webkit-scrollbar {
+    width: 4px;
+}
+
+.fuddle-htp-modal::-webkit-scrollbar-thumb {
+    background: rgba(191, 255, 0, 0.15);
+    border-radius: 2px;
+}
+
+.fuddle-htp-tiers {
+    display: flex;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.fuddle-htp-tier {
+    font-family: var(--fuddle-font-display);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    padding: 5px 14px;
+    border-radius: 6px;
+}
+
+.fuddle-htp-tier.tier-beam {
+    color: var(--fuddle-tier-beam);
+    background: rgba(37, 194, 160, 0.08);
+    border: 1px solid rgba(37, 194, 160, 0.15);
+}
+
+.fuddle-htp-tier.tier-fomo {
+    color: var(--fuddle-tier-fomo);
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.15);
+}
+
+.fuddle-htp-tier.tier-beamx {
+    color: var(--fuddle-tier-beamx);
+    background: rgba(167, 139, 250, 0.08);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+}
+
+.fuddle-htp-formula {
+    font-family: var(--fuddle-font-game);
+    font-size: 13px;
+    color: var(--fuddle-accent);
+    text-align: center;
+    padding: 12px 16px;
+    background: rgba(191, 255, 0, 0.04);
+    border: 1px solid rgba(191, 255, 0, 0.08);
+    border-radius: 8px;
+    margin: 10px 0;
+    letter-spacing: 0.3px;
+}
+
+.fuddle-htp-table {
+    margin: 10px 0;
+    border: 1px solid var(--fuddle-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.fuddle-htp-table-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--fuddle-border);
+}
+
+.fuddle-htp-table-row:last-child {
+    border-bottom: none;
+}
+
+.fuddle-htp-table-row.head {
+    background: rgba(191, 255, 0, 0.04);
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-htp-table-row span:nth-child(2),
+.fuddle-htp-table-row span:nth-child(3) {
+    text-align: center;
+}
+
+/* === Animations === */
+
+@keyframes fuddleFadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fuddleFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fuddleModalIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes fuddlePulseText {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+/* === Responsive === */
+
+@media (max-width: 520px) {
+    #fuddle-root {
+        padding: 0 14px 28px;
+    }
+
+    .fuddle-title {
+        font-size: 20px;
+        letter-spacing: 3px;
+    }
+
+    .fuddle-tile {
+        width: 50px;
+        height: 50px;
+        font-size: 22px;
+        border-width: 2px;
+        border-radius: 6px;
+    }
+
+    .fuddle-row {
+        gap: 6px;
+    }
+
+    .fuddle-key {
+        min-width: 32px;
+        height: 46px;
+        font-size: 13px;
+        border-radius: 5px;
+        box-shadow: 0 3px 0 #0C0A09, 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .fuddle-key.wide {
+        min-width: 50px;
+    }
+
+    .fuddle-keyboard {
+        padding: 12px 10px;
+        border-radius: 10px;
+    }
+
+    .fuddle-stats-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .fuddle-create-row {
+        grid-template-columns: 1fr;
+    }
+
+    .fuddle-games-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .fuddle-admin-form {
+        grid-template-columns: 1fr;
+    }
+
+    .fuddle-tournaments-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .fuddle-tournament-card {
+        padding: 16px 14px 14px;
+    }
+
+    .fuddle-tournament-prize .prize-amount {
+        font-size: 20px;
+    }
+
+    .fuddle-cid-display {
+        font-size: 10px;
+    }
+
+    .appstore-featured-content {
+        flex-direction: column;
+        text-align: center;
+        padding: 28px 20px;
+    }
+
+    .appstore-featured-info h2 {
+        font-size: 24px;
+    }
+
+    .fuddle-result-modal {
+        padding: 28px 20px;
+    }
+
+    .fuddle-lootbox-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Active games list */
+.fuddle-games-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fuddle-active-game {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 10px;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.fuddle-active-game:hover {
+    border-color: var(--fuddle-accent);
+    background: rgba(191, 255, 0, 0.04);
+}
+
+.fuddle-active-game.tier-beam {
+    border-left: 3px solid var(--fuddle-tier-beam);
+}
+
+.fuddle-active-game.tier-fomo {
+    border-left: 3px solid var(--fuddle-tier-fomo);
+}
+
+.fuddle-active-game.tier-beamx {
+    border-left: 3px solid var(--fuddle-tier-beamx);
+}

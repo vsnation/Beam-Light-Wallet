@@ -1,6 +1,23 @@
 /* BEAM Wallet - Base Styles */
 /* Resets, typography, and background effects */
 
+/* Local fonts - no external CDN requests (privacy) */
+@font-face {
+    font-family: 'Outfit';
+    src: url('../fonts/Outfit-latin.woff2') format('woff2');
+    font-weight: 300 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../fonts/JetBrainsMono-latin.woff2') format('woff2');
+    font-weight: 400 500;
+    font-style: normal;
+    font-display: swap;
+}
+
 *, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
@@ -46,14 +63,14 @@ body {
     top: -200px;
     right: -100px;
     background: radial-gradient(circle, var(--beam-cyan) 0%, transparent 70%);
-    animation: float 20s ease-in-out infinite;
+    /* Animation disabled to reduce CPU usage */
 }
 
 .bg-gradient-2 {
     bottom: -300px;
     left: -200px;
     background: radial-gradient(circle, var(--beam-pink) 0%, transparent 70%);
-    animation: float 25s ease-in-out infinite reverse;
+    /* Animation disabled to reduce CPU usage */
     opacity: 0.2;
 }
 
