@@ -35,6 +35,10 @@ export const DEFAULT_FEE = 100000;  // 0.001 BEAM
 // DEX Contract ID (AMM)
 export const DEX_CID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
 
+// Airdrop Contract ID (Voucher-based token distribution)
+// Set after deployment
+export const AIRDROP_CID = '';
+
 // Pool types (affects fees)
 export const POOL_KINDS = {
     0: { name: 'Volatile', fee: '0.3%' },

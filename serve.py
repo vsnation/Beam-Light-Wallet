@@ -57,6 +57,14 @@ BLACKHOLE_CONTRACT_ID = "5ab408982b148210e88f180114f10222a2235eafeede0a3a224fda0
 # Features: SetZero fix for cancel_order, confirm_payment & claim_trade require rating (1-5)
 P2P_ESCROW_CONTRACT_ID = "2145205e91c3c0a68b0f439b8afd7a0b4729fb232768dfdf5ab421da864d76f7"
 
+# Airdrop Contract - Voucher-based token distribution
+# Set after deployment (placeholder until deployed)
+AIRDROP_CONTRACT_ID = "8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c349b5b18e"
+
+# Fuddle Contract - On-chain Wordle game
+# Set after deployment (placeholder until deployed)
+FUDDLE_CONTRACT_ID = "8605eaf746a798ccb45000da28e270a408cad6ce012f49b06eb305eee067a40f"
+
 # Load DEX shader bytes for contract calls
 DEX_SHADER = None
 try:
@@ -100,6 +108,28 @@ try:
         print(f"Loaded P2P Escrow shader: {len(P2P_ESCROW_SHADER)} bytes")
 except Exception as e:
     print(f"Warning: Could not load P2P Escrow shader: {e}")
+
+# Load Airdrop shader bytes for voucher airdrop contract calls
+AIRDROP_SHADER = None
+try:
+    shader_path = BASE_DIR / "shaders" / "airdrop_app.wasm"
+    if shader_path.exists():
+        with open(shader_path, "rb") as f:
+            AIRDROP_SHADER = list(f.read())
+        print(f"Loaded Airdrop shader: {len(AIRDROP_SHADER)} bytes")
+except Exception as e:
+    print(f"Warning: Could not load Airdrop shader: {e}")
+
+# Load Fuddle shader bytes for on-chain Wordle game
+FUDDLE_SHADER = None
+try:
+    shader_path = BASE_DIR / "shaders" / "fuddle_app.wasm"
+    if shader_path.exists():
+        with open(shader_path, "rb") as f:
+            FUDDLE_SHADER = list(f.read())
+        print(f"Loaded Fuddle shader: {len(FUDDLE_SHADER)} bytes")
+except Exception as e:
+    print(f"Warning: Could not load Fuddle shader: {e}")
 
 # Track state
 wallet_api_process = None
@@ -234,12 +264,12 @@ def stop_wallet_api():
     pid = get_wallet_api_pid()
     if pid:
         try:
-            os.kill(pid, signal.SIGTERM)
-            time.sleep(1)
-            if get_wallet_api_pid():
-                os.kill(pid, signal.SIGKILL)
-        except:
+            os.kill(pid, signal.SIGKILL)
+            time.sleep(0.2)
+        except ProcessLookupError:
             pass
+        except Exception as e:
+            print(f"Error killing wallet-api: {e}")
 
     wallet_api_process = None
     active_wallet = None
@@ -300,7 +330,8 @@ def get_node_sync_status():
                 match = re.search(r'Updating node:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
                 if match:
                     progress = int(match.group(1))
-                    # These are block counts, not heights
+                    current_height = int(match.group(2))
+                    target_height = int(match.group(3))
                     if progress == 100:
                         synced = True
                     break
@@ -874,6 +905,10 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.handle_p2p_get_reputation()
         elif self.path.startswith("/api/p2p/feedbacks"):
             self.handle_p2p_get_feedbacks()
+        elif self.path in ('/favicon.png', '/manifest.json', '/icon-192.png', '/icon-512.png'):
+            # Serve PWA assets from src/ directory
+            self.path = "/src" + self.path
+            super().do_GET()
         elif self.path.startswith("/css/") or self.path.startswith("/js/"):
             # Redirect CSS/JS requests to src/ directory
             self.path = "/src" + self.path
@@ -888,7 +923,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             # Serve P2P module files
             self.path = "/src" + self.path
             super().do_GET()
-        elif self.path.startswith("/explorer") or self.path in ["/", "/dashboard", "/assets", "/transactions", "/addresses", "/dex", "/p2p", "/settings", "/donate"]:
+        elif self.path.startswith("/explorer") or self.path in ["/", "/dashboard", "/assets", "/transactions", "/addresses", "/dex", "/p2p", "/airdrop", "/appstore", "/fuddle", "/settings", "/donate"]:
             # Handle all frontend routes - serve index.html with route info
             self.serve_with_route()
         elif self.path == "/index.html":
@@ -928,7 +963,10 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 "addresses": "addresses",
                 "dex": "dex",
                 "p2p": "p2p",
+                "airdrop": "airdrop",
                 "explorer": "explorer",
+                "appstore": "appstore",
+                "fuddle": "fuddle",
                 "settings": "settings",
                 "donate": "donate"
             }
@@ -985,6 +1023,8 @@ window.APP_ROUTE = {json.dumps(app_route)};
             self.handle_node_stop()
         elif self.path == "/api/node/switch":
             self.handle_node_switch()
+        elif self.path == "/api/cleanup":
+            self.handle_cleanup()
         elif self.path == "/api/shutdown":
             self.handle_shutdown()
         elif self.path == "/api/update":
@@ -1059,6 +1099,12 @@ window.APP_ROUTE = {json.dumps(app_route)};
     def handle_heartbeat(self):
         """Handle heartbeat from browser - kept for compatibility"""
         self.send_json({"status": "ok", "timestamp": time.time()})
+
+    def handle_cleanup(self):
+        """Kill stale wallet-api and beam-node for fresh start"""
+        stop_wallet_api()
+        stop_beam_node()
+        self.send_json({"success": True})
 
     def handle_shutdown(self):
         """Handle shutdown request from browser (on page close)"""
@@ -1396,8 +1442,14 @@ window.APP_ROUTE = {json.dumps(app_route)};
                         # Inject P2P Escrow shader for P2P marketplace
                         elif P2P_ESCROW_SHADER and P2P_ESCROW_CONTRACT_ID in args:
                             data["params"]["contract"] = P2P_ESCROW_SHADER
-                            # NOTE: fee parameter is ignored by wallet-api (known issue)
-                            # See /Beam/ISSUES_AND_SOLUTIONS.md for details
+                            body = json.dumps(data).encode()
+                        # Inject Airdrop shader for voucher airdrops
+                        elif AIRDROP_SHADER and AIRDROP_CONTRACT_ID and AIRDROP_CONTRACT_ID in args:
+                            data["params"]["contract"] = AIRDROP_SHADER
+                            body = json.dumps(data).encode()
+                        # Inject Fuddle shader for on-chain Wordle game
+                        elif FUDDLE_SHADER and FUDDLE_CONTRACT_ID and FUDDLE_CONTRACT_ID in args:
+                            data["params"]["contract"] = FUDDLE_SHADER
                             body = json.dumps(data).encode()
                 except json.JSONDecodeError:
                     pass

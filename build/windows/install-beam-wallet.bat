@@ -138,6 +138,7 @@ if not exist "serve.py" (
 echo.
 echo Creating launcher scripts...
 
+:: Create Start-Wallet.bat (fallback for command-line users)
 (
 echo @echo off
 echo cd /d "%%~dp0"
@@ -148,6 +149,31 @@ echo echo Press Ctrl+C to stop the wallet
 echo echo.
 echo python serve.py %PORT%
 ) > "%INSTALL_DIR%\Start-Wallet.bat"
+
+:: Create hidden launcher VBScript (no CMD window)
+(
+echo Set WshShell = CreateObject^("WScript.Shell"^)
+echo Set fso = CreateObject^("Scripting.FileSystemObject"^)
+echo installDir = fso.GetParentFolderName^(WScript.ScriptFullName^)
+echo.
+echo ' Check if already running - smart relaunch
+echo Set http = CreateObject^("MSXML2.XMLHTTP"^)
+echo On Error Resume Next
+echo http.Open "GET", "http://127.0.0.1:%PORT%/api/status", False
+echo http.Send
+echo If Err.Number = 0 And http.Status = 200 Then
+echo     WshShell.Run "cmd /c start http://127.0.0.1:%PORT%", 0, False
+echo     WScript.Quit
+echo End If
+echo On Error GoTo 0
+echo.
+echo ' Start server hidden
+echo WshShell.CurrentDirectory = installDir
+echo WshShell.Run "cmd /c cd /d """ ^& installDir ^& """ ^&^& python serve.py %PORT%", 0, False
+echo WScript.Sleep 3000
+echo ' Open browser
+echo WshShell.Run "cmd /c start http://127.0.0.1:%PORT%", 0, False
+) > "%INSTALL_DIR%\Start-Wallet.vbs"
 
 :: Create stop script
 (
@@ -160,9 +186,9 @@ echo echo Done.
 echo pause
 ) > "%INSTALL_DIR%\Stop-Wallet.bat"
 
-:: Create desktop shortcut
+:: Create desktop shortcut pointing to VBScript (hidden launch)
 echo Creating desktop shortcut...
-powershell -Command "& {$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\BEAM Light Wallet.lnk'); $Shortcut.TargetPath = '%INSTALL_DIR%\Start-Wallet.bat'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'BEAM Light Wallet'; $Shortcut.Save()}"
+powershell -Command "& {$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\BEAM Light Wallet.lnk'); $Shortcut.TargetPath = 'wscript.exe'; $Shortcut.Arguments = '\"\"\"' + '%INSTALL_DIR%\Start-Wallet.vbs' + '\"\"\"'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'BEAM Light Wallet'; $Shortcut.Save()}"
 
 echo.
 echo ======================================================
@@ -183,10 +209,11 @@ set /p START_NOW="Start the wallet now? (Y/N): "
 if /i "%START_NOW%"=="Y" (
     echo.
     echo Starting wallet...
-    start "" "http://127.0.0.1:%PORT%"
-    timeout /t 3 /nobreak >nul
     cd /d "%INSTALL_DIR%"
-    python serve.py %PORT%
+    wscript.exe "Start-Wallet.vbs"
+    echo BEAM Light Wallet is starting in the background.
+    echo Your browser will open shortly.
+    timeout /t 3 /nobreak >nul
 ) else (
     echo.
     echo You can start the wallet later using the desktop shortcut.

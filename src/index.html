@@ -3,21 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BEAM Wallet</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-
-    <!-- Stylesheets -->
+    <title>BEAM Light Wallet</title>
+    <link rel="icon" type="image/png" sizes="256x256" href="/icon-256.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#25c2a0">
+    <meta name="description" content="BEAM Light Wallet - Decentralized Privacy Wallet">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- Stylesheets (fonts loaded locally via @font-face in base.css) -->
     <link rel="stylesheet" href="/css/variables.css">
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/css/welcome.css">
+    <link rel="stylesheet" href="/css/fuddle.css">
 
     <!-- External Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <!-- DEX Shader (loads window.DEX_SHADER for contract calls) -->
     <script src="/js/dex-shader.js"></script>
+    <!-- Airdrop Shader (loads window.AIRDROP_SHADER for airdrop contract calls) -->
+    <script src="/js/airdrop-shader.js"></script>
 </head>
 <body>
     <!-- Background Effects -->
@@ -81,10 +87,27 @@
                         <path d="M18 3v12a9 9 0 01-9-9H3"/>
                     </svg>
                 </div>
+                <div class="nav-item" data-page="airdrop" data-tooltip="Airdrop">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 12v10H4V12"/>
+                        <path d="M2 7h20v5H2z"/>
+                        <path d="M12 22V7"/>
+                        <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/>
+                        <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+                    </svg>
+                </div>
                 <div class="nav-item" data-page="explorer" data-tooltip="Explorer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"/>
                         <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                </div>
+                <div class="nav-item" data-page="appstore" data-tooltip="App Store">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1.5"/>
                     </svg>
                 </div>
                 <div class="nav-item" data-page="donate" data-tooltip="Support Development">
@@ -121,6 +144,10 @@
                     </div>
                 </div>
                 <div class="header-right">
+                    <a href="https://buybeam.my" target="_blank" rel="noopener" class="buy-beam-btn">
+                        Buy $BEAM
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+                    </a>
                     <button class="header-btn" onclick="openReceiveModal()" title="Receive">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 5v14M19 12l-7 7-7-7"/>
@@ -253,6 +280,7 @@
                         </button>
 
                         <div class="utxo-panel" id="utxo-panel">
+                            <div id="utxo-recommendations" style="display:none;"></div>
                             <table class="utxo-table">
                                 <thead>
                                     <tr>
@@ -260,6 +288,7 @@
                                         <th>Maturity</th>
                                         <th>Type</th>
                                         <th>Status</th>
+                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody id="utxo-tbody">
@@ -602,6 +631,221 @@
                 <!-- P2P Marketplace Page -->
                 <div class="page" id="page-p2p">
                     <iframe id="p2p-iframe" src="/p2p/p2p.html" style="width: 100%; height: calc(100vh - 80px); border: none; background: transparent;"></iframe>
+                </div>
+
+                <!-- Airdrop Page -->
+                <div class="page" id="page-airdrop">
+                    <div class="airdrop-container">
+                        <!-- Airdrop Tabs -->
+                        <div class="airdrop-tabs">
+                            <button class="airdrop-tab active" data-airdrop-tab="claim" onclick="showAirdropTab('claim')">Claim Voucher</button>
+                            <button class="airdrop-tab" data-airdrop-tab="manage" onclick="showAirdropTab('manage')">Create & Manage</button>
+                        </div>
+
+                        <!-- Contract Address -->
+                        <div class="airdrop-contract-bar" id="airdrop-contract-bar">
+                            <span class="contract-label">Contract:</span>
+                            <span class="contract-address" id="airdrop-contract-address" title="Click to copy"></span>
+                            <button class="btn-copy-contract" id="btn-copy-contract" onclick="copyAirdropContract()" title="Copy contract ID">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Airdrop Stats Bar -->
+                        <div class="airdrop-stats-bar" id="airdrop-stats-bar">
+                            <div class="airdrop-stat-pill">
+                                <span class="airdrop-stat-label">Batches</span>
+                                <span class="airdrop-stat-value" id="airdrop-stat-batches">--</span>
+                            </div>
+                            <div class="airdrop-stat-pill">
+                                <span class="airdrop-stat-label">Vouchers</span>
+                                <span class="airdrop-stat-value" id="airdrop-stat-vouchers">--</span>
+                            </div>
+                            <div class="airdrop-stat-pill">
+                                <span class="airdrop-stat-label">Claimed</span>
+                                <span class="airdrop-stat-value" id="airdrop-stat-claimed">--</span>
+                            </div>
+                            <div class="airdrop-stat-pill">
+                                <span class="airdrop-stat-label">Available</span>
+                                <span class="airdrop-stat-value" id="airdrop-stat-available">--</span>
+                            </div>
+                        </div>
+
+                        <!-- Claim Tab -->
+                        <div class="airdrop-tab-content active" id="airdrop-claim">
+                            <div class="airdrop-claim-section">
+                                <div class="claim-hero">
+                                    <svg class="claim-hero-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="44" height="44">
+                                        <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/>
+                                        <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/>
+                                        <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+                                    </svg>
+                                    <h3>Redeem Airdrop Voucher</h3>
+                                    <p>Enter a voucher code to claim your tokens. Codes are 16-character alphanumeric strings in XXXX-XXXX-XXXX-XXXX format.</p>
+                                </div>
+                                <div class="claim-input-group">
+                                    <label>Voucher Code</label>
+                                    <input type="text" id="voucher-code-input" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+                                    <div class="claim-status" id="claim-status"></div>
+                                </div>
+                                <div class="voucher-result-card" id="voucher-result" style="display:none;">
+                                    <div class="voucher-result-header">
+                                        <div class="voucher-asset-info">
+                                            <div class="voucher-asset-icon" id="voucher-asset-icon"></div>
+                                            <div class="voucher-asset-details">
+                                                <span class="voucher-asset-name" id="voucher-asset-name"></span>
+                                                <span class="voucher-asset-id" id="voucher-asset-id"></span>
+                                            </div>
+                                        </div>
+                                        <div class="voucher-status-badge" id="voucher-status-badge"></div>
+                                    </div>
+                                    <div class="voucher-value" id="voucher-value"></div>
+                                    <button class="btn-claim" id="btn-claim-voucher" onclick="claimVoucher()" style="display:none;">Claim Tokens</button>
+                                </div>
+                            </div>
+
+                            <!-- Airdrop Transaction History -->
+                            <div class="airdrop-tx-section">
+                                <h3>Airdrop Transactions</h3>
+                                <div id="airdrop-tx-list" class="airdrop-tx-list">
+                                    <div class="airdrop-tx-empty">No airdrop transactions yet</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Manage Tab -->
+                        <div class="airdrop-tab-content" id="airdrop-manage">
+                            <!-- Create Batch Form -->
+                            <div class="airdrop-create-section">
+                                <h3>Create Voucher Batch</h3>
+                                <div class="create-form">
+                                    <div class="form-row">
+                                        <label>Asset</label>
+                                        <div class="airdrop-asset-selector" id="airdrop-asset-selector">
+                                            <div class="asset-selector-selected" id="asset-selector-selected" onclick="toggleAirdropAssetDropdown()">
+                                                <span class="asset-selector-preview" id="asset-selector-preview"></span>
+                                                <svg class="asset-selector-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="6 9 12 15 18 9"/></svg>
+                                            </div>
+                                            <div class="asset-selector-dropdown" id="asset-selector-dropdown"></div>
+                                            <input type="hidden" id="airdrop-asset-select" value="174">
+                                        </div>
+                                        <div class="asset-selector-help">
+                                            <span class="asset-help-icon" title="To add more assets: edit config/assets.json with asset ID, name, symbol, icon URL, and decimals. Then restart the server.">?</span>
+                                        </div>
+                                    </div>
+                                    <div class="airdrop-balance-row" id="airdrop-balance-row">
+                                        <span class="balance-label">Your balance:</span>
+                                        <span class="balance-value" id="airdrop-asset-balance">--</span>
+                                    </div>
+                                    <div class="form-row">
+                                        <label>Value per Voucher</label>
+                                        <input type="number" id="airdrop-value" placeholder="1.0" min="0.00000001" step="0.00000001">
+                                    </div>
+                                    <div class="form-row">
+                                        <label>Number of Vouchers</label>
+                                        <input type="number" id="airdrop-count" placeholder="10" min="1" max="100" value="10">
+                                    </div>
+                                    <div class="create-summary" id="create-summary">
+                                        <div class="cost-breakdown">
+                                            <span>Vouchers: <strong id="total-cost">0</strong> <span id="total-cost-symbol">FOMO</span></span>
+                                            <span class="cost-fee">+ 1% fee: <strong id="total-fee">0</strong> <span id="total-fee-symbol">FOMO</span></span>
+                                        </div>
+                                        <div class="cost-total-line">
+                                            Total: <strong id="total-with-fee">0</strong> <span id="total-with-fee-symbol">FOMO</span>
+                                        </div>
+                                    </div>
+                                    <button class="btn-create-batch" id="btn-create-batch" onclick="createAirdropBatch()">Create Batch</button>
+                                    <div class="create-progress" id="create-progress" style="display:none;">
+                                        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+                                        <span class="progress-text" id="progress-text">Creating...</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Generated Codes Display (shown after creating) -->
+                            <div class="airdrop-codes-section" id="airdrop-codes-section" style="display:none;">
+                                <h3>Generated Voucher Codes</h3>
+                                <div class="codes-warning">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" width="18" height="18" style="vertical-align:middle;margin-right:6px;">
+                                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                                    </svg>
+                                    Save these codes now! They are only stored in your browser's localStorage. Export or copy them before clearing browser data.
+                                </div>
+                                <div class="codes-actions">
+                                    <button class="btn-action-codes" onclick="copyAllCodes()">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                                        </svg>
+                                        Copy All Codes
+                                    </button>
+                                    <button class="btn-action-codes btn-export" onclick="exportCodesCSV()">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                            <polyline points="7 10 12 15 17 10"/>
+                                            <line x1="12" y1="15" x2="12" y2="3"/>
+                                        </svg>
+                                        Download CSV
+                                    </button>
+                                </div>
+                                <div class="codes-table-wrapper">
+                                    <table class="codes-table" id="codes-table">
+                                        <thead><tr><th>#</th><th>Code</th><th>Value</th><th>Status</th></tr></thead>
+                                        <tbody id="codes-table-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Saved Voucher Codes (persistent, loaded from localStorage) -->
+                            <div class="airdrop-saved-codes-section" id="airdrop-saved-codes-section">
+                                <div class="saved-codes-header">
+                                    <h3>My Voucher Codes</h3>
+                                    <button class="btn-small" onclick="refreshSavedCodesStatus()" id="btn-refresh-codes" title="Check on-chain status">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                                        Refresh
+                                    </button>
+                                </div>
+                                <div id="saved-codes-list" class="saved-codes-list">
+                                    <div class="airdrop-tx-empty">No saved codes. Create a batch to generate voucher codes.</div>
+                                </div>
+                            </div>
+
+                            <!-- My Batches (on-chain) -->
+                            <div class="airdrop-batches-section">
+                                <h3>My Batches (On-Chain)</h3>
+                                <div id="my-batches-list" class="batches-list">
+                                    <div class="empty-state">No batches yet</div>
+                                </div>
+                            </div>
+
+                            <!-- Admin Panel (visible only for contract owner) -->
+                            <div class="airdrop-admin-section" id="airdrop-admin-section" style="display:none;">
+                                <div class="admin-header">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" width="20" height="20">
+                                        <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                    </svg>
+                                    <h3>Admin Panel</h3>
+                                    <span class="admin-badge">Owner</span>
+                                </div>
+                                <div class="admin-fees-section">
+                                    <div class="admin-fees-header">
+                                        <h4>Collected Fees</h4>
+                                        <button class="btn-small" onclick="loadAirdropFees()" id="btn-refresh-fees" title="Refresh fee balances">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                                            Refresh
+                                        </button>
+                                    </div>
+                                    <div id="admin-fees-list" class="admin-fees-list">
+                                        <div class="airdrop-tx-empty">Loading fees...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Explorer Page -->
@@ -1050,6 +1294,21 @@
                             <div class="loading-state">Loading block...</div>
                         </div>
                     </section>
+                </div>
+
+                <!-- App Store Page -->
+                <div class="page" id="page-appstore">
+                    <section class="section">
+                        <div class="section-header">
+                            <div class="section-title">App Store</div>
+                        </div>
+                        <div id="appstore-grid" class="appstore-grid"></div>
+                    </section>
+                </div>
+
+                <!-- Fuddle Game Page -->
+                <div class="page" id="page-fuddle">
+                    <div id="fuddle-root"></div>
                 </div>
 
                 <!-- Donate Page -->
@@ -2201,6 +2460,71 @@
         </div>
     </div>
 
+    <!-- Split UTXOs Modal -->
+    <div class="modal-overlay" id="split-utxo-modal">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Split Coins</h2>
+                <button class="modal-close" onclick="closeModal('split-utxo-modal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div id="split-asset-info"></div>
+                <div id="split-current-utxos" style="margin-bottom:16px;"></div>
+                <div id="split-count-selector" style="margin-bottom:16px;"></div>
+                <div id="split-preview" style="margin-bottom:16px;"></div>
+                <div id="split-fee-info" style="background:var(--void-light);border-radius:8px;padding:12px;margin-bottom:16px;"></div>
+                <div class="split-info-box">
+                    Splitting creates multiple independent coins. Each coin can be spent separately, so you can send several transactions without waiting for confirmations (~60 sec each).
+                </div>
+                <button id="split-execute-btn" class="quick-btn quick-btn-primary" style="width:100%;padding:14px;font-size:15px;margin-top:16px;" onclick="executeSplit()">
+                    Split into 5 coins
+                </button>
+                <div id="split-progress" style="display:none;margin-top:16px;">
+                    <div class="split-progress-bar">
+                        <div class="split-progress-fill" id="split-progress-fill"></div>
+                    </div>
+                    <div class="split-progress-text" id="split-progress-text">Splitting...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Combine UTXOs Modal -->
+    <div class="modal-overlay" id="combine-utxo-modal">
+        <div class="modal" style="max-width: 480px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Combine Coins</h2>
+                <button class="modal-close" onclick="closeModal('combine-utxo-modal')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div id="combine-asset-info"></div>
+                <div id="combine-current-utxos" style="margin-bottom:16px;"></div>
+                <div id="combine-preview" style="margin-bottom:16px;"></div>
+                <div id="combine-fee-info" style="background:var(--void-light);border-radius:8px;padding:12px;margin-bottom:16px;"></div>
+                <div class="split-info-box">
+                    Combining merges all your small coins into one large coin. This cleans up dust and makes your full balance available in a single UTXO.
+                </div>
+                <button id="combine-execute-btn" class="quick-btn quick-btn-primary" style="width:100%;padding:14px;font-size:15px;margin-top:16px;" onclick="executeCombine()">
+                    Combine into 1 coin
+                </button>
+                <div id="combine-progress" style="display:none;margin-top:16px;">
+                    <div class="split-progress-bar">
+                        <div class="split-progress-fill" id="combine-progress-fill"></div>
+                    </div>
+                    <div class="split-progress-text" id="combine-progress-text">Combining...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- First-time Guide -->
     <div class="guide-overlay" id="guide-overlay">
         <div class="guide-card">
@@ -2228,6 +2552,7 @@
     <!-- wallet-app.js has different HTML structure, don't include it -->
     <!-- <script src="js/wallet-app.js"></script> -->
     <!-- JavaScript -->
+    <script src="/js/pages/fuddle.js"></script>
     <script src="/js/app.js"></script>
 
     <!-- Modal Container -->

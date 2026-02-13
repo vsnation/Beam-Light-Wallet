@@ -128,3 +128,58 @@ credentials/
 node-utxo-image.bin
 .wallet_config
 CLAUDE.md
+.owner_key
+
+# =============================================================================
+# PROJECT FILES NOT FOR RELEASE
+# =============================================================================
+# Fuddle word lists (large, not part of wallet)
+data/fuddle/
+
+# Contract source code (compiled WASMs in shaders/ are sufficient)
+contracts/
+
+# Marketing & tooling scripts
+scripts/
+
+# Test files
+tests/
+
+# Internal documentation
+ARCHITECTURE.md
+FUDDLE.md
+HOW_THE_E2E_CHAT_WORKS.md
+HOW_TO_DO_SHADERS_ON_BEAM.md
+IMPLEMENTATION_PLAN.md
+KNOWLEDGE.md
+P2P_FIXES_TRACKER.md
+P2P_IMPLEMENTATION.md
+P2P_IMPLEMENTATION_PLAN.md
+P2P_STATUS_REPORT.md
+P2P_TESTING_README.md
+P2P_TEST_CHECKLIST.md
+P2P_TEST_RESULTS.md
+PLAN.md
+X_MARKETING_PLAN.md
+
+# P2P data
+p2p_data/
+
+# Media files
+gifs/
+screenshots/
+
+# Duplicate install scripts in root
+macos_install.sh
+linux_install.sh
+windows_install.bat
+
+# Build output (DMG, app bundles, releases)
+build/macos/*.dmg
+build/macos/BEAM Light Wallet.app/
+build/macos/AppIcon.icns
+build/macos/AppIcon.svg.png
+build/releases/
+
+# Data directory (runtime)
+data/

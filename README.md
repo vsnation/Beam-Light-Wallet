@@ -489,19 +489,23 @@ DEX requires local node with shader support. Public nodes don't support DEX oper
 
 ## Version
 
-- **Wallet Version:** 1.0.3
+- **Wallet Version:** 1.0.5
 - **BEAM Binaries:** 7.5.13882
 
-### What's New in v1.0.3
+### What's New in v1.0.5
 
-- **Improved UI** - Larger, more visible dropdown icons with hover effects
-- **Better Error Messages** - Clear guidance when features require Local Node
-- **Auto-Switch to Local Node** - Automatically switches when node syncs for full DEX support
-- **Protected Settings** - Prevents duplicate clicks on node switch buttons
-- **Cleaner Password Errors** - User-friendly messages with recovery instructions
-- **Hidden Scrollbars** - Cleaner dashboard appearance
-- **Consistent Folder Naming** - Windows-compatible folder names across all platforms
-- **P2P Marketplace** - Alpha version (may have bugs)
+- **Airdrop System** - Create and share redeemable voucher codes for any token
+- **Fuddle Game** - On-chain Wordle with BEAM/FOMO/BEAMX tournament prizes
+- **Built-in Explorer** - Browse blocks, assets, contracts, DEX trades
+- **P2P Marketplace** - Escrow-protected fiat-to-crypto trading with trust scores
+- **Improved Dashboard** - Better balance breakdown and asset display
+- **New App Store Page** - Quick access to DEX, P2P, Airdrop, Explorer, Fuddle
+
+### Previous: v1.0.3
+
+- Improved UI, better error messages, auto-switch to local node
+- Protected settings, cleaner password errors, hidden scrollbars
+- Consistent folder naming across platforms
 
 ---
 

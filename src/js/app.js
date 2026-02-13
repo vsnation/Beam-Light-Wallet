@@ -5,7 +5,7 @@
 // ============================================
 // Version and Auto-Update
 // ============================================
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.5';
 const GITHUB_REPO = 'vsnation/Beam-Light-Wallet';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -480,12 +480,12 @@ function isPasswordError(error) {
 let walletData = {
     assets: [],
     utxos: [],
+    utxoAnalysis: { byAsset: {}, recommendations: [] },
     isConnected: false
 };
 
 // BEAM price in USD (fetched from CoinGecko via server)
 let beamPriceUsd = 0;
-let priceUpdateInterval = null;
 
 // Fetch BEAM price from server
 async function fetchBeamPrice() {
@@ -504,8 +504,7 @@ async function fetchBeamPrice() {
 // Start price updates (every 60 seconds)
 function startPriceUpdates() {
     fetchBeamPrice(); // Initial fetch
-    if (priceUpdateInterval) clearInterval(priceUpdateInterval);
-    priceUpdateInterval = setInterval(fetchBeamPrice, 60000);
+    startInterval('priceUpdate', fetchBeamPrice, 60000);
 }
 
 // Update all USD displays on the page
@@ -572,6 +571,19 @@ const MIN_LIQUIDITY_GROTH = MIN_LIQUIDITY_BEAM * 100000000; // 5000 BEAM in grot
 // API Configuration
 const API_URL = '/api/wallet';
 const GROTH = 100000000;
+
+// Centralized interval management
+const activeIntervals = {};
+function startInterval(name, fn, ms) {
+    if (activeIntervals[name]) clearInterval(activeIntervals[name]);
+    activeIntervals[name] = setInterval(fn, ms);
+}
+function stopInterval(name) {
+    if (activeIntervals[name]) { clearInterval(activeIntervals[name]); delete activeIntervals[name]; }
+}
+function stopAllIntervals() {
+    Object.keys(activeIntervals).forEach(stopInterval);
+}
 
 // Sanitize numeric input - convert commas to decimal points
 function sanitizeNumericInput(input) {
@@ -652,6 +664,13 @@ async function apiCall(method, params = {}) {
         if (method === 'invoke_contract' && params.args && params.args.includes(DEX_CID)) {
             if (typeof DEX_SHADER !== 'undefined' && !params.contract) {
                 params.contract = DEX_SHADER;
+            }
+        }
+
+        // Automatically add Airdrop shader for invoke_contract calls with Airdrop contract
+        if (method === 'invoke_contract' && params.args && typeof AIRDROP_CID !== 'undefined' && params.args.includes(AIRDROP_CID)) {
+            if (typeof AIRDROP_SHADER !== 'undefined' && !params.contract) {
+                params.contract = AIRDROP_SHADER;
             }
         }
 
@@ -774,7 +793,7 @@ async function loadWalletData() {
 
         // Try to get UTXOs
         try {
-            const utxos = await apiCall('get_utxo', { count: 100 });
+            const utxos = await apiCall('get_utxo', { count: 500 });
             walletData.utxos = (utxos || []).map(u => ({
                 asset: u.asset_id || 0,
                 amount: u.amount || 0,
@@ -782,9 +801,11 @@ async function loadWalletData() {
                 type: u.type === 0 ? 'Regular' : (u.type === 1 ? 'Change' : 'Coinbase'),
                 status: u.status === 1 ? 'available' : 'spent'
             }));
+            walletData.utxoAnalysis = analyzeUtxos(walletData.utxos);
         } catch (e) {
             console.log('UTXOs not available:', e);
             walletData.utxos = [];
+            walletData.utxoAnalysis = { byAsset: {}, recommendations: [] };
         }
 
         // Load asset metadata cache for getAssetInfo() to work correctly
@@ -805,12 +826,6 @@ async function loadWalletData() {
         } catch (e) {
             console.log('Assets list not available:', e);
         }
-
-        // Load DEX pools for rate calculations (needed for USD values)
-        loadDexPools().catch(e => console.log('DEX pools not available:', e));
-
-        // Start price updates for USD display
-        startPriceUpdates();
 
         return true;
     } catch (e) {
@@ -895,6 +910,10 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
 });
 
 function showPage(pageId, updateUrl = true) {
+    // Stop page-specific intervals when leaving a page
+    stopInterval('dexActivity');
+    stopInterval('explorerRefresh');
+
     // Update nav
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.querySelector(`[data-page="${pageId}"]`)?.classList.add('active');
@@ -918,7 +937,10 @@ function showPage(pageId, updateUrl = true) {
         addresses: 'Addresses',
         dex: 'DEX Trading',
         p2p: 'P2P Marketplace',
+        airdrop: 'Airdrop',
         explorer: 'Explorer',
+        appstore: 'App Store',
+        fuddle: 'Fuddle',
         donate: 'Support Development',
         settings: 'Settings'
     };
@@ -933,7 +955,10 @@ function showPage(pageId, updateUrl = true) {
             addresses: '/addresses',
             dex: '/dex',
             p2p: '/p2p',
+            airdrop: '/airdrop',
             explorer: '/explorer',
+            appstore: '/appstore',
+            fuddle: '/fuddle',
             donate: '/donate',
             settings: '/settings'
         };
@@ -947,6 +972,7 @@ function showPage(pageId, updateUrl = true) {
             renderAssetCards();
             renderBalancesTable();
             renderUtxos();
+            renderUtxoRecommendations();
         });
     } else if (pageId === 'assets') {
         loadAllAssets();
@@ -958,8 +984,15 @@ function showPage(pageId, updateUrl = true) {
         loadDexPools();
         initializeDexDefaults();
         loadDexActivity(); // Load recent activity feed
+        startInterval('dexActivity', loadDexActivity, 30000);
+    } else if (pageId === 'airdrop') {
+        initAirdropPage();
     } else if (pageId === 'explorer') {
         initExplorerPage();
+    } else if (pageId === 'appstore') {
+        renderAppStore();
+    } else if (pageId === 'fuddle') {
+        if (typeof initFuddle === 'function') initFuddle();
     } else if (pageId === 'settings') {
         loadSettings();
     }
@@ -992,6 +1025,8 @@ function parseUrlToPage(path) {
     if (path.startsWith('/transactions')) return 'transactions';
     if (path.startsWith('/addresses')) return 'addresses';
     if (path.startsWith('/dex')) return 'dex';
+    if (path.startsWith('/p2p')) return 'p2p';
+    if (path.startsWith('/airdrop')) return 'airdrop';
     if (path.startsWith('/settings')) return 'settings';
     if (path.startsWith('/donate')) return 'donate';
     return 'dashboard';
@@ -1096,6 +1131,13 @@ function renderAssetCards() {
         const usdValue = getAssetUsdValue(asset.id, totalBalance);
         const usdDisplay = usdValue > 0 ? formatUsd(usdValue) : '';
 
+        // UTXO health hint
+        const utxoRec = !isLpToken && walletData.utxoAnalysis?.recommendations?.find(r => r.assetId === asset.id);
+        const utxoHintHtml = utxoRec && asset.balance > 0 ? `
+            <div class="utxo-split-hint" onclick="event.stopPropagation(); openSplitModal(${asset.id})" title="${utxoRec.message}">
+                ${utxoRec.severity === 'critical' ? '\u26a0' : '\u24d8'} ${utxoRec.count} coin${utxoRec.count > 1 ? 's' : ''}
+            </div>` : '';
+
         return `
             <div class="asset-card asset-card-${config.class || ''}${isLpToken ? ' lp-token-card' : ''}" onclick="selectAsset(${asset.id})">
                 <div class="asset-card-header">
@@ -1111,6 +1153,7 @@ function renderAssetCards() {
                     ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}<span class="asset-balance-decimal">.${decimal.substring(0,4) || '0000'}</span>
                 </div>
                 ${usdDisplay ? `<div class="asset-usd-below">${usdDisplay}</div>` : ''}
+                ${utxoHintHtml}
                 <div class="asset-name">
                     ${displayName}
                     ${asset.locked > 0 ? `<span class="annotation" style="margin-left:8px;">+${formatAmount(asset.locked)} locked</span>` : ''}
@@ -1594,38 +1637,123 @@ async function executeQuickWithdrawLP() {
     btn.textContent = 'Withdraw Liquidity';
 }
 
-// Render UTXOs
+// Render UTXOs (grouped by asset with health indicators)
 function renderUtxos() {
     const tbody = document.getElementById('utxo-tbody');
 
     if (walletData.utxos.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">No UTXOs available</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">No coins available</td></tr>`;
+        updateUtxoToggleText();
         return;
     }
 
-    tbody.innerHTML = walletData.utxos.map(utxo => {
-        const info = getAssetInfo(utxo.asset);
-        const config = ASSET_CONFIG[utxo.asset] || { name: info.name, symbol: info.symbol, color: info.color };
-        const amount = formatAmount(utxo.amount);
-        const textColor = ['warning', 'success'].includes(config.class) ? '#000' : '#fff';
-        const displayIcon = config.icon || info.icon;
+    // Group UTXOs by asset (only available coins)
+    const groups = {};
+    walletData.utxos.filter(u => u.status === 'available').forEach(u => {
+        if (!groups[u.asset]) groups[u.asset] = [];
+        groups[u.asset].push(u);
+    });
 
-        return `
-            <tr>
-                <td>
-                    <div class="utxo-coin">
-                        <div class="utxo-coin-icon" style="${displayIcon ? '' : `background: ${config.color}; color: ${textColor}`}">
-                            ${displayIcon ? `<img src="${displayIcon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color}';this.parentNode.style.color='${textColor}';this.parentNode.textContent='${config.symbol.substring(0,2)}'">` : config.symbol.substring(0, 2)}
-                        </div>
-                        <span class="utxo-amount">${amount} ${config.symbol}</span>
+    // Sort groups: BEAM first, then by total balance descending
+    const sortedAssetIds = Object.keys(groups).map(Number).sort((a, b) => {
+        if (a === 0) return -1;
+        if (b === 0) return 1;
+        const totalA = groups[a].reduce((s, u) => s + u.amount, 0);
+        const totalB = groups[b].reduce((s, u) => s + u.amount, 0);
+        return totalB - totalA;
+    });
+
+    const analysis = walletData.utxoAnalysis;
+    let html = '';
+
+    for (const assetId of sortedAssetIds) {
+        const utxos = groups[assetId].sort((a, b) => b.amount - a.amount);
+        const info = getAssetInfo(assetId);
+        const config = ASSET_CONFIG[assetId] || { name: info.name, symbol: info.symbol, color: info.color };
+        const availableCount = utxos.filter(u => u.status === 'available').length;
+        const rec = analysis?.recommendations?.find(r => r.assetId === assetId);
+        const healthCls = rec ? rec.severity : 'ok';
+
+        // Group header row
+        html += `
+            <tr class="utxo-group-header">
+                <td colspan="4">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-weight:600;">${config.symbol || info.symbol}</span>
+                        <span class="utxo-health-badge ${healthCls}">${availableCount} coin${availableCount !== 1 ? 's' : ''}</span>
                     </div>
                 </td>
-                <td><span class="utxo-maturity">${(utxo.maturity || 0).toLocaleString()}</span></td>
-                <td><span class="utxo-type">${utxo.type || 'Regular'}</span></td>
-                <td><span class="utxo-status ${utxo.status || 'available'}">${utxo.status || 'available'}</span></td>
+                <td style="text-align:right;">
+                    ${availableCount > 1 ? `<button class="utxo-combine-action" onclick="openCombineModal(${assetId})">Combine</button>` : ''}
+                    ${rec ? `<button class="utxo-split-action" onclick="openSplitModal(${assetId})">Split</button>` : ''}
+                </td>
             </tr>
         `;
-    }).join('');
+
+        // Individual UTXO rows
+        utxos.forEach((utxo, idx) => {
+            const amount = formatAmount(utxo.amount);
+            const textColor = ['warning', 'success'].includes(config.class) ? '#000' : '#fff';
+            const displayIcon = config.icon || info.icon;
+            const isLargest = idx === 0 && utxos.length > 1;
+
+            html += `
+                <tr>
+                    <td>
+                        <div class="utxo-coin">
+                            <div class="utxo-coin-icon" style="${displayIcon ? '' : `background: ${config.color}; color: ${textColor}`}">
+                                ${displayIcon ? `<img src="${displayIcon}" style="width:100%;height:100%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color}';this.parentNode.style.color='${textColor}';this.parentNode.textContent='${(config.symbol || info.symbol).substring(0,2)}'">` : (config.symbol || info.symbol).substring(0, 2)}
+                            </div>
+                            <span class="utxo-amount">${amount} ${config.symbol || info.symbol}</span>
+                        </div>
+                    </td>
+                    <td><span class="utxo-maturity">${(utxo.maturity || 0).toLocaleString()}</span></td>
+                    <td><span class="utxo-type">${utxo.type || 'Regular'}</span></td>
+                    <td><span class="utxo-status ${utxo.status || 'available'}">${utxo.status || 'available'}</span></td>
+                    <td></td>
+                </tr>
+            `;
+        });
+    }
+
+    tbody.innerHTML = html;
+    updateUtxoToggleText();
+}
+
+// Update UTXO toggle button text with coin counts and health
+function updateUtxoToggleText() {
+    const toggle = document.getElementById('utxo-toggle');
+    if (!toggle) return;
+
+    const available = walletData.utxos.filter(u => u.status === 'available');
+    const analysis = walletData.utxoAnalysis;
+    const hasCritical = analysis?.recommendations?.some(r => r.severity === 'critical');
+    const hasWarning = analysis?.recommendations?.some(r => r.severity === 'warning');
+
+    // Build coin count summary
+    const groups = {};
+    available.forEach(u => {
+        const info = getAssetInfo(u.asset);
+        const sym = (ASSET_CONFIG[u.asset] || { symbol: info.symbol }).symbol || info.symbol;
+        groups[sym] = (groups[sym] || 0) + 1;
+    });
+    const summary = Object.entries(groups).map(([sym, cnt]) => `${cnt} ${sym}`).join(', ');
+
+    // Get the SVG and info-trigger from existing toggle
+    const svg = toggle.querySelector('svg');
+    const infoTrigger = toggle.querySelector('.info-trigger');
+
+    // Rebuild inner content preserving SVG and info
+    const svgHtml = svg ? svg.outerHTML : '';
+    const infoHtml = infoTrigger ? infoTrigger.outerHTML : '';
+
+    const healthBadge = hasCritical
+        ? '<span class="utxo-health-badge critical">Split recommended</span>'
+        : hasWarning
+            ? '<span class="utxo-health-badge warning">Split suggested</span>'
+            : '';
+
+    toggle.innerHTML = `${svgHtml} Show Coins${summary ? ` (${summary})` : ''} ${healthBadge} ${infoHtml}`;
 }
 
 // Toggle asset view
@@ -1637,6 +1765,526 @@ function toggleAssetView() {
 function toggleUtxo() {
     document.getElementById('utxo-toggle').classList.toggle('expanded');
     document.getElementById('utxo-panel').classList.toggle('expanded');
+}
+
+// ============================================
+// UTXO Analysis & Split Feature
+// ============================================
+
+function analyzeUtxos(utxos) {
+    const byAsset = {};
+    utxos.filter(u => u.status === 'available').forEach(u => {
+        if (!byAsset[u.asset]) byAsset[u.asset] = [];
+        byAsset[u.asset].push(u);
+    });
+
+    const recommendations = [];
+    for (const [assetId, assetUtxos] of Object.entries(byAsset)) {
+        const aid = parseInt(assetId);
+        const info = getAssetInfo(aid);
+        if (info.isLpToken) continue;
+        const totalAmount = assetUtxos.reduce((s, u) => s + u.amount, 0);
+        const count = assetUtxos.length;
+        if (totalAmount === 0) continue;
+        const largest = Math.max(...assetUtxos.map(u => u.amount));
+        const largestPct = (largest / totalAmount * 100);
+
+        let severity = 'ok';
+        let message = '';
+        let suggestedSplits = 0;
+
+        // What remains usable if the largest coin gets locked in a tx
+        const remainder = totalAmount - largest;
+        const remainderInsufficient = remainder < 100000; // < 0.001 BEAM (1 fee)
+
+        if (count === 1) {
+            severity = 'critical';
+            message = 'All funds in 1 coin \u2014 any transaction will lock your entire balance';
+            suggestedSplits = Math.min(10, Math.max(3, Math.ceil(totalAmount / (10 * GROTH))));
+        } else if (largestPct > 90 && remainderInsufficient) {
+            severity = 'critical';
+            message = `${formatAmount(largest)} ${info.symbol || 'BEAM'} in 1 coin (${largestPct.toFixed(0)}%) \u2014 sending locks nearly everything`;
+            suggestedSplits = Math.min(10, Math.max(3, Math.ceil(totalAmount / (10 * GROTH))));
+        } else if (count === 2 && largestPct > 80) {
+            severity = 'warning';
+            message = 'Most funds concentrated in 1 coin \u2014 consider splitting for parallel transactions';
+            suggestedSplits = 4;
+        } else if (largestPct > 90) {
+            severity = 'warning';
+            message = 'Funds concentrated in few coins';
+            suggestedSplits = 3;
+        }
+
+        if (severity !== 'ok') {
+            recommendations.push({ assetId: aid, count, totalAmount, largest, largestPct, severity, message, suggestedSplits });
+        }
+    }
+    return { byAsset, recommendations };
+}
+
+// Render UTXO recommendation banners
+function renderUtxoRecommendations() {
+    const container = document.getElementById('utxo-recommendations');
+    if (!container) return;
+
+    const analysis = walletData.utxoAnalysis;
+    if (!analysis || analysis.recommendations.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    container.innerHTML = analysis.recommendations.map(rec => {
+        const info = getAssetInfo(rec.assetId);
+        const config = ASSET_CONFIG[rec.assetId] || { symbol: info.symbol };
+        const symbol = config.symbol || info.symbol;
+        const totalDisplay = formatAmount(rec.totalAmount);
+        const feeTotal = formatAmount(50000 + rec.suggestedSplits * 20000);
+        const isCritical = rec.severity === 'critical';
+
+        return `
+            <div class="utxo-recommendation ${rec.severity}">
+                <div class="utxo-rec-header">
+                    <div class="utxo-rec-icon">${isCritical ? '\u26a0' : '\u24d8'}</div>
+                    <div class="utxo-rec-title">${symbol}: ${rec.message}</div>
+                </div>
+                <div class="utxo-rec-body">
+                    ${isCritical
+                        ? 'When you send a transaction, the coin used gets locked until it confirms (~60 sec). With only 1 coin, your entire balance is frozen. Split into smaller coins to send multiple transactions at once.'
+                        : 'Splitting your large coin into smaller ones lets you send multiple transactions without waiting for confirmations.'
+                    }
+                </div>
+                <div class="utxo-rec-footer">
+                    <button class="utxo-rec-btn" onclick="openSplitModal(${rec.assetId})">
+                        Split into ${rec.suggestedSplits} coins
+                    </button>
+                    <span class="utxo-rec-meta">Coins: ${rec.count} | Fee: ${feeTotal} BEAM</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Split modal state
+let splitState = {
+    assetId: 0,
+    totalAmount: 0,
+    availableUtxos: [],
+    splitCount: 5,
+    isExecuting: false
+};
+
+function openSplitModal(assetId) {
+    const analysis = walletData.utxoAnalysis;
+    if (!analysis) return;
+
+    const assetInfo = getAssetInfo(assetId);
+    if (assetInfo.isLpToken) {
+        showToast('LP tokens represent liquidity positions and don\'t need splitting', 'info');
+        return;
+    }
+
+    const assetUtxos = (analysis.byAsset[assetId] || []).slice().sort((a, b) => b.amount - a.amount);
+    if (assetUtxos.length === 0) {
+        showToast('No available coins for this asset', 'error');
+        return;
+    }
+
+    const totalAmount = assetUtxos.reduce((s, u) => s + u.amount, 0);
+    const rec = analysis.recommendations.find(r => r.assetId === assetId);
+    const suggestedSplits = rec ? rec.suggestedSplits : 5;
+
+    splitState = {
+        assetId,
+        totalAmount,
+        availableUtxos: assetUtxos,
+        splitCount: Math.min(suggestedSplits, 10),
+        isExecuting: false
+    };
+
+    const info = getAssetInfo(assetId);
+    const config = ASSET_CONFIG[assetId] || { symbol: info.symbol, color: info.color };
+    const symbol = config.symbol || info.symbol;
+    const displayIcon = config.icon || info.icon;
+
+    // Render asset info
+    document.getElementById('split-asset-info').innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:40px;height:40px;border-radius:50%;${displayIcon ? '' : `background:${config.color || info.color};`}display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;">
+                ${displayIcon ? `<img src="${displayIcon}" style="width:100%;height:100%;border-radius:50%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color || info.color}';this.parentNode.textContent='${symbol.substring(0,2)}'">` : symbol.substring(0, 2)}
+            </div>
+            <div>
+                <div style="font-weight:600;font-size:16px;">${symbol}</div>
+                <div style="font-size:12px;color:var(--text-muted);">Available: ${formatAmount(totalAmount)} ${symbol}</div>
+            </div>
+        </div>
+    `;
+
+    // Render current UTXOs visualization
+    renderSplitCurrentUtxos();
+
+    // Set default split count
+    updateSplitPreview();
+
+    // Reset progress
+    document.getElementById('split-progress').style.display = 'none';
+    document.getElementById('split-execute-btn').disabled = false;
+    document.getElementById('split-execute-btn').style.display = '';
+
+    openModal('split-utxo-modal');
+}
+
+function renderSplitCurrentUtxos() {
+    const container = document.getElementById('split-current-utxos');
+    const utxos = splitState.availableUtxos;
+    const total = splitState.totalAmount;
+    const info = getAssetInfo(splitState.assetId);
+    const symbol = (ASSET_CONFIG[splitState.assetId] || { symbol: info.symbol }).symbol || info.symbol;
+
+    container.innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Current coins (${utxos.length})</div>
+        <div class="utxo-bar-container">
+            ${utxos.map((u, i) => {
+                const pct = total > 0 ? (u.amount / total * 100) : 0;
+                const hue = (i * 47 + 160) % 360;
+                return `<div class="utxo-bar" style="width:${Math.max(pct, 2)}%;background:hsl(${hue}, 60%, 50%);" title="${formatAmount(u.amount)} ${symbol} (${pct.toFixed(1)}%)"></div>`;
+            }).join('')}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+            ${utxos.map((u, i) => {
+                const hue = (i * 47 + 160) % 360;
+                return `<span style="font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:3px;">
+                    <span style="width:8px;height:8px;border-radius:2px;background:hsl(${hue}, 60%, 50%);display:inline-block;"></span>
+                    ${formatAmount(u.amount)}
+                </span>`;
+            }).join('')}
+        </div>
+    `;
+}
+
+function selectSplitCount(count) {
+    splitState.splitCount = count;
+    updateSplitPreview();
+}
+
+function updateSplitPreview() {
+    const { assetId, totalAmount, splitCount } = splitState;
+    const isBeam = assetId === 0;
+    const fee = 50000 + splitCount * 20000; // ~18k per output + margin
+
+    // tx_split is 1 transaction, 1 fee
+    let splitAmount;
+    let tooSmall = false;
+    if (isBeam) {
+        const afterFee = totalAmount - fee;
+        if (afterFee <= 0) {
+            tooSmall = true;
+            splitAmount = 0;
+        } else {
+            splitAmount = Math.floor(afterFee / splitCount);
+        }
+    } else {
+        splitAmount = Math.floor(totalAmount / splitCount);
+        // Check if user has enough BEAM for the single fee
+        const beamAsset = walletData.assets.find(a => a.id === 0);
+        const beamBalance = beamAsset ? beamAsset.balance : 0;
+        if (beamBalance < fee) {
+            tooSmall = true;
+        }
+    }
+
+    // Update count selector buttons
+    const countBtns = document.getElementById('split-count-selector');
+    const presets = [2, 3, 5, 8, 10];
+    countBtns.innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Split into:</div>
+        <div class="split-count-btns">
+            ${presets.map(n => `
+                <button class="split-count-btn ${n === splitCount ? 'active' : ''}" onclick="selectSplitCount(${n})">${n}</button>
+            `).join('')}
+        </div>
+    `;
+
+    // Preview bars
+    const previewContainer = document.getElementById('split-preview');
+    const info = getAssetInfo(assetId);
+    const symbol = (ASSET_CONFIG[assetId] || { symbol: info.symbol }).symbol || info.symbol;
+
+    if (tooSmall) {
+        previewContainer.innerHTML = `
+            <div style="padding:12px;text-align:center;color:var(--error);font-size:13px;">
+                ${isBeam ? 'Balance too small to cover fee' : 'Not enough BEAM to pay transaction fee (' + formatAmount(fee) + ' BEAM needed)'}
+            </div>
+        `;
+    } else {
+        const remainder = isBeam ? (totalAmount - fee - splitAmount * (splitCount - 1)) : (totalAmount - splitAmount * (splitCount - 1));
+        previewContainer.innerHTML = `
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">After splitting (${splitCount} coins)</div>
+            <div class="utxo-bar-container">
+                ${Array.from({length: splitCount}, (_, i) => {
+                    const amt = i < splitCount - 1 ? splitAmount : remainder;
+                    const pct = totalAmount > 0 ? (amt / totalAmount * 100) : 0;
+                    return `<div class="utxo-bar" style="width:${Math.max(pct, 2)}%;background:var(--beam-cyan);opacity:${0.6 + i * 0.04};" title="${formatAmount(amt)} ${symbol}"></div>`;
+                }).join('')}
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:6px;">
+                ${splitCount - 1} coins of ${formatAmount(splitAmount)} ${symbol} + 1 coin of ${formatAmount(remainder)} ${symbol}
+            </div>
+        `;
+    }
+
+    // Fee info
+    document.getElementById('split-fee-info').innerHTML = `
+        <div style="display:flex;justify-content:space-between;font-size:12px;">
+            <span style="color:var(--text-muted);">Fee</span>
+            <span>${formatAmount(fee)} BEAM</span>
+        </div>
+    `;
+
+    // Update button
+    const btn = document.getElementById('split-execute-btn');
+    btn.textContent = `Split into ${splitCount} coins`;
+    btn.disabled = tooSmall;
+}
+
+async function executeSplit() {
+    if (splitState.isExecuting) return;
+    splitState.isExecuting = true;
+
+    const { assetId, totalAmount, splitCount } = splitState;
+    const isBeam = assetId === 0;
+    const fee = 50000 + splitCount * 20000; // ~18k per output + margin
+
+    let splitAmount;
+    if (isBeam) {
+        splitAmount = Math.floor((totalAmount - fee) / splitCount);
+    } else {
+        splitAmount = Math.floor(totalAmount / splitCount);
+    }
+
+    if (splitAmount <= 0) {
+        showToast('Amount too small to split', 'error');
+        splitState.isExecuting = false;
+        return;
+    }
+
+    // Build coins array: (splitCount-1) equal parts, remainder goes to last
+    const coins = [];
+    for (let i = 0; i < splitCount - 1; i++) {
+        coins.push(splitAmount);
+    }
+    const remainder = isBeam
+        ? (totalAmount - fee - splitAmount * (splitCount - 1))
+        : (totalAmount - splitAmount * (splitCount - 1));
+    coins.push(remainder);
+
+    const btn = document.getElementById('split-execute-btn');
+    const progress = document.getElementById('split-progress');
+    btn.disabled = true;
+    btn.style.display = 'none';
+    progress.style.display = 'block';
+    document.getElementById('split-progress-text').textContent = 'Splitting...';
+    document.getElementById('split-progress-fill').style.width = '50%';
+
+    try {
+        const txParams = { coins, fee };
+        if (assetId !== 0) {
+            txParams.asset_id = assetId;
+        }
+
+        await apiCall('tx_split', txParams);
+
+        document.getElementById('split-progress-text').textContent = 'Complete!';
+        document.getElementById('split-progress-fill').style.width = '100%';
+
+        const info = getAssetInfo(assetId);
+        const symbol = (ASSET_CONFIG[assetId] || { symbol: info.symbol }).symbol || info.symbol;
+        showToastAdvanced('Coins Split!', `${symbol} split into ${splitCount} coins. They'll be available after confirmation (~60 sec).`, 'success');
+
+        // Refresh data after short delay
+        setTimeout(async () => {
+            await loadWalletData();
+            renderAssetCards();
+            renderBalancesTable();
+            renderUtxos();
+            renderUtxoRecommendations();
+        }, 2000);
+
+        setTimeout(() => closeModal('split-utxo-modal'), 1500);
+
+    } catch (e) {
+        showToastAdvanced('Split Failed', e.message, 'error');
+        btn.style.display = '';
+        btn.disabled = false;
+        progress.style.display = 'none';
+    }
+
+    splitState.isExecuting = false;
+}
+
+// ==================== Combine UTXOs ====================
+
+function openCombineModal(assetId) {
+    const analysis = walletData.utxoAnalysis;
+    if (!analysis) return;
+
+    const assetInfo = getAssetInfo(assetId);
+    if (assetInfo.isLpToken) {
+        showToast('LP tokens represent liquidity positions and don\'t need combining', 'info');
+        return;
+    }
+
+    const assetUtxos = (analysis.byAsset[assetId] || []).slice().sort((a, b) => b.amount - a.amount);
+    if (assetUtxos.length < 2) {
+        showToast('Need at least 2 coins to combine', 'info');
+        return;
+    }
+
+    const totalAmount = assetUtxos.reduce((s, u) => s + u.amount, 0);
+    const isBeam = assetId === 0;
+    const fee = 50000 + (assetUtxos.length + 1) * 20000; // inputs + 1 output, ~18k each + margin
+
+    const info = getAssetInfo(assetId);
+    const config = ASSET_CONFIG[assetId] || { symbol: info.symbol, color: info.color };
+    const symbol = config.symbol || info.symbol;
+    const displayIcon = config.icon || info.icon;
+
+    // Asset info header
+    document.getElementById('combine-asset-info').innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:40px;height:40px;border-radius:50%;${displayIcon ? '' : `background:${config.color || info.color};`}display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;">
+                ${displayIcon ? `<img src="${displayIcon}" style="width:100%;height:100%;border-radius:50%;" onerror="this.style.display='none';this.parentNode.style.background='${config.color || info.color}';this.parentNode.textContent='${symbol.substring(0,2)}'">` : symbol.substring(0, 2)}
+            </div>
+            <div>
+                <div style="font-weight:600;font-size:16px;">${symbol}</div>
+                <div style="font-size:12px;color:var(--text-muted);">${assetUtxos.length} coins totaling ${formatAmount(totalAmount)} ${symbol}</div>
+            </div>
+        </div>
+    `;
+
+    // Current UTXOs visualization
+    const utxoListHtml = assetUtxos.map((u, i) => {
+        const pct = totalAmount > 0 ? (u.amount / totalAmount * 100) : 0;
+        const hue = (i * 47 + 160) % 360;
+        return `<div class="utxo-bar" style="width:${Math.max(pct, 2)}%;background:hsl(${hue}, 60%, 50%);" title="${formatAmount(u.amount)} ${symbol} (${pct.toFixed(1)}%)"></div>`;
+    }).join('');
+
+    const legendHtml = assetUtxos.map((u, i) => {
+        const hue = (i * 47 + 160) % 360;
+        return `<span style="font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:3px;">
+            <span style="width:8px;height:8px;border-radius:2px;background:hsl(${hue}, 60%, 50%);display:inline-block;"></span>
+            ${formatAmount(u.amount)}
+        </span>`;
+    }).join('');
+
+    document.getElementById('combine-current-utxos').innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Current coins (${assetUtxos.length})</div>
+        <div class="utxo-bar-container">${utxoListHtml}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">${legendHtml}</div>
+    `;
+
+    // Preview — single bar
+    const resultAmount = isBeam ? totalAmount - fee : totalAmount;
+    document.getElementById('combine-preview').innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">After combining (1 coin)</div>
+        <div class="utxo-bar-container">
+            <div class="utxo-bar" style="width:100%;background:var(--beam-cyan);" title="${formatAmount(resultAmount)} ${symbol}"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:6px;">
+            1 coin of ${formatAmount(resultAmount)} ${symbol}
+        </div>
+    `;
+
+    // Fee info
+    document.getElementById('combine-fee-info').innerHTML = `
+        <div style="display:flex;justify-content:space-between;font-size:12px;">
+            <span style="color:var(--text-muted);">Fee</span>
+            <span>${formatAmount(fee)} BEAM</span>
+        </div>
+    `;
+
+    // Check if affordable
+    let canCombine = true;
+    if (isBeam && totalAmount <= fee) {
+        canCombine = false;
+    } else if (!isBeam) {
+        const beamAsset = walletData.assets.find(a => a.id === 0);
+        if (!beamAsset || beamAsset.balance < fee) canCombine = false;
+    }
+
+    const btn = document.getElementById('combine-execute-btn');
+    btn.disabled = !canCombine;
+    btn.textContent = 'Combine into 1 coin';
+    btn.style.display = '';
+
+    if (!canCombine) {
+        document.getElementById('combine-preview').innerHTML = `
+            <div style="padding:12px;text-align:center;color:var(--error);font-size:13px;">
+                ${isBeam ? 'Balance too small to cover fee' : 'Not enough BEAM to pay fee (' + formatAmount(fee) + ' BEAM needed)'}
+            </div>
+        `;
+    }
+
+    document.getElementById('combine-progress').style.display = 'none';
+    openModal('combine-utxo-modal');
+
+    // Store for execute
+    window._combineState = { assetId, totalAmount, fee, resultAmount, isBeam };
+}
+
+async function executeCombine() {
+    const state = window._combineState;
+    if (!state) return;
+
+    const { assetId, totalAmount, fee, isBeam } = state;
+    const resultAmount = isBeam ? totalAmount - fee : totalAmount;
+
+    if (resultAmount <= 0) {
+        showToast('Amount too small to combine', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('combine-execute-btn');
+    const progress = document.getElementById('combine-progress');
+    btn.disabled = true;
+    btn.style.display = 'none';
+    progress.style.display = 'block';
+    document.getElementById('combine-progress-text').textContent = 'Combining...';
+    document.getElementById('combine-progress-fill').style.width = '50%';
+
+    try {
+        const txParams = { coins: [resultAmount], fee };
+        if (assetId !== 0) {
+            txParams.asset_id = assetId;
+        }
+
+        await apiCall('tx_split', txParams);
+
+        document.getElementById('combine-progress-text').textContent = 'Complete!';
+        document.getElementById('combine-progress-fill').style.width = '100%';
+
+        const info = getAssetInfo(assetId);
+        const symbol = (ASSET_CONFIG[assetId] || { symbol: info.symbol }).symbol || info.symbol;
+        showToastAdvanced('Coins Combined!', `${symbol} merged into 1 coin. Available after confirmation (~60 sec).`, 'success');
+
+        setTimeout(async () => {
+            await loadWalletData();
+            renderAssetCards();
+            renderBalancesTable();
+            renderUtxos();
+            renderUtxoRecommendations();
+        }, 2000);
+
+        setTimeout(() => closeModal('combine-utxo-modal'), 1500);
+
+    } catch (e) {
+        showToastAdvanced('Combine Failed', e.message, 'error');
+        btn.style.display = '';
+        btn.disabled = false;
+        progress.style.display = 'none';
+    }
+
+    window._combineState = null;
 }
 
 // Modal functions
@@ -3483,9 +4131,6 @@ function showLockedOverlay(message) {
 
         // Load wallets list
         loadWelcomeWallets();
-
-        // Start local node for syncing (without owner key) - runs in background
-        startNodeForSync();
     }
     overlay.style.display = 'flex';
 }
@@ -3497,6 +4142,9 @@ function hideLockedOverlay() {
 
 // Lock wallet and show unlock screen
 async function lockWallet() {
+    // Stop all intervals immediately to prevent requests against dead API
+    stopAllIntervals();
+
     try {
         // Call lock API to stop wallet-api
         const response = await fetch('/api/wallet/lock', { method: 'POST' });
@@ -3621,7 +4269,6 @@ function showWelcomeError(viewId, message) {
 }
 
 // Background local node sync checker
-let localNodeSyncChecker = null;
 let storedWalletPassword = null;
 
 async function startBackgroundNodeSync() {
@@ -3654,18 +4301,17 @@ async function startBackgroundNodeSync() {
 }
 
 function startNodeSyncChecker() {
-    if (localNodeSyncChecker) clearInterval(localNodeSyncChecker);
+    stopInterval('bgSyncChecker');
 
     // Check every 60 seconds
-    localNodeSyncChecker = setInterval(async () => {
+    startInterval('bgSyncChecker', async () => {
         try {
             const res = await fetch('/api/node/status');
             const status = await res.json();
 
             if (status.running && status.synced) {
                 console.log('Local node synced! Switching...');
-                clearInterval(localNodeSyncChecker);
-                localNodeSyncChecker = null;
+                stopInterval('bgSyncChecker');
 
                 // Seamlessly switch to local node
                 await seamlessSwitchToLocalNode();
@@ -3728,7 +4374,7 @@ async function welcomeUnlock() {
     }
 
     const btn = document.getElementById('welcome-unlock-btn');
-    btn.innerHTML = '<div class="welcome-spinner"></div> Checking node...';
+    btn.innerHTML = '<div class="welcome-spinner"></div> Preparing...';
     btn.disabled = true;
 
     // Helper to reset button
@@ -3742,109 +4388,107 @@ async function welcomeUnlock() {
         storedWalletPassword = password;
         sessionStorage.setItem('walletPassword', password);
 
-        // Check current server status and if local node is synced
-        const serverStatus = await checkServerStatus();
-        const nodeSynced = await isLocalNodeSynced();
-        const alreadyOnLocal = serverStatus?.node_mode === 'local';
+        // Step 1: Kill existing processes for clean start
+        btn.innerHTML = '<div class="welcome-spinner"></div> Cleaning up...';
+        try { await fetch('/api/cleanup', { method: 'POST' }); } catch(e) {}
 
-        console.log('Node check:', { synced: nodeSynced, alreadyOnLocal, nodeMode: serverStatus?.node_mode });
-        debugLog('info', 'nodeCheck', { synced: nodeSynced, alreadyOnLocal });
-
-        if (nodeSynced && alreadyOnLocal) {
-            // Already on local node and synced - just unlock, no switch needed
-            btn.innerHTML = '<div class="welcome-spinner"></div> Unlocking...';
-            console.log('Already on local node, unlocking directly');
-
-            const unlockRes = await fetch('/api/wallet/unlock', {
+        // Step 2: Export owner_key (also validates password)
+        btn.innerHTML = '<div class="welcome-spinner"></div> Validating password...';
+        let ownerKey = null;
+        try {
+            const exportRes = await fetch('/api/wallet/export_owner_key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ wallet: welcomeSelectedWallet, password: password })
             });
-            const unlockResult = await unlockRes.json();
+            const exportResult = await exportRes.json();
 
-            if (unlockResult.success) {
-                currentNodeType = 'local';
-                hideLockedOverlay();
-                const connected = await loadWalletData();
-                if (connected) {
-                    renderAssetCards();
-                    renderBalancesTable();
-                    renderUtxos();
-                    showToastAdvanced('Wallet Unlocked', 'Connected to local node (DEX ready)', 'success');
-                    loadDexPools().catch(e => console.log('DEX pools not available:', e.message));
-                }
-            } else {
-                if (isPasswordError(unlockResult.error)) {
-                    showWelcomeError('', PASSWORD_ERROR_MESSAGE);
-                } else {
-                    showWelcomeError('', unlockResult.error || 'Failed to unlock wallet');
-                }
-                resetButton();
-                return;
-            }
-        } else if (nodeSynced) {
-            // Node is synced but not on local - switch to local node
-            btn.innerHTML = '<div class="welcome-spinner"></div> Connecting to local node...';
-            console.log('Switching to local node for wallet:', welcomeSelectedWallet);
-
-            const switchRes = await fetch('/api/node/switch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode: 'local', password: password, wallet: welcomeSelectedWallet })
-            });
-            const switchResult = await switchRes.json();
-            console.log('Switch result:', switchResult);
-            debugLog('response', 'node/switch', switchResult);
-
-            if (switchResult.success) {
-                currentNodeType = 'local';
-                hideLockedOverlay();
-                const connected = await loadWalletData();
-                if (connected) {
-                    renderAssetCards();
-                    renderBalancesTable();
-                    renderUtxos();
-                    showToastAdvanced('Wallet Unlocked', 'Connected to local node (DEX ready)', 'success');
-                    loadDexPools().catch(e => console.log('DEX pools not available:', e.message));
-                }
-            } else {
-                // Check if it's a password error - don't fallback, show error directly
-                if (isPasswordError(switchResult.error)) {
+            if (exportResult.error) {
+                if (isPasswordError(exportResult.error)) {
                     showWelcomeError('', PASSWORD_ERROR_MESSAGE);
                     resetButton();
-                    return; // Don't proceed with fallback
+                    return;
                 }
-
-                // Fallback to public node for non-password errors
-                console.log('Local switch failed, falling back to public:', switchResult.error);
-                debugLog('error', 'node/switch', { fallback: 'public', reason: switchResult.error });
-                await unlockWithPublicNode(password);
-
-                // Schedule a retry to switch to local node after 5 seconds
-                setTimeout(async () => {
-                    const stillSynced = await isLocalNodeSynced();
-                    if (stillSynced) {
-                        console.log('Retrying local node switch...');
-                        seamlessSwitchToLocalNode();
-                    }
-                }, 5000);
+                console.log('Owner key export failed (non-password):', exportResult.error);
+            } else if (exportResult.success && exportResult.owner_key) {
+                ownerKey = exportResult.owner_key;
             }
-        } else {
-            // Local node not synced - use public node, continue syncing in background
-            console.log('Node not synced, using public node');
-            await unlockWithPublicNode(password);
-
-            // Continue background sync and check periodically
-            startNodeSyncChecker();
+        } catch (e) {
+            console.log('Owner key export error:', e);
         }
+
+        // Step 3: Start beam-node with owner_key (non-blocking, for background sync)
+        if (ownerKey) {
+            btn.innerHTML = '<div class="welcome-spinner"></div> Starting node...';
+            try {
+                await fetch('/api/node/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ owner_key: ownerKey, password: password })
+                });
+                console.log('Local node started with owner key');
+            } catch (e) {
+                console.log('Node start failed (will use public node):', e);
+            }
+        }
+
+        // Step 4: Start wallet-api on public node for immediate access
+        btn.innerHTML = '<div class="welcome-spinner"></div> Unlocking...';
+        const unlockRes = await fetch('/api/wallet/unlock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet: welcomeSelectedWallet, password: password, node: 'eu-node01.mainnet.beam.mw:8100' })
+        });
+        const unlockResult = await unlockRes.json();
+
+        if (!unlockResult.success) {
+            if (isPasswordError(unlockResult.error)) {
+                showWelcomeError('', PASSWORD_ERROR_MESSAGE);
+            } else {
+                showWelcomeError('', unlockResult.error || 'Failed to unlock wallet');
+            }
+            resetButton();
+            return;
+        }
+
+        // Step 5: Load wallet data and render UI
+        currentNodeType = 'public';
+        hideLockedOverlay();
+        const connected = await loadWalletData();
+        if (connected) {
+            renderAssetCards();
+            renderBalancesTable();
+            renderUtxos();
+            // Load DEX pools once on unlock
+            loadDexPools().catch(e => console.log('DEX pools not available:', e.message));
+        }
+
+        // Step 6: Start intervals
+        startPriceUpdates();
+        startInterval('walletRefresh', async () => {
+            const stillConnected = await loadWalletData();
+            if (stillConnected) {
+                renderAssetCards();
+                renderBalancesTable();
+                renderUtxos();
+            } else {
+                showLockedOverlay('Connection lost. Please check wallet-api.');
+            }
+        }, 30000);
+
+        // Step 7: Start background sync checker to auto-switch to local node when synced
+        startNodeSyncChecker();
+
+        // Step 8: Start node sync monitoring for settings UI
+        startNodeSyncMonitoring();
+
+        showToast('Wallet unlocked', 'success');
     } catch (e) {
-        // Don't show generic connection error if password error was already shown
         if (e.name === 'AbortError') {
             showWelcomeError('', 'Connection timed out. Please try again.');
         } else if (!e.message || (!e.message.includes('Invalid password') && !e.message.includes('password'))) {
             showWelcomeError('', 'Connection error. Is the server running?');
         }
-        // If password error, it was already shown by unlockWithPublicNode
     }
 
     resetButton();
@@ -4025,6 +4669,19 @@ async function welcomeSeedContinue() {
                 renderBalancesTable();
                 renderUtxos();
                 showToast('Wallet created and unlocked!', 'success');
+
+                // Start intervals for the new wallet session
+                startPriceUpdates();
+                startInterval('walletRefresh', async () => {
+                    const stillConnected = await loadWalletData();
+                    if (stillConnected) {
+                        renderAssetCards();
+                        renderBalancesTable();
+                        renderUtxos();
+                    } else {
+                        showLockedOverlay('Connection lost. Please check wallet-api.');
+                    }
+                }, 30000);
             }
 
             // Start background local node sync
@@ -4142,6 +4799,19 @@ async function welcomeRestoreWallet() {
                     renderBalancesTable();
                     renderUtxos();
                     showToast('Wallet restored and unlocked!', 'success');
+
+                    // Start intervals for the restored wallet session
+                    startPriceUpdates();
+                    startInterval('walletRefresh', async () => {
+                        const stillConnected = await loadWalletData();
+                        if (stillConnected) {
+                            renderAssetCards();
+                            renderBalancesTable();
+                            renderUtxos();
+                        } else {
+                            showLockedOverlay('Connection lost. Please check wallet-api.');
+                        }
+                    }, 30000);
                 }
 
                 // Start background local node sync
@@ -4164,6 +4834,85 @@ async function welcomeRestoreWallet() {
     }
 
     resetButton();
+}
+
+// =========================================================================
+// App Store Page
+// =========================================================================
+function renderAppStore() {
+    const grid = document.getElementById('appstore-grid');
+    if (!grid) return;
+
+    grid.innerHTML = `
+        <div class="appstore-featured" onclick="showPage('fuddle')">
+            <div class="appstore-featured-bg"></div>
+            <div class="appstore-featured-content">
+                <div class="appstore-featured-icon">
+                    <div class="fuddle-block-icon">F</div>
+                </div>
+                <div class="appstore-featured-info">
+                    <h2>FUDDLE</h2>
+                    <p>Guess the word. Win the prize.</p>
+                    <p class="appstore-featured-desc">On-chain Wordle with letter economics, prize pools, and leaderboards. All game logic runs on BEAM blockchain.</p>
+                    <button class="btn btn-accent">Play Now</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="appstore-cards">
+            <div class="appstore-card" onclick="showPage('dex')">
+                <div class="appstore-card-icon" style="background: linear-gradient(135deg, #25c2a0, #00d4ff);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
+                        <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
+                    </svg>
+                </div>
+                <div class="appstore-card-info">
+                    <h3>DEX Trading</h3>
+                    <p>Swap tokens on BEAM's AMM</p>
+                </div>
+            </div>
+
+            <div class="appstore-card" onclick="showPage('p2p')">
+                <div class="appstore-card-icon" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
+                        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                        <circle cx="8.5" cy="7" r="4"/>
+                        <path d="M20 8v6M23 11h-6"/>
+                    </svg>
+                </div>
+                <div class="appstore-card-info">
+                    <h3>P2P Marketplace</h3>
+                    <p>Trade crypto peer-to-peer</p>
+                </div>
+            </div>
+
+            <div class="appstore-card" onclick="showPage('airdrop')">
+                <div class="appstore-card-icon" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <div class="appstore-card-info">
+                    <h3>Airdrop</h3>
+                    <p>Create and claim vouchers</p>
+                </div>
+            </div>
+
+            <div class="appstore-card" onclick="showPage('explorer')">
+                <div class="appstore-card-icon" style="background: linear-gradient(135deg, #3b82f6, #06b6d4);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                </div>
+                <div class="appstore-card-info">
+                    <h3>Explorer</h3>
+                    <p>Browse blocks, assets, contracts</p>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // Initialize
@@ -4243,12 +4992,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize page from URL route (e.g., /explorer/block/123, /dex, /settings)
     initPageFromUrl();
 
-    // Auto-start local node in background for DEX support
-    autoStartLocalNode();
-
-    // Refresh every 10 seconds if connected
+    // Start price updates and periodic refresh if connected
     if (connected) {
-        setInterval(async () => {
+        startPriceUpdates();
+        loadDexPools().catch(e => console.log('DEX pools not available:', e));
+        startInterval('walletRefresh', async () => {
             const stillConnected = await loadWalletData();
             if (stillConnected) {
                 renderAssetCards();
@@ -4257,7 +5005,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 showLockedOverlay('Connection lost. Please check wallet-api.');
             }
-        }, 10000);
+        }, 30000);
     }
 
     // Show guide for first-time users
@@ -4922,15 +5670,25 @@ async function renderTransactions(txs) {
         const commentLower = (tx.comment || '').toLowerCase();
         const isContract = tx.tx_type === 7 || tx.tx_type === 12 || tx.tx_type_string === 'contract';
 
-        // Detect liquidity operations
-        const isAddLiquidity = commentLower.includes('add liquidity') || commentLower.includes('pool_add_liquidity') ||
-                              (isContract && tx.invoke_data && tx.invoke_data.length > 0 && detectAddLiquidity(tx.invoke_data[0]));
-        const isRemoveLiquidity = commentLower.includes('withdraw') || commentLower.includes('remove liquidity') ||
-                                  (isContract && tx.invoke_data && tx.invoke_data.length > 0 && detectRemoveLiquidity(tx.invoke_data[0]));
+        // Known contract IDs for specific detection
+        const DEX_CONTRACT_ID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
+        const AIRDROP_CONTRACT_ID = '8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c349b5b18e';
+        const FUDDLE_CONTRACT_V2 = '8605eaf746a798ccb45000da28e270a408cad6ce012f49b06eb305eee067a40f';
+        const FUDDLE_CONTRACT_V1 = 'ea643c8d8d2515d5eebe90e4350ad0251bcb0dfa9c039427f2060de6dbbaf13e';
 
-        // Check if this is a swap transaction
+        const isDexContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === DEX_CONTRACT_ID);
+        const isAirdropContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === AIRDROP_CONTRACT_ID);
+        const isFuddleContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === FUDDLE_CONTRACT_V2 || d.contract_id === FUDDLE_CONTRACT_V1);
+
+        // Detect liquidity operations (DEX only)
+        const isAddLiquidity = isDexContract && (commentLower.includes('add liquidity') || commentLower.includes('pool_add_liquidity') ||
+                              (tx.invoke_data && tx.invoke_data.length > 0 && detectAddLiquidity(tx.invoke_data[0])));
+        const isRemoveLiquidity = isDexContract && (commentLower.includes('withdraw') || commentLower.includes('remove liquidity') ||
+                                  (tx.invoke_data && tx.invoke_data.length > 0 && detectRemoveLiquidity(tx.invoke_data[0])));
+
+        // Check if this is a swap transaction (DEX contract or explicit swap comment)
         const isSwap = !isAddLiquidity && !isRemoveLiquidity && (
-                      isContract ||
+                      isDexContract ||
                       commentLower.includes('swap') ||
                       commentLower.includes('amm trade'));
 
@@ -5010,25 +5768,12 @@ async function renderTransactions(txs) {
         const isP2PRegister = isP2PContract && commentLower.includes('register');
 
         // Action type - user-friendly names
-        const actionTypes = {
-            0: 'Transfer',
-            1: 'UTXO Split',
-            2: 'Asset Created',
-            3: 'Asset Burned',
-            4: 'Asset Info',
-            5: 'Offline Send',
-            6: 'Offline Receive',
-            7: 'Contract',
-            12: 'Contract'
-        };
         let action;
+        // Asset operations
         if (isAssetCreate) action = 'Create Asset';
         else if (isAssetMint) action = 'Mint Tokens';
         else if (isAssetBurn) action = 'Burn Tokens';
-        else if (isAddLiquidity) action = 'Add Liquidity';
-        else if (isRemoveLiquidity) action = 'Remove Liquidity';
-        else if (isSwap) action = 'Swap';
-        // P2P Escrow actions
+        // P2P Escrow actions (check before generic swap/contract)
         else if (isP2PCreateOrder) action = 'P2P: Create Order';
         else if (isP2PCancelOrder) action = 'P2P: Cancel Order';
         else if (isP2PAcceptOrder) action = 'P2P: Accept Trade';
@@ -5040,7 +5785,17 @@ async function renderTransactions(txs) {
         else if (isP2PUnstake) action = 'P2P: Unstake';
         else if (isP2PRegister) action = 'P2P: Register Trader';
         else if (isP2PContract) action = 'P2P Contract';
-        else action = actionTypes[tx.tx_type] || (isReceive ? 'Receive' : 'Send');
+        // DEX operations
+        else if (isAddLiquidity) action = 'Add Liquidity';
+        else if (isRemoveLiquidity) action = 'Remove Liquidity';
+        else if (isSwap) action = 'Swap';
+        // Game & app contracts
+        else if (isFuddleContract) action = 'Fuddle Game';
+        else if (isAirdropContract) action = 'Airdrop';
+        // Generic contract call
+        else if (isContract) action = 'Contract Call';
+        // Regular transfers
+        else action = isReceive ? 'Receive' : 'Send';
 
         // Calculate confirmations
         let confirmations = 0;
@@ -5097,6 +5852,10 @@ async function renderTransactions(txs) {
         else if (isP2PFeedback) bgColor = 'linear-gradient(135deg, #f59e0b, #fbbf24)';  // Yellow for feedback
         else if (isP2PStake || isP2PUnstake) bgColor = 'linear-gradient(135deg, #6366f1, #8b5cf6)';  // Indigo for staking
         else if (isP2PContract) bgColor = 'linear-gradient(135deg, #64748b, #94a3b8)';  // Gray for other P2P
+        // Game & app contracts
+        else if (isFuddleContract) bgColor = 'linear-gradient(135deg, #f59e0b, #10b981)';  // Gold-green for Fuddle
+        else if (isAirdropContract) bgColor = 'linear-gradient(135deg, #06b6d4, #8b5cf6)';  // Cyan-purple for Airdrop
+        else if (isContract) bgColor = 'linear-gradient(135deg, #475569, #64748b)';  // Slate for generic contract
         else bgColor = isReceive ? 'var(--success)' : 'var(--warning)';
 
         // SVG icon based on type
@@ -5119,6 +5878,10 @@ async function renderTransactions(txs) {
         else if (isP2PUnstake) svgIcon = '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/><path d="M3 3l18 18"/>'; // Dollar with line through
         else if (isP2PRegister) svgIcon = '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>'; // Person icon
         else if (isP2PContract) svgIcon = '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>'; // Grid/contract
+        // Game & app contracts
+        else if (isFuddleContract) svgIcon = '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'; // Grid (word game)
+        else if (isAirdropContract) svgIcon = '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>'; // Gift/airdrop layers
+        else if (isContract) svgIcon = '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6M9 12h4M9 15h5"/>'; // Document (generic contract)
         else svgIcon = '<path d="' + (isReceive ? 'M12 5v14M19 12l-7 7-7-7' : 'M12 19V5M5 12l7-7 7 7') + '"/>';
 
         // Truncate helper
@@ -5337,8 +6100,30 @@ async function renderTransactions(txs) {
             amountHtml = '<div class="tx-amount" style="color:var(--warning);font-size:12px;">-' + swapDetails.paidAmount + ' ' + swapDetails.paidSymbol + '</div>' +
                 (swapPaidUsdDisplay ? '<div style="font-size:10px;opacity:0.5;">' + swapPaidUsdDisplay + '</div>' : '') +
                 '<div class="tx-amount" style="color:var(--success);font-size:12px;">+' + swapDetails.receivedAmount + ' ' + swapDetails.receivedSymbol + '</div>';
+        } else if ((isFuddleContract || isAirdropContract || isContract) && tx.invoke_data && tx.invoke_data.length > 0) {
+            // Contract call with invoke_data - show amounts from invoke_data
+            const amounts = tx.invoke_data[0].amounts || [];
+            const contractId = tx.invoke_data[0].contract_id || '';
+            const contractLabel = isFuddleContract ? 'Fuddle Game' : isAirdropContract ? 'Airdrop' : 'Contract ' + contractId.substring(0, 8) + '...';
+
+            if (amounts.length > 0) {
+                // Show each asset amount in the contract call
+                const amountLines = amounts.map(function(a) {
+                    const info = getAssetInfo(Math.abs(a.asset_id));
+                    const isNeg = a.amount < 0;
+                    const absAmt = formatAmount(Math.abs(a.amount));
+                    return '<div class="tx-amount" style="color:' + (isNeg ? 'var(--success)' : 'var(--warning)') + ';font-size:12px;">' +
+                        (isNeg ? '+' : '-') + absAmt + ' ' + info.symbol + '</div>';
+                }).join('');
+
+                detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);">' + contractLabel + '</div>';
+                amountHtml = amountLines + '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            } else {
+                detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);">' + contractLabel + '</div>';
+                amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+            }
         } else {
-            // Calculate USD value for this transaction
+            // Regular transfer - show asset icon and amount
             const txUsdValue = getAssetUsdValue(aid, tx.value || 0);
             const txUsdDisplay = txUsdValue > 0 ? formatUsd(txUsdValue) : '';
 
@@ -5352,8 +6137,16 @@ async function renderTransactions(txs) {
                 '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
         }
 
-        return '<div class="tx-card ' + (isPending ? 'tx-pending' : '') + '" onclick="toggleTxDetails(' + idx + ')">' +
-            '<div class="tx-card-main">' +
+        // Build metadata row (always visible: date, block height, confirmations, kernel)
+        var metaHtml = '<div class="tx-meta">' +
+            '<span class="meta-item">' + dateStr + ' ' + timeStr + '</span>' +
+            (tx.height && tx.height > 0 ? '<span class="meta-dot">&middot;</span><span class="meta-item">Block <span class="meta-value">' + tx.height + '</span></span>' : '') +
+            '<span class="meta-dot">&middot;</span><span class="meta-item meta-confirm" style="color:' + confirmColor + '">' + confirmText + ' conf</span>' +
+            (kernel !== '-' ? '<span class="meta-dot">&middot;</span><span class="meta-item">Kernel <span class="meta-value mono copyable" onclick="event.stopPropagation();copyToClipboard(\'' + kernel + '\')" title="Click to copy">' + trunc(kernel, 12) + '</span></span>' : '') +
+        '</div>';
+
+        return '<div class="tx-card ' + (isPending ? 'tx-pending' : '') + '">' +
+            '<div class="tx-card-main" onclick="toggleTxDetails(' + idx + ')">' +
                 '<div class="tx-icon" style="background:' + bgColor + '">' + (isPending ? '<div class="tx-icon-pulse"></div>' : '') +
                     '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="18" height="18">' + svgIcon + '</svg>' +
                 '</div>' +
@@ -5362,21 +6155,18 @@ async function renderTransactions(txs) {
                     detailHtml +
                 '</div>' +
                 '<div class="tx-amount-col">' + amountHtml + '</div>' +
-                '<div class="tx-confirms" style="color:' + confirmColor + '">' + confirmText + '</div>' +
                 '<div class="tx-status"><span class="utxo-status ' + status.cls + '" style="' + (isPending ? 'animation:livePulse 2s infinite;' : '') + '">' + status.text + '</span></div>' +
-                '<div class="tx-date"><div>' + dateStr + '</div><div style="font-size:11px;color:var(--text-muted);">' + timeStr + '</div></div>' +
                 '<div class="tx-expand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M6 9l6 6 6-6"/></svg></div>' +
             '</div>' +
+            metaHtml +
+            (tx.comment ? '<div class="tx-comment-visible">' + tx.comment + '</div>' : '') +
             '<div class="tx-details" id="tx-details-' + idx + '">' +
                 '<div class="tx-detail-grid">' +
-                    '<div class="tx-detail-item"><span class="tx-detail-label">TxID</span><span class="tx-detail-value mono-text" onclick="event.stopPropagation();copyToClipboard(\'' + txId + '\')" style="cursor:pointer;" title="Click to copy">' + trunc(txId, 16) + '</span></div>' +
-                    '<div class="tx-detail-item"><span class="tx-detail-label">Kernel</span><span class="tx-detail-value mono-text" onclick="event.stopPropagation();copyToClipboard(\'' + kernel + '\')" style="cursor:pointer;">' + trunc(kernel, 16) + '</span></div>' +
-                    '<div class="tx-detail-item"><span class="tx-detail-label">Sender</span><span class="tx-detail-value mono-text" onclick="event.stopPropagation();copyToClipboard(\'' + sender + '\')" style="cursor:pointer;">' + trunc(sender, 16) + '</span></div>' +
-                    '<div class="tx-detail-item"><span class="tx-detail-label">Receiver</span><span class="tx-detail-value mono-text" onclick="event.stopPropagation();copyToClipboard(\'' + receiver + '\')" style="cursor:pointer;">' + trunc(receiver, 16) + '</span></div>' +
-                    '<div class="tx-detail-item"><span class="tx-detail-label">Height</span><span class="tx-detail-value">' + (tx.height || '-') + '</span></div>' +
-                    '<div class="tx-detail-item"><span class="tx-detail-label">Confirmations</span><span class="tx-detail-value" style="color:' + confirmColor + '">' + (confirmations > 0 ? confirmations : (isPending ? 'Pending' : '-')) + '</span></div>' +
+                    '<div class="tx-detail-item"><span class="tx-detail-label">Transaction ID</span><span class="tx-detail-value" onclick="event.stopPropagation();copyToClipboard(\'' + txId + '\')" title="Click to copy">' + txId + '</span></div>' +
+                    (kernel !== '-' ? '<div class="tx-detail-item"><span class="tx-detail-label">Kernel</span><span class="tx-detail-value" onclick="event.stopPropagation();copyToClipboard(\'' + kernel + '\')" title="Click to copy">' + kernel + '</span></div>' : '') +
+                    (sender !== '-' ? '<div class="tx-detail-item"><span class="tx-detail-label">Sender</span><span class="tx-detail-value" onclick="event.stopPropagation();copyToClipboard(\'' + sender + '\')" title="Click to copy">' + sender + '</span></div>' : '') +
+                    (receiver !== '-' ? '<div class="tx-detail-item"><span class="tx-detail-label">Receiver</span><span class="tx-detail-value" onclick="event.stopPropagation();copyToClipboard(\'' + receiver + '\')" title="Click to copy">' + receiver + '</span></div>' : '') +
                 '</div>' +
-                (tx.comment ? '<div class="tx-comment">💬 ' + tx.comment + '</div>' : '') +
             '</div>' +
         '</div>';
     }).join('');
@@ -5588,7 +6378,6 @@ function loadActivityOnSwap() {
 // DEX ACTIVITY FEED
 // =============================================
 let dexActivity = [];
-let activityUpdateInterval = null;
 
 async function loadDexActivity() {
     const feed = document.getElementById('dex-activity-feed');
@@ -5613,11 +6402,6 @@ async function loadDexActivity() {
         renderActivityFeed();
 
         if (status) status.textContent = `${dexActivity.length} recent`;
-
-        // Auto-update every 30 seconds
-        if (!activityUpdateInterval) {
-            activityUpdateInterval = setInterval(loadDexActivity, 30000);
-        }
     } catch (error) {
         console.error('Failed to load activity:', error);
         feed.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">Failed to load activity</div>`;
@@ -5864,15 +6648,7 @@ async function loadDexPools() {
 
         dexAvailable = true;
         renderDexPools();
-
-        // Re-render asset cards to show LP dual icons (if on dashboard)
-        if (document.getElementById('asset-cards')) {
-            renderAssetCards();
-        }
-        // Also re-render balances table for LP icons
-        if (document.getElementById('balances-tbody')) {
-            renderBalancesTable();
-        }
+        // Note: Removed duplicate render calls here - caller will render if needed
     } catch (e) {
         console.error('Load pools error:', e);
         dexAvailable = false;
@@ -8295,7 +9071,6 @@ async function executeWithdrawLiquidity() {
 // =============================================
 // LOCAL NODE AUTO-SWITCH
 // =============================================
-let nodeSyncCheckInterval = null;
 let nodeAutoStarted = false;
 
 // Auto-start local node when app loads
@@ -8341,8 +9116,12 @@ function startNodeSyncMonitoring() {
     // Clear any existing interval
     stopNodeSyncMonitoring();
 
-    // Check sync every 3 seconds
-    nodeSyncCheckInterval = setInterval(async () => {
+    // Show the local node section in settings
+    const section = document.getElementById('local-node-section');
+    if (section) section.style.display = 'block';
+
+    // Check sync every 10 seconds (reduced from 3s to save CPU)
+    startInterval('nodeSync', async () => {
         try {
             // Get node status from server API
             const resp = await fetch(`/api/node/status`);
@@ -8380,7 +9159,7 @@ function startNodeSyncMonitoring() {
 
                         // Slow down monitoring once synced
                         stopNodeSyncMonitoring();
-                        nodeSyncCheckInterval = setInterval(async () => {
+                        startInterval('nodeSync', async () => {
                             const r = await fetch(`/api/node/status`);
                             const s = await r.json();
                             document.getElementById('sync-percentage').textContent = '100%';
@@ -8400,14 +9179,11 @@ function startNodeSyncMonitoring() {
         } catch (e) {
             console.error('Sync check failed:', e);
         }
-    }, 3000);
+    }, 10000);
 }
 
 function stopNodeSyncMonitoring() {
-    if (nodeSyncCheckInterval) {
-        clearInterval(nodeSyncCheckInterval);
-        nodeSyncCheckInterval = null;
-    }
+    stopInterval('nodeSync');
 }
 
 // Start local node manually
@@ -9868,6 +10644,9 @@ function showExplorerTab(tabName, updateUrl = true) {
 function initExplorerPage() {
     // Check for URL route (set by serve.py)
     const route = window.EXPLORER_ROUTE;
+
+    // Start auto-refresh for explorer
+    startExplorerRefresh();
 
     // Check connection first
     if (!explorerConnected) {
@@ -11842,14 +12621,16 @@ function filterExplorerContracts() {
 }
 
 // Auto-refresh explorer data when page is active
-setInterval(() => {
-    const explorerPage = document.getElementById('page-explorer');
-    if (explorerPage?.classList.contains('active') && Date.now() - explorerData.lastUpdate > 30000) {
-        if (currentExplorerTab === 'overview') {
-            loadExplorerOverview();
+function startExplorerRefresh() {
+    startInterval('explorerRefresh', () => {
+        const explorerPage = document.getElementById('page-explorer');
+        if (explorerPage?.classList.contains('active') && Date.now() - explorerData.lastUpdate > 30000) {
+            if (currentExplorerTab === 'overview') {
+                loadExplorerOverview();
+            }
         }
-    }
-}, 30000);
+    }, 30000);
+}
 
 // ============================================
 // P2P MARKETPLACE COMMUNICATION
@@ -11978,3 +12759,1315 @@ window.addEventListener('message', async (event) => {
 });
 
 console.log('P2P communication handler initialized');
+
+// =========================================
+// AIRDROP PAGE - Voucher-based token distribution
+// =========================================
+
+const AIRDROP_CID = '8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c349b5b18e';
+
+// Local storage for generated codes (never sent to blockchain)
+const AIRDROP_STORAGE_KEY = 'beam_airdrop_codes';
+
+function getAirdropCodes() {
+    try {
+        return JSON.parse(localStorage.getItem(AIRDROP_STORAGE_KEY) || '{}');
+    } catch { return {}; }
+}
+
+function saveAirdropCodes(codes) {
+    localStorage.setItem(AIRDROP_STORAGE_KEY, JSON.stringify(codes));
+}
+
+// Generate random voucher code: XXXX-XXXX-XXXX-XXXX
+function generateVoucherCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I,O,0,1 to avoid confusion
+    let code = '';
+    for (let i = 0; i < 16; i++) {
+        if (i > 0 && i % 4 === 0) code += '-';
+        code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+}
+
+// SHA-256 hash of voucher code (returns hex string)
+async function hashVoucherCode(code) {
+    const normalized = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const data = new TextEncoder().encode(normalized);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Get asset info for display
+function getAirdropAssetInfo(assetId) {
+    const id = parseInt(assetId);
+    return ASSET_CONFIG[id] || { name: `Asset #${id}`, symbol: `CA${id}`, color: '#64748b', icon: null, decimals: 8 };
+}
+
+// Render asset icon HTML
+function renderAssetIcon(assetId, size = 32) {
+    const info = getAirdropAssetInfo(assetId);
+    if (info.icon) {
+        return `<img src="${info.icon}" alt="${info.symbol}" style="width:${size}px;height:${size}px;border-radius:50%;">`;
+    }
+    const initials = (info.symbol || '??').substring(0, 2);
+    return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${info.color || '#64748b'};display:flex;align-items:center;justify-content:center;font-size:${size*0.4}px;font-weight:600;color:#fff;">${initials}</div>`;
+}
+
+// Load airdrop contract stats
+async function loadAirdropStats() {
+    if (!AIRDROP_CID) return;
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=manager,action=view_stats,cid=${AIRDROP_CID}`,
+            create_tx: false
+        });
+        const output = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+        const stats = output.stats || {};
+        const el = (id) => document.getElementById(id);
+        if (el('airdrop-stat-batches')) el('airdrop-stat-batches').textContent = stats.total_batches || 0;
+        if (el('airdrop-stat-vouchers')) el('airdrop-stat-vouchers').textContent = stats.total_vouchers || 0;
+        if (el('airdrop-stat-claimed')) el('airdrop-stat-claimed').textContent = stats.total_redeemed || 0;
+        if (el('airdrop-stat-available')) el('airdrop-stat-available').textContent = stats.available_vouchers || 0;
+    } catch (e) {
+        console.log('Failed to load airdrop stats:', e);
+    }
+}
+
+// =========================================
+// AIRDROP ASSET SELECTOR
+// =========================================
+
+// Build a rich asset option HTML
+function buildAssetOptionHtml(aid, info, size = 22) {
+    const iconHtml = info.icon
+        ? `<img src="${info.icon}" alt="${info.symbol}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;">`
+        : `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${info.color || '#64748b'};display:flex;align-items:center;justify-content:center;font-size:${size*0.4}px;font-weight:600;color:#fff;">${(info.symbol || '??').substring(0, 2)}</div>`;
+    return `${iconHtml}<span class="asset-opt-name">${info.symbol}</span><span class="asset-opt-aid">aid:${aid}</span>`;
+}
+
+// Initialize the custom asset dropdown from ASSET_CONFIG
+function initAirdropAssetSelector() {
+    const dropdown = document.getElementById('asset-selector-dropdown');
+    const hidden = document.getElementById('airdrop-asset-select');
+    const preview = document.getElementById('asset-selector-preview');
+    if (!dropdown || !hidden) return;
+
+    dropdown.innerHTML = '';
+
+    // Sorted: BEAM first, FOMO second, then rest by aid
+    const aids = Object.keys(ASSET_CONFIG).map(Number).sort((a, b) => {
+        if (a === 0) return -1;
+        if (b === 0) return 1;
+        if (a === 174) return -1;
+        if (b === 174) return 1;
+        return a - b;
+    });
+
+    aids.forEach(aid => {
+        const info = ASSET_CONFIG[aid];
+        const opt = document.createElement('div');
+        opt.className = 'asset-selector-option' + (aid === parseInt(hidden.value) ? ' selected' : '');
+        opt.dataset.aid = aid;
+        opt.innerHTML = buildAssetOptionHtml(aid, info);
+        opt.onclick = () => selectAirdropAsset(aid);
+        dropdown.appendChild(opt);
+    });
+
+    // Also add a "Custom Asset ID" option at the bottom
+    const customOpt = document.createElement('div');
+    customOpt.className = 'asset-selector-option asset-custom-option';
+    customOpt.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span class="asset-opt-name">Custom Asset ID</span>
+        <span class="asset-opt-aid">enter manually</span>
+    `;
+    customOpt.onclick = () => promptCustomAssetId();
+    dropdown.appendChild(customOpt);
+
+    // Set initial preview
+    updateAssetSelectorPreview();
+}
+
+// Select an asset in the dropdown
+function selectAirdropAsset(aid) {
+    const hidden = document.getElementById('airdrop-asset-select');
+    hidden.value = aid;
+    updateAssetSelectorPreview();
+    closeAirdropAssetDropdown();
+    // Trigger change event for summary update
+    hidden.dispatchEvent(new Event('change'));
+    // Update balance display
+    updateAirdropAssetBalance();
+}
+
+// Prompt for custom asset ID
+function promptCustomAssetId() {
+    closeAirdropAssetDropdown();
+    const aidStr = prompt('Enter Asset ID (number):');
+    if (aidStr === null) return;
+    const aid = parseInt(aidStr);
+    if (isNaN(aid) || aid < 0) {
+        showToast('Invalid Asset ID', 'error');
+        return;
+    }
+    // Add to ASSET_CONFIG if not present
+    if (!ASSET_CONFIG[aid]) {
+        ASSET_CONFIG[aid] = { name: `Asset #${aid}`, symbol: `CA${aid}`, color: `hsl(${(aid * 137) % 360}, 50%, 50%)`, icon: null, decimals: 8 };
+    }
+    selectAirdropAsset(aid);
+    // Re-init to add the new option
+    initAirdropAssetSelector();
+}
+
+// Update the selected preview display
+function updateAssetSelectorPreview() {
+    const hidden = document.getElementById('airdrop-asset-select');
+    const preview = document.getElementById('asset-selector-preview');
+    if (!hidden || !preview) return;
+    const aid = parseInt(hidden.value);
+    const info = ASSET_CONFIG[aid] || { name: `Asset #${aid}`, symbol: `CA${aid}`, color: '#64748b', icon: null };
+    preview.innerHTML = buildAssetOptionHtml(aid, info, 20);
+    // Update selected state in dropdown
+    document.querySelectorAll('.asset-selector-option').forEach(opt => {
+        opt.classList.toggle('selected', parseInt(opt.dataset.aid) === aid);
+    });
+}
+
+// Toggle dropdown
+function toggleAirdropAssetDropdown() {
+    const dropdown = document.getElementById('asset-selector-dropdown');
+    const selector = document.getElementById('airdrop-asset-selector');
+    if (!dropdown) return;
+    const isOpen = dropdown.classList.contains('open');
+    if (isOpen) {
+        closeAirdropAssetDropdown();
+    } else {
+        dropdown.classList.add('open');
+        selector.classList.add('open');
+        // Close on outside click
+        setTimeout(() => {
+            document.addEventListener('click', _closeAssetDropdownOutside, { once: true });
+        }, 0);
+    }
+}
+
+function closeAirdropAssetDropdown() {
+    const dropdown = document.getElementById('asset-selector-dropdown');
+    const selector = document.getElementById('airdrop-asset-selector');
+    if (dropdown) dropdown.classList.remove('open');
+    if (selector) selector.classList.remove('open');
+}
+
+function _closeAssetDropdownOutside(e) {
+    const selector = document.getElementById('airdrop-asset-selector');
+    if (selector && !selector.contains(e.target)) {
+        closeAirdropAssetDropdown();
+    } else {
+        // Re-attach if click was inside
+        setTimeout(() => {
+            document.addEventListener('click', _closeAssetDropdownOutside, { once: true });
+        }, 0);
+    }
+}
+
+// Check if current wallet is the airdrop contract owner
+async function checkAirdropOwner() {
+    const adminSection = document.getElementById('airdrop-admin-section');
+    if (!adminSection || !AIRDROP_CID) return;
+
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=manager,action=view,cid=${AIRDROP_CID}`,
+            create_tx: false
+        });
+        const output = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+        const settings = output.settings || output;
+        if (settings.is_owner === 1) {
+            adminSection.style.display = 'block';
+            loadAirdropFees();
+        } else {
+            adminSection.style.display = 'none';
+        }
+    } catch (e) {
+        console.log('Failed to check airdrop owner:', e);
+        adminSection.style.display = 'none';
+    }
+}
+
+// Load fee balances for admin panel
+async function loadAirdropFees() {
+    const listEl = document.getElementById('admin-fees-list');
+    if (!listEl || !AIRDROP_CID) return;
+
+    listEl.innerHTML = '<div class="airdrop-tx-empty">Loading fees...</div>';
+
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=manager,action=view_fees,cid=${AIRDROP_CID}`,
+            create_tx: false
+        });
+        const output = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+        const fees = output.fees || [];
+
+        if (fees.length === 0) {
+            listEl.innerHTML = '<div class="admin-no-fees">No fees collected yet. Fees accumulate when vouchers are redeemed (1% of batch value).</div>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        fees.forEach(fee => {
+            const info = getAirdropAssetInfo(fee.asset_id);
+            const available = fee.available || 0;
+            const accumulated = fee.accumulated || 0;
+            const withdrawn = fee.withdrawn || 0;
+
+            const card = document.createElement('div');
+            card.className = 'admin-fee-card';
+            card.innerHTML = `
+                <div class="admin-fee-info">
+                    <div class="admin-fee-asset">
+                        ${renderAssetIcon(fee.asset_id, 24)}
+                        <span>${info.symbol}</span>
+                    </div>
+                    <div class="admin-fee-amounts">
+                        <span>Accumulated: ${formatAmount(accumulated)} ${info.symbol}</span>
+                        <span>Withdrawn: ${formatAmount(withdrawn)} ${info.symbol}</span>
+                    </div>
+                    <div class="admin-fee-available">Available: ${formatAmount(available)} ${info.symbol}</div>
+                </div>
+                ${available > 0 ? `<button class="btn-withdraw-fee" onclick="withdrawAirdropFee(${fee.asset_id}, ${available})">Withdraw All</button>` : ''}
+            `;
+            listEl.appendChild(card);
+        });
+    } catch (e) {
+        listEl.innerHTML = `<div class="airdrop-tx-empty">Error loading fees: ${e.message}</div>`;
+    }
+}
+
+// Withdraw accumulated fees (admin only)
+async function withdrawAirdropFee(assetId, amount) {
+    const info = getAirdropAssetInfo(assetId);
+    if (!confirm(`Withdraw ${formatAmount(amount)} ${info.symbol} in fees?`)) return;
+
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=manager,action=withdraw_fees,cid=${AIRDROP_CID},asset_id=${assetId},amount=${amount}`,
+            create_tx: true
+        });
+
+        if (result.raw_data) {
+            await apiCall('process_invoke_data', { data: result.raw_data });
+        }
+
+        showToast(`Withdrawn ${formatAmount(amount)} ${info.symbol} in fees`, 'success');
+        setTimeout(() => { loadAirdropFees(); loadAirdropStats(); loadAirdropTransactions(); }, 1000);
+    } catch (e) {
+        showToast(e.message || 'Failed to withdraw fees', 'error');
+    }
+}
+
+// Initialize airdrop page
+function initAirdropPage() {
+    if (!AIRDROP_CID) {
+        document.getElementById('page-airdrop').innerHTML = `
+            <div class="airdrop-container">
+                <div class="airdrop-not-deployed">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" width="48" height="48">
+                        <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/>
+                        <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/>
+                        <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+                    </svg>
+                    <h3>Airdrop Contract Not Deployed</h3>
+                    <p>The airdrop smart contract hasn't been deployed yet. Deploy it using a local node, then set the contract ID in the configuration.</p>
+                    <p style="color:var(--text-muted);font-size:0.85rem;">See contracts/airdrop/ for the contract source code and deployment instructions.</p>
+                </div>
+            </div>`;
+        return;
+    }
+
+    // Load stats
+    loadAirdropStats();
+
+    // Check if user is admin (show admin panel if owner)
+    checkAirdropOwner();
+
+    // Show contract address
+    const contractEl = document.getElementById('airdrop-contract-address');
+    if (contractEl && AIRDROP_CID) {
+        contractEl.textContent = AIRDROP_CID.substring(0, 12) + '...' + AIRDROP_CID.substring(AIRDROP_CID.length - 12);
+        contractEl.dataset.full = AIRDROP_CID;
+    }
+
+    // Populate asset selector from ASSET_CONFIG
+    initAirdropAssetSelector();
+
+    // Load balance for initially selected asset
+    updateAirdropAssetBalance();
+
+    // Set up voucher code input listener with auto-formatting
+    const input = document.getElementById('voucher-code-input');
+    if (input) {
+        let debounceTimer;
+        input.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            // Auto-format: insert dashes every 4 chars
+            let raw = input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+            if (raw.length > 16) raw = raw.substring(0, 16);
+            let formatted = '';
+            for (let i = 0; i < raw.length; i++) {
+                if (i > 0 && i % 4 === 0) formatted += '-';
+                formatted += raw[i];
+            }
+            if (formatted !== input.value) {
+                input.value = formatted;
+            }
+
+            const code = input.value.trim();
+            if (code.replace(/-/g, '').length >= 8) {
+                debounceTimer = setTimeout(() => checkVoucher(code), 500);
+            } else {
+                document.getElementById('voucher-result').style.display = 'none';
+                document.getElementById('claim-status').textContent = '';
+            }
+        });
+    }
+
+    // Set up create form listeners
+    const valueInput = document.getElementById('airdrop-value');
+    const countInput = document.getElementById('airdrop-count');
+    const assetSelect = document.getElementById('airdrop-asset-select');
+    if (valueInput && countInput) {
+        const updateSummary = () => {
+            const val = parseFloat(valueInput.value) || 0;
+            const cnt = parseInt(countInput.value) || 0;
+            const total = val * cnt;
+            const fee = total > 0 ? Math.max(total / 100, 1 / GROTH) : 0; // 1% fee, min 1 groth
+            const totalWithFee = total + fee;
+            const assetId = parseInt(assetSelect.value);
+            const info = getAirdropAssetInfo(assetId);
+            const fmt = (v) => v > 0 ? v.toFixed(8).replace(/\.?0+$/, '') : '0';
+            document.getElementById('total-cost').textContent = fmt(total);
+            document.getElementById('total-cost-symbol').textContent = info.symbol;
+            document.getElementById('total-fee').textContent = fmt(fee);
+            document.getElementById('total-fee-symbol').textContent = info.symbol;
+            document.getElementById('total-with-fee').textContent = fmt(totalWithFee);
+            document.getElementById('total-with-fee-symbol').textContent = info.symbol;
+        };
+        valueInput.addEventListener('input', updateSummary);
+        countInput.addEventListener('input', updateSummary);
+        assetSelect.addEventListener('change', updateSummary);
+    }
+
+    // Load my batches
+    loadMyBatches();
+
+    // Load airdrop transactions and auto-refresh
+    loadAirdropTransactions();
+    if (window._airdropTxInterval) clearInterval(window._airdropTxInterval);
+    window._airdropTxInterval = setInterval(loadAirdropTransactions, 10000);
+}
+
+// Switch between claim and manage tabs
+function showAirdropTab(tab) {
+    document.querySelectorAll('.airdrop-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.airdrop-tab-content').forEach(c => c.classList.remove('active'));
+
+    document.querySelector(`[data-airdrop-tab="${tab}"]`)?.classList.add('active');
+    document.getElementById(tab === 'claim' ? 'airdrop-claim' : 'airdrop-manage')?.classList.add('active');
+
+    if (tab === 'manage') {
+        loadMyBatches();
+        // Auto-check on-chain status to catch claimed/failed vouchers
+        loadSavedCodes(true);
+        updateAirdropAssetBalance();
+        // Refresh admin panel if visible
+        checkAirdropOwner();
+    }
+    // Refresh stats on tab switch
+    loadAirdropStats();
+}
+
+// Check voucher status (view only, no transaction)
+async function checkVoucher(code) {
+    const statusEl = document.getElementById('claim-status');
+    const resultEl = document.getElementById('voucher-result');
+
+    statusEl.textContent = 'Checking...';
+    statusEl.className = 'claim-status checking';
+
+    try {
+        const hash = await hashVoucherCode(code);
+
+        const result = await apiCall('invoke_contract', {
+            args: `role=user,action=check_voucher,cid=${AIRDROP_CID},hash=${hash}`,
+            create_tx: false
+        });
+
+        const output = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+
+        if (output.error) {
+            statusEl.textContent = 'Voucher not found';
+            statusEl.className = 'claim-status error';
+            resultEl.style.display = 'none';
+            return;
+        }
+
+        const voucher = output.voucher || output;
+        const assetId = voucher.asset_id || 0;
+        const value = voucher.value || 0;
+        const redeemed = voucher.redeemed || 0;
+        const info = getAirdropAssetInfo(assetId);
+
+        // Show result card
+        document.getElementById('voucher-asset-icon').innerHTML = renderAssetIcon(assetId, 40);
+        document.getElementById('voucher-asset-name').textContent = info.symbol;
+        document.getElementById('voucher-asset-id').textContent = `Asset #${assetId}`;
+        document.getElementById('voucher-value').textContent = `${formatAmount(value)} ${info.symbol}`;
+
+        const badge = document.getElementById('voucher-status-badge');
+        const claimBtn = document.getElementById('btn-claim-voucher');
+
+        if (redeemed) {
+            badge.textContent = 'Claimed';
+            badge.className = 'voucher-status-badge claimed';
+            claimBtn.style.display = 'none';
+            statusEl.textContent = 'This voucher has already been claimed';
+            statusEl.className = 'claim-status error';
+        } else {
+            badge.textContent = 'Available';
+            badge.className = 'voucher-status-badge available';
+            claimBtn.style.display = 'block';
+            claimBtn.dataset.code = code;
+            statusEl.textContent = 'Voucher found! Click Claim to receive tokens.';
+            statusEl.className = 'claim-status success';
+        }
+
+        resultEl.style.display = 'block';
+    } catch (e) {
+        statusEl.textContent = e.message || 'Error checking voucher';
+        statusEl.className = 'claim-status error';
+        resultEl.style.display = 'none';
+    }
+}
+
+// Claim voucher (creates transaction)
+// SECURITY: Sends the original code (preimage) to the contract, NOT the hash.
+// The contract hashes it on-chain to derive the voucher key.
+// This prevents anyone who reads contract state (hashes) from redeeming.
+async function claimVoucher() {
+    const btn = document.getElementById('btn-claim-voucher');
+    const code = btn.dataset.code;
+    if (!code) return;
+
+    // Normalize: strip dashes and non-alphanumeric chars (BEAM args parser can't handle dashes in values)
+    const normalizedCode = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+    btn.disabled = true;
+    btn.textContent = 'Claiming...';
+
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=user,action=redeem,cid=${AIRDROP_CID},code=${normalizedCode}`,
+            create_tx: true
+        });
+
+        // Check for contract-level errors in shader output
+        if (result.output) {
+            try {
+                const output = JSON.parse(result.output);
+                if (output.error) throw new Error(output.error);
+            } catch (e) {
+                if (e.message && !e.message.includes('JSON')) throw e;
+            }
+        }
+
+        // Process transaction if needed
+        if (result.raw_data) {
+            await apiCall('process_invoke_data', { data: result.raw_data });
+        } else if (!result.txid || result.txid === '00000000000000000000000000000000') {
+            throw new Error('No transaction data returned');
+        }
+
+        showToast('Voucher claimed successfully!', 'success');
+        btn.textContent = 'Claimed!';
+        btn.style.display = 'none';
+
+        document.getElementById('voucher-status-badge').textContent = 'Claimed';
+        document.getElementById('voucher-status-badge').className = 'voucher-status-badge claimed';
+        document.getElementById('claim-status').textContent = 'Tokens are being sent to your wallet.';
+        document.getElementById('claim-status').className = 'claim-status success';
+
+        // Refresh transaction list and stats
+        setTimeout(() => { loadAirdropTransactions(); loadAirdropStats(); }, 1000);
+    } catch (e) {
+        showToast(e.message || 'Failed to claim voucher', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Claim Tokens';
+    }
+}
+
+// Create airdrop batch
+async function createAirdropBatch() {
+    const assetId = parseInt(document.getElementById('airdrop-asset-select').value);
+    const valueStr = document.getElementById('airdrop-value').value;
+    const count = parseInt(document.getElementById('airdrop-count').value);
+
+    if (!valueStr || parseFloat(valueStr) <= 0) {
+        showToast('Enter a valid value per voucher', 'error');
+        return;
+    }
+    if (!count || count < 1 || count > 100) {
+        showToast('Count must be 1-100', 'error');
+        return;
+    }
+
+    const valueGroth = Math.round(parseFloat(valueStr) * GROTH);
+    if (valueGroth <= 0) {
+        showToast('Value too small', 'error');
+        return;
+    }
+
+    // Check wallet balance for selected asset (including 1% fee)
+    const totalCostGroth = valueGroth * count;
+    const feeGroth = Math.max(Math.floor(totalCostGroth / 100), 1); // 1% fee, min 1 groth
+    const totalWithFeeGroth = totalCostGroth + feeGroth;
+    try {
+        const status = await apiCall('wallet_status', {});
+        if (status && status.totals) {
+            const assetTotal = status.totals.find(t => t.asset_id === assetId);
+            const available = assetTotal ? (assetTotal.available || 0) : 0;
+            if (available < totalWithFeeGroth) {
+                const info = getAirdropAssetInfo(assetId);
+                showToast(`Insufficient balance. Need ${formatAmount(totalWithFeeGroth)} ${info.symbol} (incl. 1% fee), have ${formatAmount(available)} ${info.symbol}`, 'error');
+                return;
+            }
+        }
+    } catch (e) {
+        // Proceed anyway if balance check fails - contract will reject
+    }
+
+    const btn = document.getElementById('btn-create-batch');
+    const progressEl = document.getElementById('create-progress');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+
+    btn.disabled = true;
+    progressEl.style.display = 'block';
+    progressText.textContent = 'Generating codes...';
+    progressFill.style.width = '10%';
+
+    try {
+        // Generate codes and compute hashes
+        const codes = [];
+        const entries = [];
+
+        for (let i = 0; i < count; i++) {
+            const code = generateVoucherCode();
+            const hash = await hashVoucherCode(code);
+            codes.push({ code, hash, value: valueGroth });
+
+            // Build VoucherEntry: 32 bytes hash + 8 bytes value (little-endian)
+            entries.push(hash);
+            // Convert value to 8-byte little-endian hex
+            let valHex = '';
+            let val = valueGroth;
+            for (let j = 0; j < 8; j++) {
+                valHex += (val & 0xff).toString(16).padStart(2, '0');
+                val = Math.floor(val / 256);
+            }
+            entries.push(valHex);
+        }
+
+        progressText.textContent = 'Creating batch on blockchain...';
+        progressFill.style.width = '30%';
+
+        // Concatenate all hash+value entries into one hex blob
+        const vouchersHex = entries.join('');
+
+        const result = await apiCall('invoke_contract', {
+            args: `role=user,action=create_batch,cid=${AIRDROP_CID},asset_id=${assetId},count=${count},vouchers=${vouchersHex}`,
+            create_tx: true,
+        });
+
+        progressFill.style.width = '50%';
+        progressText.textContent = 'Signing transaction...';
+
+        let txid = result?.txid || null;
+        if (result.raw_data) {
+            const txResult = await apiCall('process_invoke_data', { data: result.raw_data });
+            txid = txResult?.txid || txid;
+        }
+
+        progressFill.style.width = '70%';
+        progressText.textContent = 'Transaction submitted, waiting for confirmation...';
+
+        // Save codes to localStorage with PENDING status and txid
+        const stored = getAirdropCodes();
+        const batchKey = `batch_${Date.now()}`;
+        stored[batchKey] = {
+            assetId,
+            valuePerVoucher: valueGroth,
+            count,
+            createdAt: new Date().toISOString(),
+            txid: txid || null,
+            txStatus: 'pending',
+            codes: codes.map(c => ({ code: c.code, hash: c.hash, value: c.value, status: 'pending' }))
+        };
+        saveAirdropCodes(stored);
+
+        // Display codes immediately (with pending status)
+        displayGeneratedCodes(stored[batchKey]);
+        loadSavedCodes(false);
+
+        // Scroll to the generated codes section
+        setTimeout(() => {
+            const section = document.getElementById('airdrop-codes-section');
+            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 300);
+
+        // Now poll for tx confirmation (check every 5s, up to 2 minutes)
+        if (txid) {
+            let confirmed = false;
+            for (let attempt = 0; attempt < 24; attempt++) {
+                await new Promise(r => setTimeout(r, 5000));
+                try {
+                    const txList = await apiCall('tx_list', { filter: { status: 0 } });
+                    // Also check completed
+                    const allTx = await apiCall('tx_list', { count: 20 });
+                    const tx = (allTx || []).find(t => t.txId === txid);
+                    if (tx) {
+                        if (tx.status === 3) { // Completed
+                            confirmed = true;
+                            progressFill.style.width = '100%';
+                            progressText.textContent = 'Batch confirmed on blockchain!';
+                            // Update batch status to confirmed
+                            const s = getAirdropCodes();
+                            if (s[batchKey]) {
+                                s[batchKey].txStatus = 'confirmed';
+                                s[batchKey].codes.forEach(c => { if (c.status === 'pending') c.status = 'available'; });
+                                saveAirdropCodes(s);
+                            }
+                            showToast(`Batch confirmed! ${count} voucher codes ready.`, 'success');
+                            break;
+                        } else if (tx.status === 4 || tx.status === 2) { // Failed or Cancelled
+                            progressFill.style.width = '100%';
+                            progressFill.style.background = 'var(--error)';
+                            progressText.textContent = 'Transaction FAILED - vouchers not created on blockchain';
+                            // Update batch status to failed
+                            const s = getAirdropCodes();
+                            if (s[batchKey]) {
+                                s[batchKey].txStatus = 'failed';
+                                s[batchKey].codes.forEach(c => c.status = 'failed');
+                                saveAirdropCodes(s);
+                            }
+                            showToast('Batch transaction failed! Codes are invalid.', 'error');
+                            break;
+                        }
+                        // Still in progress, update progress
+                        const pct = 70 + Math.min(attempt * 1.2, 25);
+                        progressFill.style.width = pct + '%';
+                        progressText.textContent = `Waiting for confirmation (${attempt * 5}s)...`;
+                    }
+                } catch (e) {
+                    // Ignore polling errors
+                }
+            }
+            if (!confirmed) {
+                // Timeout - still pending
+                const s = getAirdropCodes();
+                if (s[batchKey] && s[batchKey].txStatus === 'pending') {
+                    progressText.textContent = 'Still pending. Use Refresh to check status later.';
+                }
+            }
+        } else {
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Batch submitted (check status with Refresh)';
+        }
+
+        // Refresh everything
+        loadSavedCodes(false);
+        loadMyBatches();
+        loadAirdropTransactions();
+        loadAirdropStats();
+    } catch (e) {
+        showToast(e.message || 'Failed to create batch', 'error');
+        progressText.textContent = 'Failed';
+    } finally {
+        btn.disabled = false;
+        setTimeout(() => { progressEl.style.display = 'none'; }, 5000);
+    }
+}
+
+// Display generated codes in table
+function displayGeneratedCodes(batch) {
+    const section = document.getElementById('airdrop-codes-section');
+    const tbody = document.getElementById('codes-table-body');
+    const info = getAirdropAssetInfo(batch.assetId);
+    const txStatus = batch.txStatus || 'unknown';
+
+    section.style.display = 'block';
+    tbody.innerHTML = '';
+
+    // Show up to CODES_PER_PAGE in immediate table, rest in "My Voucher Codes"
+    const showCount = Math.min(batch.codes.length, CODES_PER_PAGE);
+    for (let i = 0; i < showCount; i++) {
+        const c = batch.codes[i];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td class="code-cell">
+                <span class="code-text">${c.code}</span>
+                <button class="btn-copy-code" onclick="copyCode('${c.code}', this)" title="Copy">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                    </svg>
+                </button>
+            </td>
+            <td>${formatAmount(c.value)} ${info.symbol}</td>
+            <td>${renderCodeStatusBadge(c.status, txStatus)}</td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    // Show note if more codes exist
+    if (batch.codes.length > showCount) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="4" style="text-align:center;color:var(--text-muted);font-size:0.82rem;padding:10px;">
+            ...and ${batch.codes.length - showCount} more codes. See all in "My Voucher Codes" below.
+        </td>`;
+        tbody.appendChild(tr);
+    }
+}
+
+// Copy airdrop contract ID
+function copyAirdropContract() {
+    if (!AIRDROP_CID) return;
+    navigator.clipboard.writeText(AIRDROP_CID).then(() => {
+        const btn = document.getElementById('btn-copy-contract');
+        if (btn) {
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" width="14" height="14"><path d="M20 6L9 17l-5-5"/></svg>';
+            setTimeout(() => {
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+            }, 1500);
+        }
+        showToast('Contract ID copied', 'success');
+    });
+}
+
+// Update selected asset balance display
+async function updateAirdropAssetBalance() {
+    const balanceEl = document.getElementById('airdrop-asset-balance');
+    if (!balanceEl) return;
+
+    const aid = parseInt(document.getElementById('airdrop-asset-select')?.value || 0);
+    const info = getAirdropAssetInfo(aid);
+
+    // Check wallet assets for balance
+    try {
+        const status = await apiCall('wallet_status', {});
+        let balance = 0;
+        if (status && status.totals) {
+            const assetTotal = status.totals.find(t => t.asset_id === aid);
+            if (assetTotal) {
+                balance = assetTotal.available || 0;
+            }
+        }
+        const formatted = formatAmount(balance);
+        balanceEl.textContent = `${formatted} ${info.symbol}`;
+        balanceEl.classList.toggle('balance-low', balance === 0);
+    } catch (e) {
+        balanceEl.textContent = `-- ${info.symbol}`;
+    }
+}
+
+// Copy single code
+function copyCode(code, btn) {
+    navigator.clipboard.writeText(code).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" width="14" height="14"><path d="M20 6L9 17l-5-5"/></svg>';
+        setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    });
+}
+
+// Copy all codes
+function copyAllCodes() {
+    const stored = getAirdropCodes();
+    const keys = Object.keys(stored).sort().reverse();
+    if (keys.length === 0) return;
+
+    const batch = stored[keys[0]];
+    const info = getAirdropAssetInfo(batch.assetId);
+    const text = batch.codes.map((c, i) =>
+        `${i + 1}. ${c.code} - ${formatAmount(c.value)} ${info.symbol}`
+    ).join('\n');
+
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('All codes copied to clipboard', 'success');
+    });
+}
+
+// Export codes as CSV
+function exportCodesCSV() {
+    const stored = getAirdropCodes();
+    const keys = Object.keys(stored).sort().reverse();
+    if (keys.length === 0) return;
+
+    const batch = stored[keys[0]];
+    const info = getAirdropAssetInfo(batch.assetId);
+    let csv = 'Number,Code,Value,Asset,Status\n';
+    batch.codes.forEach((c, i) => {
+        csv += `${i + 1},${c.code},${formatAmount(c.value)},${info.symbol},${c.status}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `airdrop_codes_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Load my batches from blockchain
+async function loadMyBatches() {
+    if (!AIRDROP_CID) return;
+
+    const listEl = document.getElementById('my-batches-list');
+
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=user,action=view_my_batches,cid=${AIRDROP_CID}`,
+            create_tx: false
+        });
+
+        const output = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+        const batches = output.batches || [];
+
+        if (batches.length === 0) {
+            listEl.innerHTML = '<div class="empty-state">No batches yet. Create one above!</div>';
+            return;
+        }
+
+        // Also load locally stored codes for matching
+        const stored = getAirdropCodes();
+
+        listEl.innerHTML = '';
+        batches.forEach(batch => {
+            const info = getAirdropAssetInfo(batch.asset_id);
+            const remaining = batch.total_count - batch.redeemed_count;
+
+            const card = document.createElement('div');
+            card.className = 'batch-card';
+            card.innerHTML = `
+                <div class="batch-header">
+                    <div class="batch-asset">
+                        ${renderAssetIcon(batch.asset_id, 28)}
+                        <span>${info.symbol}</span>
+                    </div>
+                    <div class="batch-id">Batch #${batch.id}</div>
+                </div>
+                <div class="batch-stats">
+                    <div class="batch-stat">
+                        <span class="stat-label">Value each</span>
+                        <span class="stat-value">${formatAmount(batch.value_per_voucher)} ${info.symbol}</span>
+                    </div>
+                    <div class="batch-stat">
+                        <span class="stat-label">Total / Claimed</span>
+                        <span class="stat-value">${batch.redeemed_count} / ${batch.total_count}</span>
+                    </div>
+                    <div class="batch-stat">
+                        <span class="stat-label">Remaining</span>
+                        <span class="stat-value">${remaining}</span>
+                    </div>
+                </div>
+                ${remaining > 0 ? `<button class="btn-cancel-batch" onclick="cancelAirdropBatch(${batch.id})">Cancel & Reclaim</button>` : ''}
+            `;
+            listEl.appendChild(card);
+        });
+    } catch (e) {
+        listEl.innerHTML = `<div class="empty-state">Error loading batches: ${e.message}</div>`;
+    }
+}
+
+// Track how many codes are shown per batch (for Load More pagination)
+const _airdropCodesVisible = {};
+const CODES_PER_PAGE = 10;
+
+// Load saved voucher codes from localStorage and display with on-chain status
+async function loadSavedCodes(checkOnChain = false) {
+    const listEl = document.getElementById('saved-codes-list');
+    if (!listEl) return;
+
+    const stored = getAirdropCodes();
+    const batchKeys = Object.keys(stored).sort().reverse();
+
+    if (batchKeys.length === 0) {
+        listEl.innerHTML = '<div class="airdrop-tx-empty">No saved codes. Create a batch to generate voucher codes.</div>';
+        return;
+    }
+
+    // If checking on-chain, update all statuses first
+    if (checkOnChain && AIRDROP_CID) {
+        const keysToRemove = [];
+        for (const key of batchKeys) {
+            const batch = stored[key];
+            if (!batch.codes) continue;
+            for (const c of batch.codes) {
+                try {
+                    const result = await apiCall('invoke_contract', {
+                        args: `role=user,action=check_voucher,cid=${AIRDROP_CID},hash=${c.hash}`,
+                        create_tx: false
+                    });
+                    const output = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+                    if (output.error) {
+                        c.status = 'not found';
+                    } else if (output.voucher && output.voucher.redeemed) {
+                        c.status = 'claimed';
+                    } else {
+                        c.status = 'available';
+                    }
+                } catch (e) { /* keep existing */ }
+            }
+            // If all codes found on-chain, mark batch as confirmed
+            if (batch.txStatus === 'pending') {
+                const hasAvailable = batch.codes.some(c => c.status === 'available' || c.status === 'claimed');
+                const allNotFound = batch.codes.every(c => c.status === 'not found');
+                if (hasAvailable) {
+                    batch.txStatus = 'confirmed';
+                } else if (allNotFound) {
+                    // Codes not found on-chain — but check if the tx actually failed
+                    // or is still in-progress before marking batch as failed
+                    let txActuallyFailed = false;
+                    if (batch.txid) {
+                        try {
+                            const txList = await apiCall('tx_list', { count: 50 });
+                            const tx = (txList || []).find(t => t.txId === batch.txid);
+                            if (tx && (tx.status === 4 || tx.status === 2)) {
+                                // tx status 4 = Failed, 2 = Cancelled
+                                txActuallyFailed = true;
+                            }
+                            // If tx is still in-progress (status 0 or 1) or completed (3),
+                            // don't mark as failed — codes may appear shortly
+                        } catch (e) { /* ignore tx check errors */ }
+                    }
+                    if (txActuallyFailed) {
+                        batch.txStatus = 'failed';
+                    }
+                    // Otherwise stay 'pending' — tx is still processing
+                }
+            }
+            // Remove batches where ALL codes are NOT FOUND (stale from old contract)
+            // Only remove if batch is NOT pending and was created more than 10 minutes ago
+            const allNotFound2 = batch.codes.every(c => c.status === 'not found');
+            const batchAge = Date.now() - (batch.createdAt || 0);
+            const isOldEnough = batchAge > 10 * 60 * 1000; // 10 minutes
+            if (allNotFound2 && batch.txStatus !== 'pending' && isOldEnough) {
+                keysToRemove.push(key);
+            }
+        }
+        // Delete stale batches
+        if (keysToRemove.length > 0) {
+            keysToRemove.forEach(k => delete stored[k]);
+            console.log(`Removed ${keysToRemove.length} stale batch(es) with all NOT FOUND codes`);
+        }
+        saveAirdropCodes(stored);
+        // Update batchKeys after removal
+        batchKeys.length = 0;
+        batchKeys.push(...Object.keys(stored).sort().reverse());
+    }
+
+    listEl.innerHTML = '';
+
+    for (const key of batchKeys) {
+        const batch = stored[key];
+        if (!batch.codes || batch.codes.length === 0) continue;
+
+        const info = getAirdropAssetInfo(batch.assetId);
+        const created = batch.createdAt ? new Date(batch.createdAt).toLocaleDateString() : '';
+        const txStatus = batch.txStatus || 'unknown';
+
+        // Batch container
+        const batchDiv = document.createElement('div');
+        batchDiv.className = 'saved-batch-group';
+        if (txStatus === 'failed') batchDiv.classList.add('batch-failed');
+
+        // Batch status badge
+        let statusHtml = '';
+        if (txStatus === 'pending') {
+            statusHtml = '<span class="batch-status-badge batch-status-pending">Pending</span>';
+        } else if (txStatus === 'confirmed') {
+            statusHtml = '<span class="batch-status-badge batch-status-confirmed">Confirmed</span>';
+        } else if (txStatus === 'failed') {
+            statusHtml = '<span class="batch-status-badge batch-status-failed">Failed</span>';
+        }
+
+        // Count available/claimed
+        const availCount = batch.codes.filter(c => c.status === 'available').length;
+        const claimedCount = batch.codes.filter(c => c.status === 'claimed').length;
+
+        // Batch header
+        const header = document.createElement('div');
+        header.className = 'saved-batch-header';
+        header.innerHTML = `
+            <div class="saved-batch-title">
+                ${renderAssetIcon(batch.assetId, 22)}
+                <span>${batch.codes.length} codes &middot; ${formatAmount(batch.valuePerVoucher)} ${info.symbol} each</span>
+                ${statusHtml}
+            </div>
+            <div class="saved-batch-meta">
+                ${created}
+                ${txStatus === 'confirmed' ? `<span style="margin-left:8px;color:var(--text-muted);font-size:0.75rem;">${availCount} available, ${claimedCount} claimed</span>` : ''}
+            </div>
+        `;
+        batchDiv.appendChild(header);
+
+        // Failed batch warning
+        if (txStatus === 'failed') {
+            const warn = document.createElement('div');
+            warn.className = 'batch-failed-warning';
+            warn.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" width="16" height="16">
+                    <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+                Transaction failed. These codes were NOT deployed to the blockchain and cannot be redeemed.
+            `;
+            batchDiv.appendChild(warn);
+        }
+
+        // Action buttons (only for confirmed or unknown batches)
+        if (txStatus !== 'failed') {
+            const actions = document.createElement('div');
+            actions.className = 'saved-batch-actions';
+            actions.innerHTML = `
+                <button class="btn-action-codes" onclick="copySavedBatchCodes('${key}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                    </svg>
+                    Copy All
+                </button>
+                <button class="btn-action-codes btn-export" onclick="exportSavedBatchCSV('${key}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Download CSV
+                </button>
+            `;
+            batchDiv.appendChild(actions);
+        }
+
+        // Code rows with pagination (show CODES_PER_PAGE, then "Load more")
+        const visibleCount = _airdropCodesVisible[key] || CODES_PER_PAGE;
+        const codesContainer = document.createElement('div');
+        codesContainer.className = 'saved-codes-container';
+        codesContainer.id = `codes-container-${key}`;
+
+        const showCount = Math.min(visibleCount, batch.codes.length);
+        for (let i = 0; i < showCount; i++) {
+            const c = batch.codes[i];
+            const statusBadge = renderCodeStatusBadge(c.status, txStatus);
+            const row = document.createElement('div');
+            row.className = 'saved-code-row' + (txStatus === 'failed' ? ' code-failed' : '');
+            row.innerHTML = `
+                <span class="saved-code-num">${i + 1}</span>
+                <span class="saved-code-text">${c.code}</span>
+                <button class="btn-copy-code" onclick="copyCode('${c.code}', this)" title="Copy code">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                    </svg>
+                </button>
+                ${statusBadge}
+            `;
+            codesContainer.appendChild(row);
+        }
+
+        batchDiv.appendChild(codesContainer);
+
+        // "Load more" button if there are more codes
+        if (batch.codes.length > showCount) {
+            const remaining = batch.codes.length - showCount;
+            const loadMoreBtn = document.createElement('button');
+            loadMoreBtn.className = 'btn-load-more-codes';
+            loadMoreBtn.textContent = `Show ${Math.min(remaining, CODES_PER_PAGE)} more (${remaining} remaining)`;
+            loadMoreBtn.onclick = () => {
+                _airdropCodesVisible[key] = (visibleCount || CODES_PER_PAGE) + CODES_PER_PAGE;
+                loadSavedCodes(false);
+            };
+            batchDiv.appendChild(loadMoreBtn);
+        }
+
+        listEl.appendChild(batchDiv);
+    }
+}
+
+// Render status badge for a code
+function renderCodeStatusBadge(status, batchTxStatus) {
+    if (batchTxStatus === 'failed') {
+        return '<span class="voucher-status-badge failed">Failed</span>';
+    }
+    if (batchTxStatus === 'pending' || status === 'pending') {
+        return '<span class="voucher-status-badge pending">Pending</span>';
+    }
+    if (status === 'claimed') {
+        return '<span class="voucher-status-badge claimed">Claimed</span>';
+    }
+    if (status === 'not found') {
+        return '<span class="voucher-status-badge failed">Not Found</span>';
+    }
+    if (status === 'available') {
+        return '<span class="voucher-status-badge available">Available</span>';
+    }
+    return `<span class="voucher-status-badge">${status || 'Unknown'}</span>`;
+}
+
+// Refresh on-chain status for all saved codes
+async function refreshSavedCodesStatus() {
+    const btn = document.getElementById('btn-refresh-codes');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="spin-icon"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Checking...';
+    }
+    await loadSavedCodes(true);
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Refresh';
+    }
+    showToast('Voucher statuses updated', 'success');
+}
+
+// Copy all codes from a saved batch
+function copySavedBatchCodes(batchKey) {
+    const stored = getAirdropCodes();
+    const batch = stored[batchKey];
+    if (!batch) return;
+    const info = getAirdropAssetInfo(batch.assetId);
+    const text = batch.codes.map((c, i) =>
+        `${i + 1}. ${c.code} - ${formatAmount(c.value)} ${info.symbol} [${c.status || 'unknown'}]`
+    ).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('All codes copied to clipboard', 'success');
+    });
+}
+
+// Export saved batch codes as CSV
+function exportSavedBatchCSV(batchKey) {
+    const stored = getAirdropCodes();
+    const batch = stored[batchKey];
+    if (!batch) return;
+    const info = getAirdropAssetInfo(batch.assetId);
+    let csv = 'Number,Code,Value,Asset,Status\n';
+    batch.codes.forEach((c, i) => {
+        csv += `${i + 1},${c.code},${formatAmount(c.value)},${info.symbol},${c.status || 'unknown'}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `airdrop_codes_${batchKey}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Load airdrop-related transactions
+async function loadAirdropTransactions() {
+    const listEl = document.getElementById('airdrop-tx-list');
+    if (!listEl) return;
+
+    try {
+        const result = await apiCall('tx_list', { count: 50 });
+        const txs = result || [];
+
+        // Filter transactions related to airdrop contract
+        const airdropTxs = txs.filter(tx => {
+            if (tx.tx_type !== 12) return false; // Only contract transactions
+            const invokeData = tx.invoke_data || [];
+            return invokeData.some(d => d.contract_id === AIRDROP_CID);
+        });
+
+        if (airdropTxs.length === 0) {
+            listEl.innerHTML = '<div class="airdrop-tx-empty">No airdrop transactions yet</div>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        airdropTxs.slice(0, 10).forEach(tx => {
+            const status = tx.status;
+            const statusText = tx.status_string || 'unknown';
+            const comment = tx.comment || 'Contract call';
+            const fee = tx.fee ? (tx.fee / 100000000).toFixed(4) : '0';
+            const time = tx.create_time ? new Date(tx.create_time * 1000).toLocaleString() : '';
+            const txId = tx.txId || '';
+
+            // Determine status class and icon
+            let statusCls, statusIcon;
+            if (status === 3) { // completed
+                statusCls = 'tx-success';
+                statusIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M20 6L9 17l-5-5"/></svg>';
+            } else if (status === 4) { // failed
+                statusCls = 'tx-failed';
+                statusIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>';
+            } else if (status === 2) { // cancelled
+                statusCls = 'tx-cancelled';
+                statusIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>';
+            } else { // in progress (0, 1, 5)
+                statusCls = 'tx-pending';
+                statusIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+            }
+
+            // Get amounts from invoke_data
+            let amountInfo = '';
+            const invokeData = tx.invoke_data || [];
+            invokeData.forEach(d => {
+                (d.amounts || []).forEach(a => {
+                    const info = getAirdropAssetInfo(a.asset_id);
+                    amountInfo += `${formatAmount(a.amount)} ${info.symbol} `;
+                });
+            });
+
+            const row = document.createElement('div');
+            row.className = `airdrop-tx-row ${statusCls}`;
+            row.innerHTML = `
+                <div class="airdrop-tx-icon">${statusIcon}</div>
+                <div class="airdrop-tx-info">
+                    <div class="airdrop-tx-comment">${comment}</div>
+                    <div class="airdrop-tx-meta">${time}${amountInfo ? ' &middot; ' + amountInfo.trim() : ''}</div>
+                </div>
+                <div class="airdrop-tx-status">
+                    <span class="airdrop-tx-badge ${statusCls}">${statusText}</span>
+                    <span class="airdrop-tx-fee">Fee: ${fee} BEAM</span>
+                </div>
+            `;
+            listEl.appendChild(row);
+        });
+    } catch (e) {
+        listEl.innerHTML = '<div class="airdrop-tx-empty">Failed to load transactions</div>';
+    }
+}
+
+// Cancel batch and reclaim unclaimed vouchers
+async function cancelAirdropBatch(batchId) {
+    if (!confirm('Cancel this batch? All unclaimed vouchers will be reclaimed to your wallet.')) return;
+
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=user,action=cancel_batch,cid=${AIRDROP_CID},batch_id=${batchId}`,
+            create_tx: true
+        });
+
+        if (result.raw_data) {
+            await apiCall('process_invoke_data', { data: result.raw_data });
+        }
+
+        showToast('Batch cancelled. Unclaimed tokens returned to your wallet.', 'success');
+        loadMyBatches();
+        setTimeout(() => { loadAirdropTransactions(); loadAirdropStats(); }, 1000);
+    } catch (e) {
+        showToast(e.message || 'Failed to cancel batch', 'error');
+    }
+}
