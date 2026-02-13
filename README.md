@@ -26,24 +26,32 @@
 
 ## Quick Install
 
-### 🍎 macOS / 🐧 Linux
+### 🍎 macOS
 
 ```bash
 git clone https://github.com/vsnation/Beam-Light-Wallet.git
 cd Beam-Light-Wallet
-./install.sh
+./start-macos.sh
 ```
 
-**To run again later:** Just run `./install.sh` again - it skips downloads if binaries exist.
+Or download DMG from [Releases](https://github.com/vsnation/Beam-Light-Wallet/releases).
 
-Or download DMG from [Releases](https://github.com/vsnation/Beam-Light-Wallet/releases) (macOS).
+### 🐧 Linux
+
+```bash
+git clone https://github.com/vsnation/Beam-Light-Wallet.git
+cd Beam-Light-Wallet
+./start-linux.sh
+```
+
+**To run again later:** Just run `./start-linux.sh` again - it skips downloads if binaries exist.
 
 ### 🪟 Windows
 
 ```powershell
 git clone https://github.com/vsnation/Beam-Light-Wallet.git
 cd Beam-Light-Wallet
-.\build\windows\install.bat
+.\build\windows\start.bat
 ```
 
 Or download from [Releases](https://github.com/vsnation/Beam-Light-Wallet/releases).
@@ -152,7 +160,10 @@ http://127.0.0.1:9080
 ```
 Beam-Light-Wallet/
 ├── serve.py                # Main HTTP server
-├── install.sh              # Cross-platform installer
+├── start.sh                # Cross-platform launcher
+├── start-macos.sh          # macOS launcher
+├── start-linux.sh          # Linux launcher
+├── start-windows.sh        # Windows launcher (WSL/Git Bash)
 ├── src/                    # Web interface
 │   ├── index.html          # Main application
 │   ├── css/                # Stylesheets
@@ -495,11 +506,12 @@ DEX requires local node with shader support. Public nodes don't support DEX oper
 ### What's New in v1.0.5
 
 - **Airdrop System** - Create and share redeemable voucher codes for any token
-- **Fuddle Game** - On-chain Wordle with BEAM/FOMO/BEAMX tournament prizes
+- **Fuddle Game** - On-chain Wordle with BEAM/FOMO/BEAMX tournament prizes (updated contract with RNG fix)
 - **Built-in Explorer** - Browse blocks, assets, contracts, DEX trades
 - **P2P Marketplace** - Escrow-protected fiat-to-crypto trading with trust scores
 - **Improved Dashboard** - Better balance breakdown and asset display
 - **New App Store Page** - Quick access to DEX, P2P, Airdrop, Explorer, Fuddle
+- **Renamed Launchers** - Platform-specific start scripts (start-macos.sh, start-linux.sh, start-windows.sh)
 
 ### Previous: v1.0.3
 

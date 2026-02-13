@@ -28,21 +28,28 @@ WALLET_API_URL = "http://127.0.0.1:10000/api/wallet"
 WALLET_API_PORT = 10000
 BASE_DIR = Path(__file__).parent.absolute()
 
-# Detect if running inside macOS .app bundle
-# If so, use ~/Library/Application Support/BEAM Light Wallet for writable data
-_IN_APP_BUNDLE = ".app/Contents" in str(BASE_DIR)
-if _IN_APP_BUNDLE:
-    _DATA_DIR = Path.home() / "Library" / "Application Support" / "BEAM Light Wallet"
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
-    WALLETS_DIR = _DATA_DIR / "wallets"
-    BINARIES_DIR = _DATA_DIR / "binaries"
-    LOGS_DIR = _DATA_DIR / "logs"
-    NODE_DATA_DIR = _DATA_DIR / "node_data"
-else:
-    WALLETS_DIR = BASE_DIR / "wallets"
-    BINARIES_DIR = BASE_DIR / "binaries"
-    LOGS_DIR = BASE_DIR / "logs"
-    NODE_DATA_DIR = BASE_DIR / "node_data"
+# All private data (binaries, wallets, logs, node_data) stored in ~/.beam-light-wallet
+# This keeps user data in a consistent location regardless of how the app was installed
+DATA_DIR = Path.home() / ".beam-light-wallet"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Migrate from old locations if they exist
+_old_app_support = Path.home() / "Library" / "Application Support" / "BEAM Light Wallet"
+_old_home_dir = Path.home() / "BEAM-LightWallet"
+for _old_dir in [_old_app_support, _old_home_dir]:
+    if _old_dir.exists() and _old_dir != DATA_DIR:
+        for _subdir in ["wallets", "binaries", "logs", "node_data"]:
+            _old_sub = _old_dir / _subdir
+            _new_sub = DATA_DIR / _subdir
+            if _old_sub.exists() and not _old_sub.is_symlink() and not _new_sub.exists():
+                import shutil
+                print(f"Migrating {_old_sub} -> {_new_sub}")
+                shutil.copytree(str(_old_sub), str(_new_sub))
+
+WALLETS_DIR = DATA_DIR / "wallets"
+BINARIES_DIR = DATA_DIR / "binaries"
+LOGS_DIR = DATA_DIR / "logs"
+NODE_DATA_DIR = DATA_DIR / "node_data"
 
 # Detect platform
 import platform
@@ -75,7 +82,7 @@ AIRDROP_CONTRACT_ID = "8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c34
 
 # Fuddle Contract - On-chain Wordle game
 # Set after deployment (placeholder until deployed)
-FUDDLE_CONTRACT_ID = "8605eaf746a798ccb45000da28e270a408cad6ce012f49b06eb305eee067a40f"
+FUDDLE_CONTRACT_ID = "28c52aef751ebe40d611660414dc355db7de4ae76bcc1dab5952537010735808"
 
 # Load DEX shader bytes for contract calls
 DEX_SHADER = None
@@ -148,8 +155,12 @@ wallet_api_process = None
 beam_beam_node_process = None
 active_wallet = None
 
-# State files directory (must be writable - use data dir for .app bundles)
-STATE_DIR = _DATA_DIR if _IN_APP_BUNDLE else BASE_DIR
+# Server-side password storage (in-memory only, never persisted to disk)
+active_password = None
+active_owner_key = None
+
+# State files directory (writable data dir)
+STATE_DIR = DATA_DIR
 
 # Load saved node_mode or default to "public"
 node_mode_file = STATE_DIR / ".node_mode"
@@ -565,6 +576,36 @@ def switch_to_local_node(password, wallet_name=None):
         print(f"[switch_to_local_node] === SUCCESS: Switched to local node! ===")
     else:
         print(f"[switch_to_local_node] === FAILED: {result} ===")
+
+    return result
+
+
+def fast_switch_node(mode, node_addr=None):
+    """Fast node switch — just restart wallet-api with different node address.
+    Local node must already be running for 'local' mode.
+    Uses stored password so no client password needed."""
+    global node_mode, active_password
+
+    # Save wallet name before start_wallet_api clears it via stop_wallet_api
+    wallet_name = active_wallet
+    if not wallet_name:
+        return {"error": "No active wallet"}
+    if not active_password:
+        return {"error": "No stored password. Re-unlock wallet."}
+
+    if mode == "local":
+        if not is_node_running():
+            return {"error": "Local node is not running"}
+        target_node = LOCAL_NODE_ADDR
+    else:
+        target_node = node_addr or DEFAULT_NODE
+
+    # Just restart wallet-api with new node address
+    result = start_wallet_api(wallet_name, active_password, target_node)
+
+    if result.get("success"):
+        node_mode = mode
+        (STATE_DIR / ".node_mode").write_text(mode)
 
     return result
 
@@ -1110,8 +1151,8 @@ window.APP_ROUTE = {json.dumps(app_route)};
             install_type = "git"
         elif "/Applications/" in str(BASE_DIR) or ".app/Contents" in str(BASE_DIR):
             install_type = "dmg"
-        elif (BASE_DIR / "install.sh").exists():
-            install_type = "git"  # install.sh script method
+        elif (BASE_DIR / "start.sh").exists():
+            install_type = "git"  # start.sh script method
 
         self.send_json({
             "status": "ok",
@@ -1214,31 +1255,30 @@ window.APP_ROUTE = {json.dumps(app_route)};
     def handle_node_switch(self):
         """Switch between public and local node"""
         try:
+            global active_password
             body = self.get_json_body()
             mode = body.get("mode", "public")
-            password = body.get("password")
-            wallet_name = body.get("wallet")  # Optional wallet name for initial switch
-            node_addr = body.get("node")  # Optional specific node address
+            password = body.get("password") or active_password
+            wallet_name = body.get("wallet")
+            node_addr = body.get("node")
 
             if not password:
-                self.send_json({"error": "Password required to switch node"}, 400)
+                self.send_json({"error": "No password available. Re-unlock wallet."}, 400)
                 return
 
-            if mode == "local":
-                result = switch_to_local_node(password, wallet_name)
+            # Store password if provided by client
+            if body.get("password"):
+                active_password = body["password"]
+
+            if mode == "local" and is_node_running():
+                # Fast path: local node already running, just restart wallet-api
+                result = fast_switch_node("local")
+            elif mode == "public":
+                # Fast path: just restart wallet-api with public node
+                result = fast_switch_node("public", node_addr)
             else:
-                # Switch to public node (use specific address or default)
-                global node_mode
-                target_wallet = wallet_name or active_wallet
-                if target_wallet:
-                    target_node = node_addr if node_addr and not node_addr.startswith("127.") else DEFAULT_NODE
-                    result = start_wallet_api(target_wallet, password, target_node)
-                    if result.get("success"):
-                        node_mode = "public"
-                        (STATE_DIR / ".node_mode").write_text("public")
-                        result["node"] = target_node
-                else:
-                    result = {"error": "No wallet specified and no active wallet"}
+                # Fallback: full switch (start node from scratch)
+                result = switch_to_local_node(password, wallet_name)
 
             self.send_json(result, 200 if result.get("success") else 400)
         except Exception as e:
@@ -1252,7 +1292,7 @@ window.APP_ROUTE = {json.dumps(app_route)};
 
     def handle_unlock(self):
         try:
-            global node_mode
+            global node_mode, active_password, active_owner_key
             body = self.get_json_body()
             wallet_name = body.get("wallet")
             password = body.get("password")
@@ -1270,11 +1310,15 @@ window.APP_ROUTE = {json.dumps(app_route)};
             if node_mode == "local" and not node_addr:
                 print(f"[handle_unlock] Local mode detected, using switch_to_local_node...")
                 result = switch_to_local_node(password, wallet_name)
+                if result.get("success"):
+                    active_password = password
                 status = 401 if "password" in result.get("error", "").lower() else (200 if "success" in result else 500)
                 self.send_json(result, status)
                 return
 
             result = start_wallet_api(wallet_name, password, node_addr)
+            if result.get("success"):
+                active_password = password
             status = 401 if "password" in result.get("error", "").lower() else (200 if "success" in result else 500)
             self.send_json(result, status)
 
@@ -1282,7 +1326,11 @@ window.APP_ROUTE = {json.dumps(app_route)};
             self.send_json({"error": str(e)}, 500)
 
     def handle_lock(self):
+        global active_password, active_owner_key
         stop_wallet_api()
+        stop_beam_node()
+        active_password = None
+        active_owner_key = None
         self.send_json({"success": True, "message": "Wallet locked"})
 
     def handle_create(self):
@@ -1430,6 +1478,7 @@ window.APP_ROUTE = {json.dumps(app_route)};
 
     def handle_export_owner_key(self):
         try:
+            global active_password, active_owner_key
             body = self.get_json_body()
             wallet_name = body.get("wallet")
             password = body.get("password")
@@ -1442,6 +1491,9 @@ window.APP_ROUTE = {json.dumps(app_route)};
                 return
 
             result = export_owner_key(wallet_name, password)
+            if result.get("success"):
+                active_password = password
+                active_owner_key = result.get("owner_key")
             self.send_json(result, 200 if "success" in result else 400)
 
         except Exception as e:
@@ -2181,8 +2233,10 @@ window.APP_ROUTE = {json.dumps(app_route)};
 def main():
     os.chdir(str(BASE_DIR))
 
-    WALLETS_DIR.mkdir(exist_ok=True)
-    LOGS_DIR.mkdir(exist_ok=True)
+    WALLETS_DIR.mkdir(parents=True, exist_ok=True)
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    NODE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (BINARIES_DIR / PLATFORM).mkdir(parents=True, exist_ok=True)
 
     running = is_wallet_api_running()
     state_file = STATE_DIR / ".active_wallet"
@@ -2195,6 +2249,7 @@ def main():
 ║  Web UI:      http://127.0.0.1:{PORT}/                              ║
 ║  API Proxy:   http://127.0.0.1:{PORT}/api/wallet                    ║
 ╠══════════════════════════════════════════════════════════════════╣
+║  Data dir:    {str(DATA_DIR):<40} ║
 ║  Wallet API:  {"RUNNING" if running else "STOPPED":<10}                                    ║
 ║  Active:      {wallet_name:<15}                                ║
 ║  Wallets:     {', '.join(list_wallets()) or 'none':<30}      ║

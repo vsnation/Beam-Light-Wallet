@@ -7,8 +7,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/.../install-ubuntu.sh | bash
-#   or
-#   wget -qO- https://raw.githubusercontent.com/.../install-ubuntu.sh | bash
+#   or: ./start-linux.sh (from cloned repo)
 #
 # ============================================================================
 
@@ -23,9 +22,19 @@ NC='\033[0m' # No Color
 
 # Configuration
 BEAM_VERSION="7.5.13882"
-INSTALL_DIR="$HOME/Beam-Light-Wallet"
 PORT=9080
+REPO_URL="https://github.com/vsnation/Beam-Light-Wallet"
 GITHUB_BASE="https://github.com/BeamMW/beam/releases/download/beam-${BEAM_VERSION}"
+
+# Private data stored in ~/.beam-light-wallet
+DATA_DIR="$HOME/.beam-light-wallet"
+BINARIES_DIR="$DATA_DIR/binaries/linux"
+WALLETS_DIR="$DATA_DIR/wallets"
+LOGS_DIR="$DATA_DIR/logs"
+NODE_DATA_DIR="$DATA_DIR/node_data"
+
+# App code directory
+INSTALL_DIR="$HOME/BEAM-LightWallet"
 
 echo -e "${CYAN}"
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -75,36 +84,51 @@ fi
 echo -e "${GREEN}✓ All dependencies satisfied${NC}"
 echo "  Python: $(python3 --version)"
 
-# Create install directory
+# Create directories
 echo ""
-echo -e "${CYAN}Installing to: ${NC}$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR"
-cd "$INSTALL_DIR"
+echo -e "${CYAN}App code:  ${NC}$INSTALL_DIR"
+echo -e "${CYAN}Data dir:  ${NC}$DATA_DIR"
+mkdir -p "$INSTALL_DIR" "$BINARIES_DIR" "$WALLETS_DIR" "$LOGS_DIR" "$NODE_DATA_DIR"
 
-# Create directory structure
-mkdir -p binaries/linux wallets logs src/css src/js
+# Migrate from old location if exists
+OLD_INSTALL="$HOME/Beam-Light-Wallet"
+if [ -d "$OLD_INSTALL" ] && [ "$OLD_INSTALL" != "$INSTALL_DIR" ]; then
+    for subdir in wallets binaries logs node_data; do
+        OLD_SUB="$OLD_INSTALL/$subdir"
+        NEW_SUB="$DATA_DIR/$subdir"
+        if [ -d "$OLD_SUB" ] && [ ! -L "$OLD_SUB" ]; then
+            echo -e "${YELLOW}Migrating $OLD_SUB -> $NEW_SUB${NC}"
+            cp -r "$OLD_SUB"/* "$NEW_SUB/" 2>/dev/null || true
+        fi
+    done
+fi
 
 # Download wallet source files
 echo ""
 echo -e "${CYAN}Downloading wallet files...${NC}"
+cd "$INSTALL_DIR"
 
 # Check if we're running from local source
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/../serve.py" ]; then
+if [ -f "$SCRIPT_DIR/../../serve.py" ]; then
     echo "  Installing from local source..."
-    cp "$SCRIPT_DIR/../serve.py" "$INSTALL_DIR/"
-    cp -r "$SCRIPT_DIR/../src/"* "$INSTALL_DIR/src/" 2>/dev/null || true
-else
+    cp -r "$SCRIPT_DIR/../../"* "$INSTALL_DIR/" 2>/dev/null || true
+elif [ ! -f "$INSTALL_DIR/serve.py" ]; then
     echo "  Downloading from repository..."
-    # Download serve.py and frontend files
-    # TODO: Replace with actual GitHub raw URLs when published
-    echo -e "${YELLOW}  Note: Download URLs need to be configured for your repository${NC}"
+    if command -v git &> /dev/null; then
+        git clone --depth 1 "$REPO_URL.git" "$INSTALL_DIR" 2>/dev/null || {
+            cd "$INSTALL_DIR"
+            git pull 2>/dev/null || true
+        }
+    else
+        curl -sL "$REPO_URL/archive/main.tar.gz" | tar -xz --strip-components=1 -C "$INSTALL_DIR"
+    fi
 fi
 
-# Download BEAM binaries
+# Download BEAM binaries to ~/.beam-light-wallet/binaries/linux/
 echo ""
 echo -e "${CYAN}Downloading BEAM binaries v${BEAM_VERSION}...${NC}"
-cd "$INSTALL_DIR/binaries/linux"
+cd "$BINARIES_DIR"
 
 # wallet-api
 if [ ! -f "wallet-api" ]; then
@@ -160,8 +184,7 @@ if curl -s "http://127.0.0.1:$PORT/api/status" > /dev/null 2>&1; then
 fi
 
 # Start server in background
-mkdir -p logs
-nohup python3 serve.py $PORT > logs/serve.log 2>&1 &
+nohup python3 serve.py $PORT > "$HOME/.beam-light-wallet/logs/serve.log" 2>&1 &
 disown
 
 # Wait for server
@@ -204,8 +227,8 @@ EOF
 # Use bundled icon (included in package)
 echo ""
 echo -e "${CYAN}Setting up desktop shortcut...${NC}"
-if [ -f "$SCRIPT_DIR/../icon.png" ]; then
-    cp "$SCRIPT_DIR/../icon.png" "$INSTALL_DIR/icon.png"
+if [ -f "$SCRIPT_DIR/../../icon.png" ]; then
+    cp "$SCRIPT_DIR/../../icon.png" "$INSTALL_DIR/icon.png"
     echo -e "  ${GREEN}✓ Icon installed${NC}"
 elif [ -f "icon.png" ]; then
     echo -e "  ${GREEN}✓ Icon already present${NC}"
@@ -252,7 +275,8 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║              Installation Complete!                          ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "Install location: ${CYAN}$INSTALL_DIR${NC}"
+echo -e "App code:     ${CYAN}$INSTALL_DIR${NC}"
+echo -e "Private data: ${CYAN}$DATA_DIR${NC}"
 echo ""
 echo -e "${YELLOW}To start the wallet:${NC}"
 echo "  cd $INSTALL_DIR"

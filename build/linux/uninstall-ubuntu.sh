@@ -9,7 +9,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-INSTALL_DIR="$HOME/Beam-Light-Wallet"
+INSTALL_DIR="$HOME/BEAM-LightWallet"
+DATA_DIR="$HOME/.beam-light-wallet"
 
 echo -e "${YELLOW}"
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -26,11 +27,23 @@ echo "Checking installed components..."
 FOUND=0
 
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "  ${GREEN}✓${NC} Installation directory: $INSTALL_DIR"
-    if [ -d "$INSTALL_DIR/wallets" ]; then
-        WALLET_COUNT=$(ls -1 "$INSTALL_DIR/wallets" 2>/dev/null | wc -l)
+    echo -e "  ${GREEN}✓${NC} App directory: $INSTALL_DIR"
+    FOUND=1
+fi
+
+if [ -d "$DATA_DIR" ]; then
+    echo -e "  ${GREEN}✓${NC} Data directory: $DATA_DIR"
+    if [ -d "$DATA_DIR/wallets" ]; then
+        WALLET_COUNT=$(ls -1 "$DATA_DIR/wallets" 2>/dev/null | wc -l)
         echo -e "    ${YELLOW}⚠ Found $WALLET_COUNT wallet(s)${NC}"
     fi
+    FOUND=1
+fi
+
+# Also check old locations
+OLD_INSTALL="$HOME/Beam-Light-Wallet"
+if [ -d "$OLD_INSTALL" ]; then
+    echo -e "  ${GREEN}✓${NC} Old install directory: $OLD_INSTALL"
     FOUND=1
 fi
 
@@ -84,7 +97,7 @@ if [ -f "$HOME/.local/share/applications/beam-lightwallet.desktop" ]; then
 fi
 
 # Backup wallets before removing (optional)
-if [ -d "$INSTALL_DIR/wallets" ] && [ "$(ls -A $INSTALL_DIR/wallets 2>/dev/null)" ]; then
+if [ -d "$DATA_DIR/wallets" ] && [ "$(ls -A $DATA_DIR/wallets 2>/dev/null)" ]; then
     echo ""
     echo -e "${YELLOW}You have wallet data that will be permanently deleted.${NC}"
     read -p "Create backup of wallets before removing? [Y/n] " -n 1 -r
@@ -93,16 +106,30 @@ if [ -d "$INSTALL_DIR/wallets" ] && [ "$(ls -A $INSTALL_DIR/wallets 2>/dev/null)
     if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
         BACKUP_DIR="$HOME/BEAM-Wallet-Backup-$(date +%Y%m%d-%H%M%S)"
         mkdir -p "$BACKUP_DIR"
-        cp -r "$INSTALL_DIR/wallets" "$BACKUP_DIR/"
+        cp -r "$DATA_DIR/wallets" "$BACKUP_DIR/"
         echo -e "  ${GREEN}✓${NC} Wallets backed up to: $BACKUP_DIR"
     fi
 fi
 
-# Remove installation directory
+# Remove data directory
+if [ -d "$DATA_DIR" ]; then
+    echo "Removing data directory ($DATA_DIR)..."
+    rm -rf "$DATA_DIR"
+    echo -e "  ${GREEN}✓${NC} Data directory removed"
+fi
+
+# Remove app directory
 if [ -d "$INSTALL_DIR" ]; then
-    echo "Removing installation directory..."
+    echo "Removing app directory ($INSTALL_DIR)..."
     rm -rf "$INSTALL_DIR"
-    echo -e "  ${GREEN}✓${NC} Installation directory removed"
+    echo -e "  ${GREEN}✓${NC} App directory removed"
+fi
+
+# Remove old install directory if exists
+if [ -d "$OLD_INSTALL" ]; then
+    echo "Removing old directory ($OLD_INSTALL)..."
+    rm -rf "$OLD_INSTALL"
+    echo -e "  ${GREEN}✓${NC} Old directory removed"
 fi
 
 echo ""

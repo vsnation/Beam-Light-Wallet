@@ -394,7 +394,7 @@ async function showUpdateModal(version, url) {
                 <div class="modal-body">
                     <div class="info-section">
                         <h4>🔄 Automatic Update (Git Installation)</h4>
-                        <p>If you installed via <code>./install.sh</code> or git clone:</p>
+                        <p>If you installed via <code>./start.sh</code> or git clone:</p>
                         <button onclick="performAutoUpdate('${version}')" class="quick-btn quick-btn-primary" style="width: 100%; margin-top: 12px;">
                             Update Automatically
                         </button>
@@ -2773,11 +2773,10 @@ async function selectNodeType(type, triggerChange = false) {
         localBtn.disabled = true;
 
         try {
-            // Check if local node is already running and synced
+            // Check if local node is already running (fast switch — no full restart needed)
             if (type === 'local') {
                 const serverStatus = await checkServerStatus();
-                if (serverStatus?.node_running && serverStatus?.node_synced) {
-                    // Local node is ready - switch without password
+                if (serverStatus?.node_running) {
                     await switchNodeWithoutPassword(newValue, 'local');
                     return;
                 }
@@ -2818,6 +2817,12 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
             document.getElementById('settings-node').textContent = nodeAddr;
             document.getElementById('settings-node-type').textContent = mode === 'local' ? 'Local' : 'Public';
             showToastAdvanced('Node Switched', `Now connected to ${nodeAddr}`, 'success');
+            // Hide sync banner when on local node, show when switching to public
+            if (mode === 'local') {
+                updateNodeSyncBanner(false);
+            } else {
+                startNodeSyncChecker();
+            }
             setTimeout(() => loadWalletData(), 1000);
         } else {
             throw new Error(result.error || 'Failed to switch node');
@@ -2868,6 +2873,13 @@ async function changeNode() {
             document.getElementById('settings-node-type').textContent = isLocal ? 'Local' : 'Public';
 
             showToastAdvanced('Node Switched', `Now connected to ${newNode}`, 'success');
+
+            // Hide sync banner when on local node, show when switching to public
+            if (isLocal) {
+                updateNodeSyncBanner(false);
+            } else {
+                startNodeSyncChecker();
+            }
 
             // Refresh wallet status
             setTimeout(() => loadWalletData(), 1000);
@@ -4155,6 +4167,9 @@ async function lockWallet() {
             storedWalletPassword = null;
             sessionStorage.removeItem('walletPassword');
 
+            // Hide node sync banner
+            updateNodeSyncBanner(false);
+
             // Clear wallet data from UI
             walletStatus = null;
             walletAddresses = [];
@@ -4300,32 +4315,87 @@ async function startBackgroundNodeSync() {
     }
 }
 
+function updateNodeSyncBanner(show, progress, synced, label) {
+    const banner = document.getElementById('node-sync-banner');
+    if (!banner) return;
+
+    if (!show) {
+        banner.style.display = 'none';
+        banner.classList.remove('synced');
+        return;
+    }
+
+    banner.style.display = 'block';
+    const pctEl = document.getElementById('node-sync-banner-pct');
+    const fillEl = document.getElementById('node-sync-banner-fill');
+    const labelEl = document.getElementById('node-sync-banner-label');
+
+    if (synced) {
+        banner.classList.add('synced');
+        if (pctEl) pctEl.textContent = '100%';
+        if (fillEl) fillEl.style.width = '100%';
+        if (labelEl) labelEl.textContent = label || 'Local node synced — switching...';
+    } else {
+        banner.classList.remove('synced');
+        const pct = progress || 0;
+        if (pctEl) pctEl.textContent = pct + '%';
+        if (fillEl) fillEl.style.width = pct + '%';
+        if (labelEl) labelEl.textContent = label || 'Local node syncing...';
+    }
+}
+
 function startNodeSyncChecker() {
     stopInterval('bgSyncChecker');
 
-    // Check every 60 seconds
-    startInterval('bgSyncChecker', async () => {
+    // Show banner immediately if on public node
+    if (currentNodeType === 'public') {
+        updateNodeSyncBanner(true, 0, false, 'Local node syncing...');
+    }
+
+    // Do an immediate check, then every 60 seconds
+    const doCheck = async () => {
         try {
             const res = await fetch('/api/node/status');
             const status = await res.json();
 
             if (status.running && status.synced) {
                 console.log('Local node synced! Switching...');
-                stopInterval('bgSyncChecker');
 
-                // Seamlessly switch to local node
-                await seamlessSwitchToLocalNode();
+                if (currentNodeType !== 'local') {
+                    updateNodeSyncBanner(true, 100, true, 'Local node synced — switching...');
+                    stopInterval('bgSyncChecker');
+                    await seamlessSwitchToLocalNode();
+                } else {
+                    updateNodeSyncBanner(false);
+                    stopInterval('bgSyncChecker');
+                }
             } else if (status.running) {
-                console.log(`Local node sync progress: ${status.progress}%`);
+                const pct = status.progress || 0;
+                console.log(`Local node sync progress: ${pct}%`);
+                if (currentNodeType !== 'local') {
+                    updateNodeSyncBanner(true, pct, false);
+                }
+            } else {
+                // Node not running
+                if (currentNodeType !== 'local') {
+                    updateNodeSyncBanner(true, 0, false, 'Local node not running');
+                }
             }
         } catch (e) {
             console.log('Node status check failed:', e);
         }
-    }, 60000); // Check every minute
+    };
+
+    // Immediate check
+    doCheck();
+
+    // Then every 60 seconds
+    startInterval('bgSyncChecker', doCheck, 60000);
 }
 
 async function seamlessSwitchToLocalNode() {
-    if (!storedWalletPassword) {
+    const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+    if (!password) {
         console.log('No stored password, cannot switch');
         return;
     }
@@ -4334,26 +4404,39 @@ async function seamlessSwitchToLocalNode() {
         const response = await fetch('/api/node/switch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'local', password: storedWalletPassword, wallet: welcomeSelectedWallet })
+            body: JSON.stringify({ mode: 'local', password: password, wallet: welcomeSelectedWallet })
         });
 
         const result = await response.json();
 
         if (result.success) {
+            currentNodeType = 'local';
+            currentNode = '127.0.0.1:10005';
             showToastAdvanced('Local Node Active', 'Switched to local node for DEX support', 'success');
+
+            // Hide the sync banner
+            updateNodeSyncBanner(false);
 
             // Update UI if settings page is showing node info
             const nodeStatusEl = document.getElementById('settings-node-type');
             if (nodeStatusEl) nodeStatusEl.textContent = 'Local';
 
-            // Update node selector if visible
             const nodeSelector = document.getElementById('node-selector');
             if (nodeSelector) nodeSelector.value = '127.0.0.1:10005';
+
+            // Update node toggle buttons if on settings page
+            const publicBtn = document.getElementById('node-public-btn');
+            const localBtn = document.getElementById('node-local-btn');
+            if (publicBtn) { publicBtn.classList.remove('active'); publicBtn.disabled = false; }
+            if (localBtn) { localBtn.classList.add('active'); localBtn.disabled = true; }
 
             // Refresh DEX data
             if (typeof loadDexPools === 'function') {
                 setTimeout(loadDexPools, 2000);
             }
+
+            // Refresh wallet data to get updated balances from local node
+            setTimeout(() => loadWalletData(), 1000);
         }
     } catch (e) {
         console.log('Seamless switch failed:', e);
@@ -4418,26 +4501,46 @@ async function welcomeUnlock() {
         }
 
         // Step 3: Start beam-node with owner_key (non-blocking, for background sync)
+        let nodeStarted = false;
         if (ownerKey) {
             btn.innerHTML = '<div class="welcome-spinner"></div> Starting node...';
             try {
-                await fetch('/api/node/start', {
+                const nodeRes = await fetch('/api/node/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ owner_key: ownerKey, password: password })
                 });
+                const nodeResult = await nodeRes.json();
+                nodeStarted = !!nodeResult.success;
                 console.log('Local node started with owner key');
             } catch (e) {
                 console.log('Node start failed (will use public node):', e);
             }
         }
 
-        // Step 4: Start wallet-api on public node for immediate access
+        // Step 3.5: Check if local node is already synced — if so, connect to it
+        let unlockNode = 'eu-node01.mainnet.beam.mw:8100';
+        let unlockNodeType = 'public';
+        if (nodeStarted) {
+            try {
+                const syncRes = await fetch('/api/node/status');
+                const syncStatus = await syncRes.json();
+                if (syncStatus.running && syncStatus.synced) {
+                    unlockNode = '127.0.0.1:10005';
+                    unlockNodeType = 'local';
+                    console.log('Local node is synced — connecting directly');
+                }
+            } catch (e) {
+                console.log('Node status check failed, using public node:', e);
+            }
+        }
+
+        // Step 4: Start wallet-api (local node if synced, otherwise public)
         btn.innerHTML = '<div class="welcome-spinner"></div> Unlocking...';
         const unlockRes = await fetch('/api/wallet/unlock', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet: welcomeSelectedWallet, password: password, node: 'eu-node01.mainnet.beam.mw:8100' })
+            body: JSON.stringify({ wallet: welcomeSelectedWallet, password: password, node: unlockNode })
         });
         const unlockResult = await unlockRes.json();
 
@@ -4452,7 +4555,7 @@ async function welcomeUnlock() {
         }
 
         // Step 5: Load wallet data and render UI
-        currentNodeType = 'public';
+        currentNodeType = unlockNodeType;
         hideLockedOverlay();
         const connected = await loadWalletData();
         if (connected) {
@@ -5673,12 +5776,14 @@ async function renderTransactions(txs) {
         // Known contract IDs for specific detection
         const DEX_CONTRACT_ID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
         const AIRDROP_CONTRACT_ID = '8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c349b5b18e';
+        const FUDDLE_CONTRACT_V4 = '28c52aef751ebe40d611660414dc355db7de4ae76bcc1dab5952537010735808';
+        const FUDDLE_CONTRACT_V3 = 'c3f9c5c7511e8d4c249c397770bcb2b6b773fea19ad2714a88cb69cc79e7bef5';
         const FUDDLE_CONTRACT_V2 = '8605eaf746a798ccb45000da28e270a408cad6ce012f49b06eb305eee067a40f';
         const FUDDLE_CONTRACT_V1 = 'ea643c8d8d2515d5eebe90e4350ad0251bcb0dfa9c039427f2060de6dbbaf13e';
 
         const isDexContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === DEX_CONTRACT_ID);
         const isAirdropContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === AIRDROP_CONTRACT_ID);
-        const isFuddleContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === FUDDLE_CONTRACT_V2 || d.contract_id === FUDDLE_CONTRACT_V1);
+        const isFuddleContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === FUDDLE_CONTRACT_V4 || d.contract_id === FUDDLE_CONTRACT_V3 || d.contract_id === FUDDLE_CONTRACT_V2 || d.contract_id === FUDDLE_CONTRACT_V1);
 
         // Detect liquidity operations (DEX only)
         const isAddLiquidity = isDexContract && (commentLower.includes('add liquidity') || commentLower.includes('pool_add_liquidity') ||

@@ -1,6 +1,6 @@
 @echo off
 :: ============================================================================
-:: BEAM Light Wallet - Windows One-Click Installer
+:: BEAM Light Wallet - Windows Start
 :: ============================================================================
 :: Developed by @vsnation
 :: Donations: e17cc06481d9ae88e1e0181efee407fa8c36a861b9df723845eddc8fb1ba552048
@@ -10,7 +10,7 @@ setlocal EnableDelayedExpansion
 
 echo.
 echo ======================================================================
-echo           BEAM Light Wallet - Windows Installer
+echo           BEAM Light Wallet - Windows Setup
 echo                    Developed by @vsnation
 echo ======================================================================
 echo.
@@ -19,10 +19,23 @@ echo.
 
 :: Configuration
 set "BEAM_VERSION=7.5.13882"
-set "INSTALL_DIR=%USERPROFILE%\Beam-Light-Wallet"
 set "PORT=9080"
 set "GITHUB_BASE=https://github.com/BeamMW/beam/releases/download/beam-%BEAM_VERSION%"
 set "WALLET_REPO=https://github.com/vsnation/Beam-Light-Wallet/archive/refs/heads/main.zip"
+
+:: Private data stored in %USERPROFILE%\.beam-light-wallet
+set "DATA_DIR=%USERPROFILE%\.beam-light-wallet"
+set "BINARIES_DIR=%DATA_DIR%\binaries\windows"
+set "WALLETS_DIR=%DATA_DIR%\wallets"
+set "LOGS_DIR=%DATA_DIR%\logs"
+set "NODE_DATA_DIR=%DATA_DIR%\node_data"
+
+:: App code directory
+set "INSTALL_DIR=%USERPROFILE%\BEAM-LightWallet"
+
+echo App code:     %INSTALL_DIR%
+echo Private data: %DATA_DIR%
+echo.
 
 :: Check Python
 echo Checking Python...
@@ -55,17 +68,37 @@ if errorlevel 1 (
 )
 echo curl found: OK
 
-:: Create install directory
+:: Create directories
 echo.
-echo Installing to: %INSTALL_DIR%
+echo Creating directories...
+if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
+if not exist "%BINARIES_DIR%" mkdir "%BINARIES_DIR%"
+if not exist "%WALLETS_DIR%" mkdir "%WALLETS_DIR%"
+if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
+if not exist "%NODE_DATA_DIR%" mkdir "%NODE_DATA_DIR%"
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-cd /d "%INSTALL_DIR%"
+
+:: Migrate from old location if exists
+set "OLD_INSTALL=%USERPROFILE%\Beam-Light-Wallet"
+if exist "%OLD_INSTALL%\wallets" (
+    if not exist "%WALLETS_DIR%\*" (
+        echo Migrating wallets from old location...
+        xcopy /E /Y /Q "%OLD_INSTALL%\wallets\*" "%WALLETS_DIR%\" >nul 2>&1
+    )
+)
+if exist "%OLD_INSTALL%\binaries\windows" (
+    if not exist "%BINARIES_DIR%\wallet-api.exe" (
+        echo Migrating binaries from old location...
+        xcopy /E /Y /Q "%OLD_INSTALL%\binaries\windows\*" "%BINARIES_DIR%\" >nul 2>&1
+    )
+)
 
 :: ============================================================================
 :: STEP 1: Download wallet application files from GitHub
 :: ============================================================================
 echo.
 echo Downloading wallet application...
+cd /d "%INSTALL_DIR%"
 
 :: Check if wallet is FULLY installed (serve.py AND src/index.html must exist)
 if exist "serve.py" (
@@ -113,19 +146,13 @@ echo   [OK] Wallet application installed
 
 :app_installed
 
-:: Create directories
-if not exist "binaries\windows" mkdir "binaries\windows"
-if not exist "wallets" mkdir "wallets"
-if not exist "logs" mkdir "logs"
-if not exist "node_data" mkdir "node_data"
-if not exist "shaders" mkdir "shaders"
-
 :: ============================================================================
-:: STEP 2: Download BEAM binaries
+:: STEP 2: Download BEAM binaries to ~/.beam-light-wallet/binaries/windows/
 :: ============================================================================
 echo.
 echo Downloading BEAM binaries v%BEAM_VERSION%...
-cd binaries\windows
+echo   Target: %BINARIES_DIR%
+cd /d "%BINARIES_DIR%"
 
 if not exist "wallet-api.exe" (
     echo   - wallet-api...
@@ -259,14 +286,14 @@ echo Manual download:
 echo   - wallet-api: %GITHUB_BASE%/win-wallet-api-%BEAM_VERSION%.zip
 echo   - beam-wallet: %GITHUB_BASE%/win-beam-wallet-cli-%BEAM_VERSION%.zip
 echo.
-echo Extract to: %INSTALL_DIR%\binaries\windows\
+echo Extract to: %BINARIES_DIR%
 echo.
 pause
 exit /b 1
 
 :download_done
 
-cd "%INSTALL_DIR%"
+cd /d "%INSTALL_DIR%"
 
 :: ============================================================================
 :: STEP 3: Create launcher scripts
@@ -286,6 +313,7 @@ echo echo ======================================================================
 echo echo.
 echo echo Starting wallet server on port %PORT%...
 echo echo Access URL: http://127.0.0.1:%PORT%
+echo echo Data dir:   %%USERPROFILE%%\.beam-light-wallet
 echo echo.
 echo echo Press Ctrl+C to stop
 echo echo.
@@ -312,7 +340,8 @@ echo ======================================================================
 echo              Installation Complete!
 echo ======================================================================
 echo.
-echo Install location: %INSTALL_DIR%
+echo App code:     %INSTALL_DIR%
+echo Private data: %DATA_DIR%
 echo.
 echo To start the wallet:
 echo   - Double-click "BEAM Light Wallet" on your Desktop

@@ -1,221 +1,364 @@
 @echo off
-:: BEAM Light Wallet - Windows One-Click Installer
+:: ============================================================================
+:: BEAM Light Wallet - Windows Setup (legacy name)
+:: ============================================================================
 :: Developed by @vsnation
 :: Donations: e17cc06481d9ae88e1e0181efee407fa8c36a861b9df723845eddc8fb1ba552048
-:: Double-click to install and run
+:: ============================================================================
 
-setlocal enabledelayedexpansion
+setlocal EnableDelayedExpansion
 
 echo.
-echo ======================================================
-echo        BEAM Light Wallet - Windows Installer
-echo        Developed by @vsnation
-echo ======================================================
+echo ======================================================================
+echo           BEAM Light Wallet - Windows Installer
+echo                    Developed by @vsnation
+echo ======================================================================
 echo.
-
-:: Check for admin rights (optional, for firewall rules)
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Note: Running without admin rights. Firewall rules may need manual setup.
-    echo.
-)
+echo Donations: e17cc06481d9ae88e1e0181efee407fa8c36a861b9df723845eddc8fb1ba552048
+echo.
 
 :: Configuration
 set "BEAM_VERSION=7.5.13882"
-set "INSTALL_DIR=%USERPROFILE%\Beam-Light-Wallet"
 set "PORT=9080"
 set "GITHUB_BASE=https://github.com/BeamMW/beam/releases/download/beam-%BEAM_VERSION%"
+set "WALLET_REPO=https://github.com/vsnation/Beam-Light-Wallet/archive/refs/heads/main.zip"
 
-echo Installation directory: %INSTALL_DIR%
+:: Private data stored in %USERPROFILE%\.beam-light-wallet
+set "DATA_DIR=%USERPROFILE%\.beam-light-wallet"
+set "BINARIES_DIR=%DATA_DIR%\binaries\windows"
+set "WALLETS_DIR=%DATA_DIR%\wallets"
+set "LOGS_DIR=%DATA_DIR%\logs"
+set "NODE_DATA_DIR=%DATA_DIR%\node_data"
+
+:: App code directory
+set "INSTALL_DIR=%USERPROFILE%\BEAM-LightWallet"
+
+echo App code:     %INSTALL_DIR%
+echo Private data: %DATA_DIR%
 echo.
 
 :: Check Python
+echo Checking Python...
 python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Python 3 is required but not installed.
-    echo.
-    echo Please install Python from: https://www.python.org/downloads/
-    echo Or run: winget install Python.Python.3.11
-    echo.
-    echo IMPORTANT: Check "Add Python to PATH" during installation!
-    echo.
+if errorlevel 1 (
+    python3 --version >nul 2>&1
+    if errorlevel 1 (
+        echo.
+        echo ERROR: Python 3 is required but not installed.
+        echo.
+        echo Download from: https://www.python.org/downloads/
+        echo Make sure to check "Add Python to PATH" during installation.
+        echo.
+        pause
+        exit /b 1
+    )
+    set "PYTHON=python3"
+) else (
+    set "PYTHON=python"
+)
+echo Python found: OK
+
+:: Check curl (Windows 10+ has it built-in)
+echo Checking curl...
+curl --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: curl not found. Please install curl or use Windows 10+
     pause
     exit /b 1
 )
-
-echo [OK] Python found
-python --version
+echo curl found: OK
 
 :: Create directories
 echo.
 echo Creating directories...
+if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
+if not exist "%BINARIES_DIR%" mkdir "%BINARIES_DIR%"
+if not exist "%WALLETS_DIR%" mkdir "%WALLETS_DIR%"
+if not exist "%LOGS_DIR%" mkdir "%LOGS_DIR%"
+if not exist "%NODE_DATA_DIR%" mkdir "%NODE_DATA_DIR%"
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
-if not exist "%INSTALL_DIR%\binaries\windows" mkdir "%INSTALL_DIR%\binaries\windows"
-if not exist "%INSTALL_DIR%\wallets" mkdir "%INSTALL_DIR%\wallets"
-if not exist "%INSTALL_DIR%\logs" mkdir "%INSTALL_DIR%\logs"
-if not exist "%INSTALL_DIR%\src" mkdir "%INSTALL_DIR%\src"
-if not exist "%INSTALL_DIR%\src\js" mkdir "%INSTALL_DIR%\src\js"
-if not exist "%INSTALL_DIR%\src\css" mkdir "%INSTALL_DIR%\src\css"
 
-:: Download binaries
+:: Migrate from old location if exists
+set "OLD_INSTALL=%USERPROFILE%\Beam-Light-Wallet"
+if exist "%OLD_INSTALL%\wallets" (
+    if not exist "%WALLETS_DIR%\*" (
+        echo Migrating wallets from old location...
+        xcopy /E /Y /Q "%OLD_INSTALL%\wallets\*" "%WALLETS_DIR%\" >nul 2>&1
+    )
+)
+if exist "%OLD_INSTALL%\binaries\windows" (
+    if not exist "%BINARIES_DIR%\wallet-api.exe" (
+        echo Migrating binaries from old location...
+        xcopy /E /Y /Q "%OLD_INSTALL%\binaries\windows\*" "%BINARIES_DIR%\" >nul 2>&1
+    )
+)
+
+:: ============================================================================
+:: STEP 1: Download wallet application files from GitHub
+:: ============================================================================
+echo.
+echo Downloading wallet application...
+cd /d "%INSTALL_DIR%"
+
+:: Check if wallet is FULLY installed (serve.py AND src/index.html must exist)
+if exist "serve.py" (
+    if exist "src\index.html" (
+        echo   [OK] Wallet application already installed
+        goto :app_installed
+    )
+)
+
+:: Download wallet application
+echo   - Downloading from GitHub...
+if exist wallet-app.zip del /f wallet-app.zip
+curl -L -f --retry 3 --progress-bar "%WALLET_REPO%" -o wallet-app.zip
+if errorlevel 1 (
+    echo   [ERROR] Failed to download wallet application
+    echo   Please check your internet connection
+    goto :app_download_error
+)
+
+echo   - Extracting...
+tar -xf wallet-app.zip 2>nul
+if errorlevel 1 (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path 'wallet-app.zip' -DestinationPath '.' -Force" 2>nul
+)
+
+:: Move files from extracted folder to install dir
+if exist "Beam-Light-Wallet-main" (
+    echo   - Installing files...
+    xcopy /E /Y /Q "Beam-Light-Wallet-main\*" "." >nul 2>&1
+    rd /s /q "Beam-Light-Wallet-main" 2>nul
+)
+
+del wallet-app.zip 2>nul
+
+:: Verify installation
+if not exist "serve.py" (
+    echo   [ERROR] serve.py not found after extraction
+    goto :app_download_error
+)
+if not exist "src\index.html" (
+    echo   [ERROR] src/index.html not found after extraction
+    goto :app_download_error
+)
+echo   [OK] Wallet application installed
+
+:app_installed
+
+:: ============================================================================
+:: STEP 2: Download BEAM binaries to ~/.beam-light-wallet/binaries/windows/
+:: ============================================================================
 echo.
 echo Downloading BEAM binaries v%BEAM_VERSION%...
-echo This may take a few minutes...
-echo.
+echo   Target: %BINARIES_DIR%
+cd /d "%BINARIES_DIR%"
 
-cd /d "%INSTALL_DIR%\binaries\windows"
-
-:: Download wallet-api
 if not exist "wallet-api.exe" (
-    echo Downloading wallet-api...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%GITHUB_BASE%/windows-wallet-api-%BEAM_VERSION%.zip' -OutFile 'wallet-api.zip'}"
-    if exist "wallet-api.zip" (
-        powershell -Command "Expand-Archive -Path 'wallet-api.zip' -DestinationPath '.' -Force"
-        if exist "wallet-api.tar" (
-            tar -xf wallet-api.tar 2>nul
-            del wallet-api.tar
-        )
-        del wallet-api.zip
-        echo [OK] wallet-api downloaded
+    echo   - wallet-api...
+
+    :: Delete any existing corrupt file
+    if exist wallet-api.zip del /f wallet-api.zip
+
+    :: Download with retry
+    curl -L -f --retry 3 --retry-delay 2 --progress-bar "%GITHUB_BASE%/win-wallet-api-%BEAM_VERSION%.zip" -o wallet-api.zip
+    if errorlevel 1 (
+        echo   [ERROR] Download failed. Check internet connection.
+        goto :download_error
+    )
+
+    :: Verify file exists and has reasonable size (should be > 1MB)
+    for %%A in (wallet-api.zip) do set "FILESIZE=%%~zA"
+    if !FILESIZE! LSS 1000000 (
+        echo   [ERROR] Downloaded file is too small. File may be corrupt.
+        del /f wallet-api.zip 2>nul
+        goto :download_error
+    )
+
+    :: Extract
+    echo   Extracting...
+    tar -xf wallet-api.zip 2>nul
+    if errorlevel 1 (
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path 'wallet-api.zip' -DestinationPath '.' -Force" 2>nul
+    )
+    del wallet-api.zip 2>nul
+
+    if exist wallet-api.exe (
+        echo   [OK] wallet-api
     ) else (
-        echo [ERROR] Failed to download wallet-api
+        echo   [ERROR] wallet-api.exe not found after extraction
+        goto :download_error
     )
 ) else (
-    echo [OK] wallet-api already exists
+    echo   [OK] wallet-api ^(already exists^)
 )
 
-:: Download beam-wallet
 if not exist "beam-wallet.exe" (
-    echo Downloading beam-wallet...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%GITHUB_BASE%/windows-beam-wallet-cli-%BEAM_VERSION%.zip' -OutFile 'beam-wallet.zip'}"
-    if exist "beam-wallet.zip" (
-        powershell -Command "Expand-Archive -Path 'beam-wallet.zip' -DestinationPath '.' -Force"
-        if exist "beam-wallet.tar" (
-            tar -xf beam-wallet.tar 2>nul
-            del beam-wallet.tar
-        )
-        del beam-wallet.zip
-        echo [OK] beam-wallet downloaded
+    echo   - beam-wallet...
+
+    if exist beam-wallet.zip del /f beam-wallet.zip
+
+    curl -L -f --retry 3 --retry-delay 2 --progress-bar "%GITHUB_BASE%/win-beam-wallet-cli-%BEAM_VERSION%.zip" -o beam-wallet.zip
+    if errorlevel 1 (
+        echo   [ERROR] Download failed. Check internet connection.
+        goto :download_error
+    )
+
+    for %%A in (beam-wallet.zip) do set "FILESIZE=%%~zA"
+    if !FILESIZE! LSS 1000000 (
+        echo   [ERROR] Downloaded file is too small. File may be corrupt.
+        del /f beam-wallet.zip 2>nul
+        goto :download_error
+    )
+
+    echo   Extracting...
+    tar -xf beam-wallet.zip 2>nul
+    if errorlevel 1 (
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path 'beam-wallet.zip' -DestinationPath '.' -Force" 2>nul
+    )
+    del beam-wallet.zip 2>nul
+
+    if exist beam-wallet.exe (
+        echo   [OK] beam-wallet
     ) else (
-        echo [ERROR] Failed to download beam-wallet
+        echo   [ERROR] beam-wallet.exe not found after extraction
+        goto :download_error
     )
 ) else (
-    echo [OK] beam-wallet already exists
+    echo   [OK] beam-wallet ^(already exists^)
 )
 
-:: Download beam-node (optional)
 if not exist "beam-node.exe" (
-    echo Downloading beam-node (optional)...
-    powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%GITHUB_BASE%/windows-beam-node-%BEAM_VERSION%.zip' -OutFile 'beam-node.zip'}" 2>nul
-    if exist "beam-node.zip" (
-        powershell -Command "Expand-Archive -Path 'beam-node.zip' -DestinationPath '.' -Force" 2>nul
-        if exist "beam-node.tar" (
-            tar -xf beam-node.tar 2>nul
-            del beam-node.tar
+    echo   - beam-node ^(optional^)...
+
+    if exist beam-node.zip del /f beam-node.zip
+
+    curl -L -f --retry 2 --progress-bar "%GITHUB_BASE%/win-beam-node-%BEAM_VERSION%.zip" -o beam-node.zip 2>nul
+    if exist beam-node.zip (
+        for %%A in (beam-node.zip) do set "FILESIZE=%%~zA"
+        if !FILESIZE! GTR 1000000 (
+            echo   Extracting...
+            tar -xf beam-node.zip 2>nul
+            if errorlevel 1 (
+                powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path 'beam-node.zip' -DestinationPath '.' -Force" 2>nul
+            )
         )
-        del beam-node.zip
-        echo [OK] beam-node downloaded
+        del beam-node.zip 2>nul
+        if exist beam-node.exe (
+            echo   [OK] beam-node
+        ) else (
+            echo   [SKIP] beam-node ^(extraction failed, optional^)
+        )
+    ) else (
+        echo   [SKIP] beam-node ^(optional^)
     )
 ) else (
-    echo [OK] beam-node already exists
+    echo   [OK] beam-node ^(already exists^)
 )
+
+goto :download_done
+
+:app_download_error
+echo.
+echo ======================================================================
+echo   APPLICATION DOWNLOAD ERROR
+echo ======================================================================
+echo.
+echo Failed to download wallet application from GitHub.
+echo.
+echo Manual installation:
+echo   1. Go to: https://github.com/vsnation/Beam-Light-Wallet
+echo   2. Click "Code" -^> "Download ZIP"
+echo   3. Extract to: %INSTALL_DIR%
+echo.
+pause
+exit /b 1
+
+:download_error
+echo.
+echo ======================================================================
+echo   BINARY DOWNLOAD ERROR
+echo ======================================================================
+echo.
+echo Failed to download or extract BEAM binaries.
+echo.
+echo Manual download:
+echo   - wallet-api: %GITHUB_BASE%/win-wallet-api-%BEAM_VERSION%.zip
+echo   - beam-wallet: %GITHUB_BASE%/win-beam-wallet-cli-%BEAM_VERSION%.zip
+echo.
+echo Extract to: %BINARIES_DIR%
+echo.
+pause
+exit /b 1
+
+:download_done
 
 cd /d "%INSTALL_DIR%"
 
-:: Download wallet source files
-echo.
-echo Downloading wallet application files...
-
-:: For now, create a minimal serve.py if it doesn't exist
-:: In production, this would download from GitHub releases
-if not exist "serve.py" (
-    echo Creating server file...
-    echo Please download serve.py from the BEAM Light Wallet repository
-    echo and place it in: %INSTALL_DIR%
-)
-
-:: Create start script
+:: ============================================================================
+:: STEP 3: Create launcher scripts
+:: ============================================================================
 echo.
 echo Creating launcher scripts...
 
-:: Create Start-Wallet.bat (fallback for command-line users)
+:: Create start script
 (
 echo @echo off
 echo cd /d "%%~dp0"
-echo echo Starting BEAM Light Wallet...
 echo echo.
-echo echo Open http://127.0.0.1:%PORT% in your browser
-echo echo Press Ctrl+C to stop the wallet
+echo echo ======================================================================
+echo echo                    BEAM Light Wallet
+echo echo                    Developed by @vsnation
+echo echo ======================================================================
 echo echo.
-echo python serve.py %PORT%
-) > "%INSTALL_DIR%\Start-Wallet.bat"
-
-:: Create hidden launcher VBScript (no CMD window)
-(
-echo Set WshShell = CreateObject^("WScript.Shell"^)
-echo Set fso = CreateObject^("Scripting.FileSystemObject"^)
-echo installDir = fso.GetParentFolderName^(WScript.ScriptFullName^)
-echo.
-echo ' Check if already running - smart relaunch
-echo Set http = CreateObject^("MSXML2.XMLHTTP"^)
-echo On Error Resume Next
-echo http.Open "GET", "http://127.0.0.1:%PORT%/api/status", False
-echo http.Send
-echo If Err.Number = 0 And http.Status = 200 Then
-echo     WshShell.Run "cmd /c start http://127.0.0.1:%PORT%", 0, False
-echo     WScript.Quit
-echo End If
-echo On Error GoTo 0
-echo.
-echo ' Start server hidden
-echo WshShell.CurrentDirectory = installDir
-echo WshShell.Run "cmd /c cd /d """ ^& installDir ^& """ ^&^& python serve.py %PORT%", 0, False
-echo WScript.Sleep 3000
-echo ' Open browser
-echo WshShell.Run "cmd /c start http://127.0.0.1:%PORT%", 0, False
-) > "%INSTALL_DIR%\Start-Wallet.vbs"
+echo echo Starting wallet server on port %PORT%...
+echo echo Access URL: http://127.0.0.1:%PORT%
+echo echo Data dir:   %%USERPROFILE%%\.beam-light-wallet
+echo echo.
+echo echo Press Ctrl+C to stop
+echo echo.
+echo start "" "http://127.0.0.1:%PORT%"
+echo %PYTHON% serve.py %PORT%
+) > start-wallet.bat
 
 :: Create stop script
 (
 echo @echo off
-echo echo Stopping BEAM Light Wallet...
-echo taskkill /F /IM python.exe /FI "WINDOWTITLE eq *serve.py*" 2^>nul
+echo taskkill /F /IM python.exe /FI "WINDOWTITLE eq BEAM*" 2^>nul
 echo taskkill /F /IM wallet-api.exe 2^>nul
 echo taskkill /F /IM beam-node.exe 2^>nul
-echo echo Done.
-echo pause
-) > "%INSTALL_DIR%\Stop-Wallet.bat"
+echo echo BEAM Light Wallet stopped
+) > stop-wallet.bat
 
-:: Create desktop shortcut pointing to VBScript (hidden launch)
+:: Create desktop shortcut
 echo Creating desktop shortcut...
-powershell -Command "& {$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%USERPROFILE%\Desktop\BEAM Light Wallet.lnk'); $Shortcut.TargetPath = 'wscript.exe'; $Shortcut.Arguments = '\"\"\"' + '%INSTALL_DIR%\Start-Wallet.vbs' + '\"\"\"'; $Shortcut.WorkingDirectory = '%INSTALL_DIR%'; $Shortcut.Description = 'BEAM Light Wallet'; $Shortcut.Save()}"
+set "SHORTCUT=%USERPROFILE%\Desktop\BEAM Light Wallet.lnk"
+powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%SHORTCUT%'); $s.TargetPath = '%INSTALL_DIR%\start-wallet.bat'; $s.WorkingDirectory = '%INSTALL_DIR%'; $s.Description = 'BEAM Light Wallet - Privacy Wallet'; $s.Save()" 2>nul
 
 echo.
-echo ======================================================
-echo        Installation Complete!
-echo ======================================================
+echo ======================================================================
+echo              Installation Complete!
+echo ======================================================================
 echo.
-echo Installation directory: %INSTALL_DIR%
+echo App code:     %INSTALL_DIR%
+echo Private data: %DATA_DIR%
 echo.
 echo To start the wallet:
-echo   1. Double-click "BEAM Light Wallet" on your Desktop
-echo   2. Or run: %INSTALL_DIR%\Start-Wallet.bat
+echo   - Double-click "BEAM Light Wallet" on your Desktop
+echo   - Or run: %INSTALL_DIR%\start-wallet.bat
 echo.
 echo Then open: http://127.0.0.1:%PORT%
 echo.
+echo To stop: Run stop-wallet.bat or close the terminal window
+echo.
 
-:: Ask to start now
-set /p START_NOW="Start the wallet now? (Y/N): "
-if /i "%START_NOW%"=="Y" (
+set /p START="Start the wallet now? [Y/n] "
+if /i "%START%"=="" set START=Y
+if /i "%START%"=="Y" (
     echo.
     echo Starting wallet...
-    cd /d "%INSTALL_DIR%"
-    wscript.exe "Start-Wallet.vbs"
-    echo BEAM Light Wallet is starting in the background.
-    echo Your browser will open shortly.
-    timeout /t 3 /nobreak >nul
-) else (
-    echo.
-    echo You can start the wallet later using the desktop shortcut.
-    pause
+    start "" "%INSTALL_DIR%\start-wallet.bat"
 )
+
+echo.
+pause

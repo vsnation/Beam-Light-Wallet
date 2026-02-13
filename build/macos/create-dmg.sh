@@ -68,23 +68,18 @@ PLIST
 cat > "$APP_BUNDLE/Contents/MacOS/launch" << 'LAUNCHER'
 #!/bin/bash
 # BEAM Light Wallet - One-Click Launcher
-# Downloads binaries, starts services, opens browser
-# User data stored in ~/Library/Application Support/ to survive app updates
+# Downloads binaries, auto-updates app, starts services, opens browser
+# All private data stored in ~/.beam-light-wallet
 
 set -e
 
 # Get app resources directory
 RESOURCES_DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
 
-# Remove quarantine from downloaded binaries (prevents Gatekeeper warnings)
-DATA_BINARIES="$HOME/Library/Application Support/BEAM Light Wallet/binaries/macos"
-if [ -d "$DATA_BINARIES" ]; then
-    xattr -dr com.apple.quarantine "$DATA_BINARIES" 2>/dev/null || true
-fi
-
-# User data stored OUTSIDE app bundle to survive updates
-DATA_DIR="$HOME/Library/Application Support/BEAM Light Wallet"
+# All private data stored in ~/.beam-light-wallet
+DATA_DIR="$HOME/.beam-light-wallet"
 BEAM_VERSION="7.5.13882"
+REPO_URL="https://github.com/vsnation/Beam-Light-Wallet"
 BINARIES_DIR="$DATA_DIR/binaries/macos"
 WALLETS_DIR="$DATA_DIR/wallets"
 LOGS_DIR="$DATA_DIR/logs"
@@ -92,6 +87,24 @@ NODE_DATA_DIR="$DATA_DIR/node_data"
 
 # Create directories
 mkdir -p "$BINARIES_DIR" "$WALLETS_DIR" "$LOGS_DIR" "$NODE_DATA_DIR"
+
+# Remove quarantine from downloaded binaries (prevents Gatekeeper warnings)
+if [ -d "$BINARIES_DIR" ]; then
+    xattr -dr com.apple.quarantine "$BINARIES_DIR" 2>/dev/null || true
+fi
+
+# Migrate from old location if exists
+OLD_DATA="$HOME/Library/Application Support/BEAM Light Wallet"
+if [ -d "$OLD_DATA" ] && [ "$OLD_DATA" != "$DATA_DIR" ]; then
+    for subdir in wallets binaries logs node_data; do
+        OLD_SUB="$OLD_DATA/$subdir"
+        NEW_SUB="$DATA_DIR/$subdir"
+        if [ -d "$OLD_SUB" ] && [ ! -L "$OLD_SUB" ] && [ -z "$(ls -A "$NEW_SUB" 2>/dev/null)" ]; then
+            echo "Migrating $subdir from old location..."
+            cp -r "$OLD_SUB"/* "$NEW_SUB/" 2>/dev/null || true
+        fi
+    done
+fi
 
 # Symlink data directories into Resources for serve.py compatibility
 cd "$RESOURCES_DIR"
@@ -115,51 +128,47 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Function to download binaries
-download_binaries() {
-    local GITHUB_BASE="https://github.com/BeamMW/beam/releases/download/beam-${BEAM_VERSION}"
+# ==========================================
+# Auto-update: pull latest app code
+# ==========================================
+UPDATE_SHA_FILE="$DATA_DIR/.last_update_sha"
 
-    echo "Downloading BEAM binaries v${BEAM_VERSION}..."
-    show_progress "Downloading BEAM binaries..."
-
-    cd "$BINARIES_DIR"
-
-    # Download wallet-api
-    if [ ! -f "wallet-api" ]; then
-        echo "Downloading wallet-api..."
-        curl -L -# "${GITHUB_BASE}/mac-wallet-api-${BEAM_VERSION}.zip" -o wallet-api.zip
-        unzip -o wallet-api.zip
-        rm wallet-api.zip
-        chmod +x wallet-api
+update_app_code() {
+    local TEMP_DIR=$(mktemp -d)
+    if curl -sL --connect-timeout 5 "$REPO_URL/archive/main.tar.gz" -o "$TEMP_DIR/latest.tar.gz" 2>/dev/null; then
+        mkdir -p "$TEMP_DIR/extracted"
+        tar -xzf "$TEMP_DIR/latest.tar.gz" --strip-components=1 -C "$TEMP_DIR/extracted" 2>/dev/null
+        if [ -f "$TEMP_DIR/extracted/serve.py" ]; then
+            # Update app files in Resources (symlinks to user data are preserved)
+            cp "$TEMP_DIR/extracted/serve.py" "$RESOURCES_DIR/" 2>/dev/null || true
+            rm -rf "$RESOURCES_DIR/src" && cp -r "$TEMP_DIR/extracted/src" "$RESOURCES_DIR/" 2>/dev/null || true
+            rm -rf "$RESOURCES_DIR/config" && cp -r "$TEMP_DIR/extracted/config" "$RESOURCES_DIR/" 2>/dev/null || true
+            [ -d "$TEMP_DIR/extracted/shaders" ] && rm -rf "$RESOURCES_DIR/shaders" && cp -r "$TEMP_DIR/extracted/shaders" "$RESOURCES_DIR/" 2>/dev/null || true
+            echo "App code updated!"
+        fi
     fi
-
-    # Download beam-wallet
-    if [ ! -f "beam-wallet" ]; then
-        echo "Downloading beam-wallet..."
-        curl -L -# "${GITHUB_BASE}/mac-beam-wallet-cli-${BEAM_VERSION}.zip" -o beam-wallet.zip
-        unzip -o beam-wallet.zip
-        rm beam-wallet.zip
-        chmod +x beam-wallet
-    fi
-
-    # Download beam-node (optional, for local node)
-    if [ ! -f "beam-node" ]; then
-        echo "Downloading beam-node..."
-        curl -L -# "${GITHUB_BASE}/mac-beam-node-${BEAM_VERSION}.zip" -o beam-node.zip
-        unzip -o beam-node.zip 2>/dev/null || true
-        [ -f beam-node.tar ] && tar -xf beam-node.tar 2>/dev/null || true
-        rm -f beam-node.zip beam-node.tar
-        [ -f "beam-node" ] && chmod +x beam-node
-    fi
-
-    # Remove macOS quarantine flags (prevents Gatekeeper blocking)
-    xattr -dr com.apple.quarantine wallet-api beam-wallet beam-node 2>/dev/null || true
-
-    cd "$RESOURCES_DIR"
-    echo "Binaries downloaded successfully!"
+    rm -rf "$TEMP_DIR" 2>/dev/null
 }
 
-# Check and download binaries if needed
+echo "Checking for updates..."
+REMOTE_SHA=$(curl -s --connect-timeout 5 "https://api.github.com/repos/vsnation/Beam-Light-Wallet/commits/main" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha',''))" 2>/dev/null || echo "")
+LOCAL_SHA=""
+[ -f "$UPDATE_SHA_FILE" ] && LOCAL_SHA=$(cat "$UPDATE_SHA_FILE" 2>/dev/null)
+
+if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$LOCAL_SHA" ]; then
+    echo "Update available, downloading..."
+    show_progress "Updating BEAM Light Wallet..."
+    update_app_code
+    echo "$REMOTE_SHA" > "$UPDATE_SHA_FILE"
+elif [ -z "$REMOTE_SHA" ]; then
+    echo "Update check skipped (no internet)"
+else
+    echo "Up to date."
+fi
+
+# ==========================================
+# Download BEAM binaries if needed
+# ==========================================
 if [ ! -f "$BINARIES_DIR/wallet-api" ] || [ ! -f "$BINARIES_DIR/beam-wallet" ]; then
     # Show download dialog
     RESPONSE=$(osascript -e 'display dialog "BEAM Light Wallet needs to download required components (~80MB).\n\nThis is a one-time setup." buttons {"Cancel", "Download"} default button 2 with title "BEAM Light Wallet - First Run Setup"' 2>/dev/null || echo "button returned:Cancel")
@@ -256,7 +265,7 @@ cp "$PROJECT_DIR/serve.py" "$APP_BUNDLE/Contents/Resources/"
 cp "$PROJECT_DIR/README.md" "$APP_BUNDLE/Contents/Resources/"
 
 # Note: User data (binaries, wallets, logs, node_data) stored in
-# ~/Library/Application Support/BEAM Light Wallet/ to survive updates
+# ~/.beam-light-wallet/ to survive updates
 # The launcher creates symlinks to this location
 
 echo "App bundle created: $APP_BUNDLE"
@@ -316,6 +325,5 @@ echo "2. Drag 'BEAM Light Wallet' to Applications"
 echo "3. Launch from Applications folder"
 echo ""
 echo "First launch will download BEAM binaries (~80MB)"
+echo "Data stored in: ~/.beam-light-wallet/"
 echo ""
-echo "Logs location after installation:"
-echo "  /Applications/BEAM Light Wallet.app/Contents/Resources/logs/"
