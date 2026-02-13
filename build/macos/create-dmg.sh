@@ -76,6 +76,12 @@ set -e
 # Get app resources directory
 RESOURCES_DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
 
+# Remove quarantine from downloaded binaries (prevents Gatekeeper warnings)
+DATA_BINARIES="$HOME/Library/Application Support/BEAM Light Wallet/binaries/macos"
+if [ -d "$DATA_BINARIES" ]; then
+    xattr -dr com.apple.quarantine "$DATA_BINARIES" 2>/dev/null || true
+fi
+
 # User data stored OUTSIDE app bundle to survive updates
 DATA_DIR="$HOME/Library/Application Support/BEAM Light Wallet"
 BEAM_VERSION="7.5.13882"
@@ -269,6 +275,29 @@ cp -r "$APP_BUNDLE" "$DMG_FOLDER/"
 
 # Create symlink to Applications
 ln -s /Applications "$DMG_FOLDER/Applications"
+
+# Add first-launch instructions for unsigned app
+cat > "$DMG_FOLDER/FIRST LAUNCH - READ ME.txt" << 'README'
+BEAM Light Wallet - First Launch Instructions
+==============================================
+
+If macOS shows "Apple couldn't verify the developer":
+
+METHOD 1 (Easiest):
+  Right-click the app > click "Open" > click "Open" again.
+  You only need to do this ONCE.
+
+METHOD 2 (Terminal):
+  Open Terminal and run:
+  xattr -cr "/Applications/BEAM Light Wallet.app"
+  Then double-click the app normally.
+
+METHOD 3 (System Settings):
+  Go to System Settings > Privacy & Security
+  Scroll down and click "Open Anyway" next to the BEAM message.
+
+After the first launch, macOS will remember your choice.
+README
 
 # Create DMG using hdiutil
 hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_FOLDER" -ov -format UDZO "$DMG_PATH"
