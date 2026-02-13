@@ -146,6 +146,11 @@ if [ "$NEEDS_BINARIES" = true ]; then
         fi
     fi
 
+    # Remove macOS quarantine flags (prevents Gatekeeper blocking)
+    if [ "$PLATFORM" = "macos" ]; then
+        xattr -dr com.apple.quarantine wallet-api beam-wallet beam-node 2>/dev/null || true
+    fi
+
     cd "$INSTALL_DIR"
     echo ""
     echo "Binaries downloaded!"
