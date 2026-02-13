@@ -7,7 +7,7 @@
 // =============================================================================
 
 // Contract ID - set after deployment
-const FUDDLE_CID = '8605eaf746a798ccb45000da28e270a408cad6ce012f49b06eb305eee067a40f';
+const FUDDLE_CID = '28c52aef751ebe40d611660414dc355db7de4ae76bcc1dab5952537010735808';
 
 // Constants
 const FUDDLE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

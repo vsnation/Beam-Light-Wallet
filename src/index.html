@@ -169,6 +169,22 @@
 
             <!-- Content -->
             <div class="content">
+                <!-- Node Sync Banner (shown when on public node while local node syncs) -->
+                <div id="node-sync-banner" class="node-sync-banner" style="display:none;">
+                    <div class="node-sync-banner-inner">
+                        <div class="node-sync-banner-left">
+                            <div class="node-sync-pulse"></div>
+                            <span class="node-sync-label" id="node-sync-banner-label">Local node syncing...</span>
+                        </div>
+                        <div class="node-sync-banner-right">
+                            <span class="node-sync-pct" id="node-sync-banner-pct">0%</span>
+                            <div class="node-sync-bar-wrap">
+                                <div class="node-sync-bar-fill" id="node-sync-banner-fill" style="width:0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Dashboard Page -->
                 <div class="page active" id="page-dashboard">
                     <!-- Quick Actions -->

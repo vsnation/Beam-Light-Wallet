@@ -6010,3 +6010,86 @@
                 height: 36px;
             }
         }
+
+/* =============================================
+   NODE SYNC BANNER
+   ============================================= */
+.node-sync-banner {
+    padding: 0 24px;
+    margin-bottom: 4px;
+}
+.node-sync-banner-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(37, 194, 160, 0.06);
+    border: 1px solid rgba(37, 194, 160, 0.12);
+    border-radius: 10px;
+    padding: 10px 16px;
+    gap: 16px;
+}
+.node-sync-banner-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+.node-sync-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--beam-cyan);
+    flex-shrink: 0;
+    animation: nodePulse 2s ease-in-out infinite;
+}
+@keyframes nodePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(37, 194, 160, 0.4); }
+    50% { opacity: 0.5; box-shadow: 0 0 0 6px rgba(37, 194, 160, 0); }
+}
+.node-sync-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.node-sync-banner-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+.node-sync-pct {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--beam-cyan);
+    font-family: 'JetBrains Mono', monospace;
+    min-width: 36px;
+    text-align: right;
+}
+.node-sync-bar-wrap {
+    width: 80px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.node-sync-bar-fill {
+    height: 100%;
+    background: var(--beam-cyan);
+    border-radius: 2px;
+    transition: width 0.6s ease;
+}
+/* Synced state */
+.node-sync-banner.synced .node-sync-pulse {
+    background: var(--success);
+    animation: none;
+}
+.node-sync-banner.synced .node-sync-banner-inner {
+    background: rgba(16, 185, 129, 0.06);
+    border-color: rgba(16, 185, 129, 0.15);
+}
+.node-sync-banner.synced .node-sync-pct {
+    color: var(--success);
+}
+.node-sync-banner.synced .node-sync-bar-fill {
+    background: var(--success);
+}

@@ -1,0 +1,17 @@
+{
+    "contract_id": "2145205e91c3c0a68b0f439b8afd7a0b4729fb232768dfdf5ab421da864d76f7",
+    "deployed_at": "2026-01-30T11:44:00Z",
+    "block_height": 3710620,
+    "wallet": "test_wallet",
+    "fee": "0.011 BEAM",
+    "version": 7,
+    "compiler": "LLVM 16.0 (Homebrew) with -fno-builtin",
+    "features": [
+        "SetZero fix for cancel_order key lookup (VERIFIED WORKING)",
+        "Auto-derived owner key (faucet2 pattern)",
+        "confirm_payment requires rating (1-5)",
+        "claim_trade requires rating (1-5)",
+        "Upgradeable (Method 19)",
+        "Version tracking in Settings"
+    ]
+}
