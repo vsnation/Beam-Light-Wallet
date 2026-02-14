@@ -19,12 +19,26 @@ const KEYBOARD_ROWS = [
 
 // Tournament tiers keyed by CONTRACT tier (0/1/2) — token-based naming
 const TIER_CSS = { 0: 'tier-beam', 1: 'tier-fomo', 2: 'tier-beamx' };
-const TIER_NAMES = { 0: 'BEAM', 1: 'FOMO', 2: 'BEAMX' };
-const TIER_ASSETS = {
+let TIER_NAMES = { 0: 'BEAM', 1: 'FOMO', 2: 'BEAMX' };
+let TIER_ASSETS = {
     0: { id: 0, name: 'BEAM', decimals: 8 },
     1: { id: 174, name: 'FOMO', decimals: 8 },
     2: { id: 7, name: 'BEAMX', decimals: 8 }
 };
+
+function fuddleUpdateTierNames() {
+    const s = fuddleState.settings;
+    if (!s) return;
+    for (let tier = 0; tier < 3; tier++) {
+        const aid = s[`tier${tier}_asset`];
+        if (aid != null) {
+            const cfg = (typeof ASSET_CONFIG !== 'undefined') ? ASSET_CONFIG[aid] : null;
+            const name = cfg ? cfg.symbol : (aid === 0 ? 'BEAM' : `CA#${aid}`);
+            TIER_NAMES[tier] = name;
+            TIER_ASSETS[tier] = { id: aid, name: name, decimals: cfg?.decimals || 8 };
+        }
+    }
+}
 
 // Difficulty labels (word length)
 const DIFF_NAMES = { 4: '4-Letter', 5: '5-Letter', 6: '6-Letter' };
@@ -165,6 +179,7 @@ async function loadFuddleSettings() {
     if (result && result.settings) {
         fuddleState.settings = result.settings;
         fuddleState.isAdmin = !!(result.settings.is_admin);
+        fuddleUpdateTierNames();
     }
     return fuddleState.settings;
 }
@@ -491,7 +506,7 @@ function renderFuddleLobby() {
                 <div class="fuddle-tournament-letters">${t ? fuddleFormatBeam(t.tier_entry_cost) : '?'} ${tierAsset.name} per game</div>
                 <div class="fuddle-tournament-prize">
                     <span class="prize-amount">${prizePool}</span>
-                    <span class="prize-label">${tierAsset.name} Prize Pool</span>
+                    <span class="prize-label">${tierAsset.name} Prize Pool${t && t.prize_pool > 0 && typeof getAssetUsdValue === 'function' ? (() => { const usd = getAssetUsdValue(tierAsset.id, t.prize_pool); return usd > 0 ? ` <span style="font-size:11px;color:var(--text-muted);">($${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)})</span>` : ''; })() : ''}</span>
                 </div>
                 <div class="fuddle-tournament-meta">
                     <div class="meta-item">
@@ -1808,19 +1823,19 @@ lootbox_small_price=GROTH,lootbox_large_price=GROTH,tournament_duration=BLOCKS" 
         <div class="fuddle-lobby-section">
             <h3>Tournament Pools</h3>
             <div class="fuddle-admin-stats">
-                <div class="fuddle-admin-stat"><span class="label">BEAM Pool</span><span class="value">${t0 ? fuddleFormatBeam(t0.prize_pool) : '0'} BEAM</span></div>
-                <div class="fuddle-admin-stat"><span class="label">FOMO Pool</span><span class="value">${t1 ? fuddleFormatBeam(t1.prize_pool) : '0'} FOMO</span></div>
-                <div class="fuddle-admin-stat"><span class="label">BEAMX Pool</span><span class="value">${t2 ? fuddleFormatBeam(t2.prize_pool) : '0'} BEAMX</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[0]} Pool</span><span class="value">${t0 ? fuddleFormatBeam(t0.prize_pool) : '0'} ${TIER_NAMES[0]}${t0 && t0.prize_pool > 0 && typeof getAssetUsdValue === 'function' ? (() => { const u = getAssetUsdValue(TIER_ASSETS[0].id, t0.prize_pool); return u > 0 ? ` <span style="color:var(--text-muted);font-size:11px;">($${u.toFixed(2)})</span>` : ''; })() : ''}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[1]} Pool</span><span class="value">${t1 ? fuddleFormatBeam(t1.prize_pool) : '0'} ${TIER_NAMES[1]}${t1 && t1.prize_pool > 0 && typeof getAssetUsdValue === 'function' ? (() => { const u = getAssetUsdValue(TIER_ASSETS[1].id, t1.prize_pool); return u > 0 ? ` <span style="color:var(--text-muted);font-size:11px;">($${u.toFixed(2)})</span>` : ''; })() : ''}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[2]} Pool</span><span class="value">${t2 ? fuddleFormatBeam(t2.prize_pool) : '0'} ${TIER_NAMES[2]}${t2 && t2.prize_pool > 0 && typeof getAssetUsdValue === 'function' ? (() => { const u = getAssetUsdValue(TIER_ASSETS[2].id, t2.prize_pool); return u > 0 ? ` <span style="color:var(--text-muted);font-size:11px;">($${u.toFixed(2)})</span>` : ''; })() : ''}</span></div>
             </div>
             <div class="fuddle-admin-stats" style="margin-top:10px;">
-                <div class="fuddle-admin-stat"><span class="label">BEAM Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier0_cost)} BEAM</span></div>
-                <div class="fuddle-admin-stat"><span class="label">FOMO Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier1_cost)} FOMO</span></div>
-                <div class="fuddle-admin-stat"><span class="label">BEAMX Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier2_cost)} BEAMX</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[0]} Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier0_cost)} ${TIER_NAMES[0]}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[1]} Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier1_cost)} ${TIER_NAMES[1]}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[2]} Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier2_cost)} ${TIER_NAMES[2]}</span></div>
             </div>
             <div class="fuddle-admin-stats" style="margin-top:10px;">
-                <div class="fuddle-admin-stat"><span class="label">BEAM Asset ID</span><span class="value">${s.tier0_asset ?? '—'}</span></div>
-                <div class="fuddle-admin-stat"><span class="label">FOMO Asset ID</span><span class="value">${s.tier1_asset ?? '—'}</span></div>
-                <div class="fuddle-admin-stat"><span class="label">BEAMX Asset ID</span><span class="value">${s.tier2_asset ?? '—'}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[0]} Asset ID</span><span class="value">${s.tier0_asset ?? '—'}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[1]} Asset ID</span><span class="value">${s.tier1_asset ?? '—'}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[2]} Asset ID</span><span class="value">${s.tier2_asset ?? '—'}</span></div>
             </div>
         </div>
 
@@ -1841,12 +1856,24 @@ lootbox_small_price=GROTH,lootbox_large_price=GROTH,tournament_duration=BLOCKS" 
                     <input type="text" id="admin-letter-price" value="${fuddleFormatBeam(s.letter_price)}">
                 </div>
                 <div class="fuddle-admin-field">
+                    <label>Tier 0 Asset ID</label>
+                    <input type="number" id="admin-tier0-asset" value="${s.tier0_asset ?? 0}" min="0">
+                </div>
+                <div class="fuddle-admin-field">
                     <label>Tier 0 Cost (${TIER_ASSETS[0].name})</label>
                     <input type="text" id="admin-tier0-cost" value="${fuddleFormatBeam(s.tier0_cost)}">
                 </div>
                 <div class="fuddle-admin-field">
+                    <label>Tier 1 Asset ID</label>
+                    <input type="number" id="admin-tier1-asset" value="${s.tier1_asset ?? 174}" min="0">
+                </div>
+                <div class="fuddle-admin-field">
                     <label>Tier 1 Cost (${TIER_ASSETS[1].name})</label>
                     <input type="text" id="admin-tier1-cost" value="${fuddleFormatBeam(s.tier1_cost)}">
+                </div>
+                <div class="fuddle-admin-field">
+                    <label>Tier 2 Asset ID</label>
+                    <input type="number" id="admin-tier2-asset" value="${s.tier2_asset ?? 7}" min="0">
                 </div>
                 <div class="fuddle-admin-field">
                     <label>Tier 2 Cost (${TIER_ASSETS[2].name})</label>
@@ -1908,6 +1935,9 @@ async function fuddleAdminUpdateSettings() {
     const ls = parseFloat(document.getElementById('admin-lootbox-small')?.value);
     const ll = parseFloat(document.getElementById('admin-lootbox-large')?.value);
     const td = parseInt(document.getElementById('admin-tournament-duration')?.value);
+    const t0a = parseInt(document.getElementById('admin-tier0-asset')?.value);
+    const t1a = parseInt(document.getElementById('admin-tier1-asset')?.value);
+    const t2a = parseInt(document.getElementById('admin-tier2-asset')?.value);
 
     if (!lp || !t0c || !t1c || !t2c || !ls || !ll) {
         showFuddleToast('All prices required', 'error');
@@ -1916,8 +1946,11 @@ async function fuddleAdminUpdateSettings() {
 
     const args = [
         `letter_price=${Math.round(lp * 100000000)}`,
+        `tier0_asset=${isNaN(t0a) ? 4294967295 : t0a}`,
         `tier0_cost=${Math.round(t0c * 100000000)}`,
+        `tier1_asset=${isNaN(t1a) ? 4294967295 : t1a}`,
         `tier1_cost=${Math.round(t1c * 100000000)}`,
+        `tier2_asset=${isNaN(t2a) ? 4294967295 : t2a}`,
         `tier2_cost=${Math.round(t2c * 100000000)}`,
         `lootbox_small_price=${Math.round(ls * 100000000)}`,
         `lootbox_large_price=${Math.round(ll * 100000000)}`,
