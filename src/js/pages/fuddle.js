@@ -67,6 +67,8 @@ let fuddleState = {
 async function fuddleCall(action, role, extraArgs) {
     const args = `role=${role},action=${action},cid=${FUDDLE_CID}${extraArgs ? ',' + extraArgs : ''}`;
     try {
+        const params = { args };
+        if (typeof FUDDLE_SHADER !== 'undefined') params.contract = FUDDLE_SHADER;
         const resp = await fetch('/api/wallet', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -74,7 +76,7 @@ async function fuddleCall(action, role, extraArgs) {
                 jsonrpc: '2.0',
                 id: Date.now(),
                 method: 'invoke_contract',
-                params: { args }
+                params
             })
         });
         const data = await resp.json();
@@ -99,6 +101,8 @@ async function fuddleCall(action, role, extraArgs) {
 async function fuddleTx(action, role, extraArgs, txLabel) {
     const args = `role=${role},action=${action},cid=${FUDDLE_CID}${extraArgs ? ',' + extraArgs : ''}`;
     try {
+        const params = { args, create_tx: true };
+        if (typeof FUDDLE_SHADER !== 'undefined') params.contract = FUDDLE_SHADER;
         const resp = await fetch('/api/wallet', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -106,10 +110,20 @@ async function fuddleTx(action, role, extraArgs, txLabel) {
                 jsonrpc: '2.0',
                 id: Date.now(),
                 method: 'invoke_contract',
-                params: { args, create_tx: true }
+                params
             })
         });
         const data = await resp.json();
+        // Check for shader-level error in output
+        if (data.result && data.result.output) {
+            try {
+                const output = JSON.parse(data.result.output);
+                if (output.error) {
+                    console.error('Fuddle shader error:', output.error);
+                    return { error: output.error };
+                }
+            } catch (e) { /* output is not JSON, ignore */ }
+        }
         if (data.result && data.result.raw_data) {
             const resp2 = await fetch('/api/wallet', {
                 method: 'POST',
