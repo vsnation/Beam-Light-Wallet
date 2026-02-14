@@ -501,6 +501,30 @@ def start_beam_node(owner_key=None, password=None):
                 error_msg = f"beam-node exited immediately with code {exit_code}. {error_msg}"
                 if exit_code == -9 or exit_code == 137:
                     error_msg += " (Killed - possibly macOS Gatekeeper. Try: xattr -dr com.apple.quarantine " + str(BEAM_NODE_BINARY) + ")"
+
+            # Auto-recover from database corruption
+            if "orruption" in error_msg or "1row change failed" in error_msg:
+                print("[start_beam_node] Database corruption detected, deleting node.db and retrying...")
+                try:
+                    for f in NODE_DATA_DIR.glob("node.db*"):
+                        f.unlink()
+                    print("[start_beam_node] Deleted corrupted node database, retrying...")
+                    time.sleep(1)
+                    with open(log_file, "w") as lf:
+                        beam_beam_node_process = subprocess.Popen(
+                            cmd, stdout=lf, stderr=subprocess.STDOUT,
+                            cwd=str(NODE_DATA_DIR)
+                        )
+                    time.sleep(3)
+                    if is_node_running():
+                        node_mode = "local"
+                        (STATE_DIR / ".node.pid").write_text(str(beam_beam_node_process.pid))
+                        (STATE_DIR / ".node_mode").write_text("local")
+                        print(f"Started beam-node after recovery (PID: {beam_beam_node_process.pid})")
+                        return {"success": True, "pid": beam_beam_node_process.pid, "recovered": True}
+                except Exception as re:
+                    error_msg += f" Recovery failed: {re}"
+
             if not error_msg:
                 error_msg = "Node failed to start - check logs"
             print(f"[start_beam_node] FAILED: {error_msg}")
