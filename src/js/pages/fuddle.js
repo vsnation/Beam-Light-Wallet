@@ -488,8 +488,7 @@ function renderFuddleLobby() {
         const my = fuddleState.myTournaments[cTier];
         const tierClass = TIER_CSS[cTier];
         const tierName = TIER_NAMES[cTier];
-        const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];       // Tournament's actual asset (for pool/rewards)
-        const entryAsset = TIER_ENTRY_ASSETS[cTier] || tierAsset;     // Settings' asset (what contract charges)
+        const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];       // Tournament's actual asset (for pool/rewards/display)
 
         let prizePool = '0';
         let players = 0;
@@ -527,7 +526,7 @@ function renderFuddleLobby() {
 
         // Show entry cost with correct asset; warn if mismatch with tournament pool
         const entryCostText = t ? fuddleFormatBeam(t.tier_entry_cost) : '?';
-        const entryLabel = `${entryCostText} ${entryAsset.name} per game`;
+        const entryLabel = `${entryCostText} ${tierAsset.name} per game`;
 
         // USD for prize pool using tournament's actual asset
         let poolUsdHtml = '';
@@ -536,10 +535,10 @@ function renderFuddleLobby() {
             if (usd > 0) poolUsdHtml = ` <span style="font-size:11px;color:var(--text-muted);">($${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)})</span>`;
         }
 
-        // USD for entry cost using settings' asset
+        // USD for entry cost using tournament's asset
         let entryUsdHtml = '';
         if (t && t.tier_entry_cost > 0 && typeof getAssetUsdValue === 'function') {
-            const usd = getAssetUsdValue(entryAsset.id, t.tier_entry_cost);
+            const usd = getAssetUsdValue(tierAsset.id, t.tier_entry_cost);
             if (usd > 0) entryUsdHtml = ` <span style="font-size:11px;color:var(--text-muted);">($${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)})</span>`;
         }
 
@@ -1044,7 +1043,7 @@ function fuddleShowHowToPlay() {
 
 function fuddleShowDonateModal(cTier) {
     const tierName = TIER_NAMES[cTier];
-    const entryAsset = TIER_ENTRY_ASSETS[cTier] || TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
     const overlay = document.createElement('div');
     overlay.className = 'fuddle-result-overlay';
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
@@ -1052,10 +1051,10 @@ function fuddleShowDonateModal(cTier) {
     overlay.innerHTML = `
         <div class="fuddle-result-modal" style="max-width:400px;">
             <h2 style="color:var(--fuddle-accent);margin:0 0 8px;font-family:var(--fuddle-font-game);font-size:20px;letter-spacing:2px;">DONATE TO POOL</h2>
-            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">${tierName} Tournament — ${entryAsset.name}</p>
+            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">${tierName} Tournament — ${tierAsset.name}</p>
 
             <div style="margin-bottom:20px;">
-                <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Amount (${entryAsset.name})</label>
+                <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Amount (${tierAsset.name})</label>
                 <input type="text" id="donate-amount" placeholder="1.0" style="width:100%;box-sizing:border-box;">
             </div>
 
@@ -1070,7 +1069,7 @@ function fuddleShowDonateModal(cTier) {
 }
 
 async function fuddleDonateToPool(cTier) {
-    const entryAsset = TIER_ENTRY_ASSETS[cTier] || TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
     const tierName = TIER_NAMES[cTier];
     const input = document.getElementById('donate-amount');
     const beamAmount = parseFloat(input?.value);
@@ -1080,9 +1079,9 @@ async function fuddleDonateToPool(cTier) {
     }
     const groth = Math.round(beamAmount * 100000000);
 
-    fuddleShowTxProgress(`Donating ${beamAmount} ${entryAsset.name}`, `${tierName} Prize Pool`, 'Sending transaction...');
+    fuddleShowTxProgress(`Donating ${beamAmount} ${tierAsset.name}`, `${tierName} Prize Pool`, 'Sending transaction...');
 
-    const result = await fuddleTx('donate_to_pool', 'user', `tier=${cTier},amount=${groth}`, `Donate ${beamAmount} ${entryAsset.name}`);
+    const result = await fuddleTx('donate_to_pool', 'user', `tier=${cTier},amount=${groth}`, `Donate ${beamAmount} ${tierAsset.name}`);
     if (!result || result.error) {
         fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
         return;
@@ -1093,7 +1092,7 @@ async function fuddleDonateToPool(cTier) {
 
     // Donations don't have a simple poll condition — wait ~30s
     await new Promise(r => setTimeout(r, 30000));
-    fuddleTxProgressSuccess(`Donated ${beamAmount} ${entryAsset.name}!`);
+    fuddleTxProgressSuccess(`Donated ${beamAmount} ${tierAsset.name}!`);
     setTimeout(async () => {
         await loadAllTournaments();
         fuddleUpdateTierNames();
@@ -1164,7 +1163,6 @@ function fuddleShowLossModal() {
 // Show difficulty picker popup for a given contract tier
 function fuddleShowDiffPicker(cTier) {
     const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
-    const entryAsset = TIER_ENTRY_ASSETS[cTier] || tierAsset;
     const tierName = TIER_NAMES[cTier];
     const t = fuddleState.tournaments[cTier];
     const tierCostKey = `tier${cTier}_cost`;
@@ -1177,7 +1175,7 @@ function fuddleShowDiffPicker(cTier) {
     overlay.innerHTML = `
         <div class="fuddle-result-modal" style="max-width:380px;">
             <h2 style="color:var(--fuddle-accent);margin:0 0 4px;font-family:var(--fuddle-font-display);font-size:20px;letter-spacing:2px;">${tierName} TOURNAMENT</h2>
-            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">Entry: ${fuddleFormatBeam(entryCost)} ${entryAsset.name} &middot; Choose word length</p>
+            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">Entry: ${fuddleFormatBeam(entryCost)} ${tierAsset.name} &middot; Choose word length</p>
 
             <div class="fuddle-diff-picker">
                 <button class="fuddle-diff-btn" onclick="this.closest('.fuddle-result-overlay').remove(); fuddleCreateGame(4, ${cTier})">

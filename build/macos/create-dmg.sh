@@ -156,10 +156,16 @@ LOCAL_SHA=""
 [ -f "$UPDATE_SHA_FILE" ] && LOCAL_SHA=$(cat "$UPDATE_SHA_FILE" 2>/dev/null)
 
 if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$LOCAL_SHA" ]; then
-    echo "Update available, downloading..."
-    show_progress "Updating BEAM Light Wallet..."
-    update_app_code
-    echo "$REMOTE_SHA" > "$UPDATE_SHA_FILE"
+    # Ask user before downloading
+    RESPONSE=$(osascript -e 'display dialog "A new update is available for BEAM Light Wallet.\n\nWould you like to download it?" buttons {"Skip", "Download Update"} default button 2 with title "BEAM Light Wallet - Update Available"' 2>/dev/null || echo "button returned:Skip")
+    if echo "$RESPONSE" | grep -q "Download Update"; then
+        echo "Update approved by user, downloading..."
+        show_progress "Updating BEAM Light Wallet..."
+        update_app_code
+        echo "$REMOTE_SHA" > "$UPDATE_SHA_FILE"
+    else
+        echo "Update skipped by user. Will ask again next launch."
+    fi
 elif [ -z "$REMOTE_SHA" ]; then
     echo "Update check skipped (no internet)"
 else
