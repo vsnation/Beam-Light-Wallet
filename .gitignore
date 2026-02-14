@@ -139,6 +139,11 @@ data/fuddle/
 # Contract source code (compiled WASMs in shaders/ are sufficient)
 contracts/
 
+# Word lists (game answers - NEVER share publicly)
+fuddle_words_push/
+data/fuddle/
+**/words_*.txt
+
 # Marketing & tooling scripts
 scripts/
 
