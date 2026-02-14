@@ -5776,6 +5776,7 @@ async function renderTransactions(txs) {
         // Known contract IDs for specific detection
         const DEX_CONTRACT_ID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
         const AIRDROP_CONTRACT_ID = '8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c349b5b18e';
+        const FUDDLE_CONTRACT_V5 = '54b22372836b853cf61f87e657fbdd60455f2eee6b91c73f4dbf0a2df887a9d7';
         const FUDDLE_CONTRACT_V4 = '28c52aef751ebe40d611660414dc355db7de4ae76bcc1dab5952537010735808';
         const FUDDLE_CONTRACT_V3 = 'c3f9c5c7511e8d4c249c397770bcb2b6b773fea19ad2714a88cb69cc79e7bef5';
         const FUDDLE_CONTRACT_V2 = '8605eaf746a798ccb45000da28e270a408cad6ce012f49b06eb305eee067a40f';
@@ -5783,7 +5784,7 @@ async function renderTransactions(txs) {
 
         const isDexContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === DEX_CONTRACT_ID);
         const isAirdropContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === AIRDROP_CONTRACT_ID);
-        const isFuddleContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === FUDDLE_CONTRACT_V4 || d.contract_id === FUDDLE_CONTRACT_V3 || d.contract_id === FUDDLE_CONTRACT_V2 || d.contract_id === FUDDLE_CONTRACT_V1);
+        const isFuddleContract = tx.invoke_data && tx.invoke_data.some(d => d.contract_id === FUDDLE_CONTRACT_V5 || d.contract_id === FUDDLE_CONTRACT_V4 || d.contract_id === FUDDLE_CONTRACT_V3 || d.contract_id === FUDDLE_CONTRACT_V2 || d.contract_id === FUDDLE_CONTRACT_V1);
 
         // Detect liquidity operations (DEX only)
         const isAddLiquidity = isDexContract && (commentLower.includes('add liquidity') || commentLower.includes('pool_add_liquidity') ||

@@ -82,7 +82,7 @@ AIRDROP_CONTRACT_ID = "8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c34
 
 # Fuddle Contract - On-chain Wordle game
 # Set after deployment (placeholder until deployed)
-FUDDLE_CONTRACT_ID = "28c52aef751ebe40d611660414dc355db7de4ae76bcc1dab5952537010735808"
+FUDDLE_CONTRACT_ID = "54b22372836b853cf61f87e657fbdd60455f2eee6b91c73f4dbf0a2df887a9d7"
 
 # Load DEX shader bytes for contract calls
 DEX_SHADER = None
