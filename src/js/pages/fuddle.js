@@ -26,16 +26,39 @@ let TIER_ASSETS = {
     2: { id: 7, name: 'BEAMX', decimals: 8 }
 };
 
+// TIER_ENTRY_ASSETS = what the contract CHARGES (from settings, may differ from active tournament)
+let TIER_ENTRY_ASSETS = {
+    0: { id: 0, name: 'BEAM', decimals: 8 },
+    1: { id: 174, name: 'FOMO', decimals: 8 },
+    2: { id: 7, name: 'BEAMX', decimals: 8 }
+};
+
+function fuddleResolveAssetName(aid) {
+    const cfg = (typeof ASSET_CONFIG !== 'undefined') ? ASSET_CONFIG[aid] : null;
+    return cfg ? cfg.symbol : (aid === 0 ? 'BEAM' : `CA#${aid}`);
+}
+
 function fuddleUpdateTierNames() {
     const s = fuddleState.settings;
     if (!s) return;
     for (let tier = 0; tier < 3; tier++) {
-        const aid = s[`tier${tier}_asset`];
-        if (aid != null) {
-            const cfg = (typeof ASSET_CONFIG !== 'undefined') ? ASSET_CONFIG[aid] : null;
-            const name = cfg ? cfg.symbol : (aid === 0 ? 'BEAM' : `CA#${aid}`);
+        // Entry asset = from settings (what contract actually charges)
+        const settingsAid = s[`tier${tier}_asset`];
+        if (settingsAid != null) {
+            const name = fuddleResolveAssetName(settingsAid);
+            const cfg = (typeof ASSET_CONFIG !== 'undefined') ? ASSET_CONFIG[settingsAid] : null;
+            TIER_ENTRY_ASSETS[tier] = { id: settingsAid, name: name, decimals: cfg?.decimals || 8 };
+        }
+
+        // Display asset = from active tournament (snapshot at round start)
+        // Falls back to settings if no tournament exists
+        const tournament = fuddleState.tournaments?.[tier];
+        const displayAid = (tournament && tournament.asset != null) ? tournament.asset : settingsAid;
+        if (displayAid != null) {
+            const name = fuddleResolveAssetName(displayAid);
+            const cfg = (typeof ASSET_CONFIG !== 'undefined') ? ASSET_CONFIG[displayAid] : null;
             TIER_NAMES[tier] = name;
-            TIER_ASSETS[tier] = { id: aid, name: name, decimals: cfg?.decimals || 8 };
+            TIER_ASSETS[tier] = { id: displayAid, name: name, decimals: cfg?.decimals || 8 };
         }
     }
 }
@@ -179,7 +202,6 @@ async function loadFuddleSettings() {
     if (result && result.settings) {
         fuddleState.settings = result.settings;
         fuddleState.isAdmin = !!(result.settings.is_admin);
-        fuddleUpdateTierNames();
     }
     return fuddleState.settings;
 }
@@ -400,6 +422,8 @@ async function loadFuddleData() {
         loadAllMyTournaments(),
         loadCurrentHeight(),
     ]);
+    // Update tier names AFTER both settings and tournaments are loaded
+    fuddleUpdateTierNames();
 }
 
 // =========================================================================
@@ -464,7 +488,8 @@ function renderFuddleLobby() {
         const my = fuddleState.myTournaments[cTier];
         const tierClass = TIER_CSS[cTier];
         const tierName = TIER_NAMES[cTier];
-        const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+        const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];       // Tournament's actual asset (for pool/rewards)
+        const entryAsset = TIER_ENTRY_ASSETS[cTier] || tierAsset;     // Settings' asset (what contract charges)
 
         let prizePool = '0';
         let players = 0;
@@ -500,13 +525,31 @@ function renderFuddleLobby() {
 
         const countdownText = isActive ? fuddleFormatCountdown(blocksLeft) : (isEnded ? 'Ended' : 'Not started');
 
+        // Show entry cost with correct asset; warn if mismatch with tournament pool
+        const entryCostText = t ? fuddleFormatBeam(t.tier_entry_cost) : '?';
+        const entryLabel = `${entryCostText} ${entryAsset.name} per game`;
+
+        // USD for prize pool using tournament's actual asset
+        let poolUsdHtml = '';
+        if (t && t.prize_pool > 0 && typeof getAssetUsdValue === 'function') {
+            const usd = getAssetUsdValue(tierAsset.id, t.prize_pool);
+            if (usd > 0) poolUsdHtml = ` <span style="font-size:11px;color:var(--text-muted);">($${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)})</span>`;
+        }
+
+        // USD for entry cost using settings' asset
+        let entryUsdHtml = '';
+        if (t && t.tier_entry_cost > 0 && typeof getAssetUsdValue === 'function') {
+            const usd = getAssetUsdValue(entryAsset.id, t.tier_entry_cost);
+            if (usd > 0) entryUsdHtml = ` <span style="font-size:11px;color:var(--text-muted);">($${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)})</span>`;
+        }
+
         tournamentsHtml += `
             <div class="fuddle-tournament-card ${tierClass}">
                 <div class="fuddle-tournament-tier-badge">${tierName}</div>
-                <div class="fuddle-tournament-letters">${t ? fuddleFormatBeam(t.tier_entry_cost) : '?'} ${tierAsset.name} per game</div>
+                <div class="fuddle-tournament-letters">${entryLabel}${entryUsdHtml}</div>
                 <div class="fuddle-tournament-prize">
                     <span class="prize-amount">${prizePool}</span>
-                    <span class="prize-label">${tierAsset.name} Prize Pool${t && t.prize_pool > 0 && typeof getAssetUsdValue === 'function' ? (() => { const usd = getAssetUsdValue(tierAsset.id, t.prize_pool); return usd > 0 ? ` <span style="font-size:11px;color:var(--text-muted);">($${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)})</span>` : ''; })() : ''}</span>
+                    <span class="prize-label">${tierAsset.name} Prize Pool${poolUsdHtml}</span>
                 </div>
                 <div class="fuddle-tournament-meta">
                     <div class="meta-item">
@@ -1001,7 +1044,7 @@ function fuddleShowHowToPlay() {
 
 function fuddleShowDonateModal(cTier) {
     const tierName = TIER_NAMES[cTier];
-    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const entryAsset = TIER_ENTRY_ASSETS[cTier] || TIER_ASSETS[cTier] || TIER_ASSETS[0];
     const overlay = document.createElement('div');
     overlay.className = 'fuddle-result-overlay';
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
@@ -1009,10 +1052,10 @@ function fuddleShowDonateModal(cTier) {
     overlay.innerHTML = `
         <div class="fuddle-result-modal" style="max-width:400px;">
             <h2 style="color:var(--fuddle-accent);margin:0 0 8px;font-family:var(--fuddle-font-game);font-size:20px;letter-spacing:2px;">DONATE TO POOL</h2>
-            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">${tierName} Tournament — ${tierAsset.name}</p>
+            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">${tierName} Tournament — ${entryAsset.name}</p>
 
             <div style="margin-bottom:20px;">
-                <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Amount (${tierAsset.name})</label>
+                <label style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Amount (${entryAsset.name})</label>
                 <input type="text" id="donate-amount" placeholder="1.0" style="width:100%;box-sizing:border-box;">
             </div>
 
@@ -1027,7 +1070,7 @@ function fuddleShowDonateModal(cTier) {
 }
 
 async function fuddleDonateToPool(cTier) {
-    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const entryAsset = TIER_ENTRY_ASSETS[cTier] || TIER_ASSETS[cTier] || TIER_ASSETS[0];
     const tierName = TIER_NAMES[cTier];
     const input = document.getElementById('donate-amount');
     const beamAmount = parseFloat(input?.value);
@@ -1037,9 +1080,9 @@ async function fuddleDonateToPool(cTier) {
     }
     const groth = Math.round(beamAmount * 100000000);
 
-    fuddleShowTxProgress(`Donating ${beamAmount} ${tierAsset.name}`, `${tierName} Prize Pool`, 'Sending transaction...');
+    fuddleShowTxProgress(`Donating ${beamAmount} ${entryAsset.name}`, `${tierName} Prize Pool`, 'Sending transaction...');
 
-    const result = await fuddleTx('donate_to_pool', 'user', `tier=${cTier},amount=${groth}`, `Donate ${beamAmount} ${tierAsset.name}`);
+    const result = await fuddleTx('donate_to_pool', 'user', `tier=${cTier},amount=${groth}`, `Donate ${beamAmount} ${entryAsset.name}`);
     if (!result || result.error) {
         fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
         return;
@@ -1050,9 +1093,10 @@ async function fuddleDonateToPool(cTier) {
 
     // Donations don't have a simple poll condition — wait ~30s
     await new Promise(r => setTimeout(r, 30000));
-    fuddleTxProgressSuccess(`Donated ${beamAmount} ${tierAsset.name}!`);
+    fuddleTxProgressSuccess(`Donated ${beamAmount} ${entryAsset.name}!`);
     setTimeout(async () => {
         await loadAllTournaments();
+        fuddleUpdateTierNames();
         renderFuddleLobby();
     }, 1600);
 }
@@ -1120,6 +1164,7 @@ function fuddleShowLossModal() {
 // Show difficulty picker popup for a given contract tier
 function fuddleShowDiffPicker(cTier) {
     const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const entryAsset = TIER_ENTRY_ASSETS[cTier] || tierAsset;
     const tierName = TIER_NAMES[cTier];
     const t = fuddleState.tournaments[cTier];
     const tierCostKey = `tier${cTier}_cost`;
@@ -1132,7 +1177,7 @@ function fuddleShowDiffPicker(cTier) {
     overlay.innerHTML = `
         <div class="fuddle-result-modal" style="max-width:380px;">
             <h2 style="color:var(--fuddle-accent);margin:0 0 4px;font-family:var(--fuddle-font-display);font-size:20px;letter-spacing:2px;">${tierName} TOURNAMENT</h2>
-            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">Entry: ${fuddleFormatBeam(entryCost)} ${tierAsset.name} &middot; Choose word length</p>
+            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">Entry: ${fuddleFormatBeam(entryCost)} ${entryAsset.name} &middot; Choose word length</p>
 
             <div class="fuddle-diff-picker">
                 <button class="fuddle-diff-btn" onclick="this.closest('.fuddle-result-overlay').remove(); fuddleCreateGame(4, ${cTier})">
@@ -1362,6 +1407,7 @@ async function fuddleClaimTournamentReward(cTier, round) {
             fuddleTxProgressSuccess(`${tierName} reward claimed!`);
             setTimeout(async () => {
                 await loadAllTournaments();
+                fuddleUpdateTierNames();
                 renderFuddleLobby();
             }, 1600);
             return;
@@ -1372,6 +1418,7 @@ async function fuddleClaimTournamentReward(cTier, round) {
     setTimeout(async () => {
         await loadAllTournaments();
         await loadAllMyTournaments();
+        fuddleUpdateTierNames();
         renderFuddleLobby();
     }, 1600);
 }
@@ -1741,6 +1788,7 @@ async function fuddleShowAdmin() {
         loadAllTournaments(),
         loadFuddleWordCounts(),
     ]);
+    fuddleUpdateTierNames();
     const s = fuddleState.settings;
     if (!s) {
         root.innerHTML += '<div style="color:var(--error);padding:20px;">Failed to load settings</div>';
@@ -1828,14 +1876,13 @@ lootbox_small_price=GROTH,lootbox_large_price=GROTH,tournament_duration=BLOCKS" 
                 <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[2]} Pool</span><span class="value">${t2 ? fuddleFormatBeam(t2.prize_pool) : '0'} ${TIER_NAMES[2]}${t2 && t2.prize_pool > 0 && typeof getAssetUsdValue === 'function' ? (() => { const u = getAssetUsdValue(TIER_ASSETS[2].id, t2.prize_pool); return u > 0 ? ` <span style="color:var(--text-muted);font-size:11px;">($${u.toFixed(2)})</span>` : ''; })() : ''}</span></div>
             </div>
             <div class="fuddle-admin-stats" style="margin-top:10px;">
-                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[0]} Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier0_cost)} ${TIER_NAMES[0]}</span></div>
-                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[1]} Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier1_cost)} ${TIER_NAMES[1]}</span></div>
-                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[2]} Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier2_cost)} ${TIER_NAMES[2]}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">Tier 0 Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier0_cost)} ${TIER_ENTRY_ASSETS[0].name}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">Tier 1 Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier1_cost)} ${TIER_ENTRY_ASSETS[1].name}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">Tier 2 Entry Cost</span><span class="value">${fuddleFormatBeam(s.tier2_cost)} ${TIER_ENTRY_ASSETS[2].name}</span></div>
             </div>
             <div class="fuddle-admin-stats" style="margin-top:10px;">
-                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[0]} Asset ID</span><span class="value">${s.tier0_asset ?? '—'}</span></div>
-                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[1]} Asset ID</span><span class="value">${s.tier1_asset ?? '—'}</span></div>
-                <div class="fuddle-admin-stat"><span class="label">${TIER_NAMES[2]} Asset ID</span><span class="value">${s.tier2_asset ?? '—'}</span></div>
+                <div class="fuddle-admin-stat"><span class="label">Settings Asset ID</span><span class="value">T0: ${s.tier0_asset ?? '—'} (${TIER_ENTRY_ASSETS[0].name}) | T1: ${s.tier1_asset ?? '—'} (${TIER_ENTRY_ASSETS[1].name}) | T2: ${s.tier2_asset ?? '—'} (${TIER_ENTRY_ASSETS[2].name})</span></div>
+                <div class="fuddle-admin-stat"><span class="label">Active Round Asset</span><span class="value">T0: ${t0?.asset ?? '—'} (${TIER_NAMES[0]}) | T1: ${t1?.asset ?? '—'} (${TIER_NAMES[1]}) | T2: ${t2?.asset ?? '—'} (${TIER_NAMES[2]})${(t0?.asset != null && t0.asset !== s.tier0_asset) || (t1?.asset != null && t1.asset !== s.tier1_asset) || (t2?.asset != null && t2.asset !== s.tier2_asset) ? ' <span style="color:var(--warning);">MISMATCH - settings change takes effect next round</span>' : ''}</span></div>
             </div>
         </div>
 
