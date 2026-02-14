@@ -2562,3 +2562,140 @@
 .fuddle-active-game.tier-beamx {
     border-left: 3px solid var(--fuddle-tier-beamx);
 }
+
+/* === TX Progress Bottom Bar === */
+
+.fuddle-tx-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 9000;
+    background: rgba(17, 24, 39, 0.97);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(191, 255, 0, 0.15);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.fuddle-tx-bar.visible {
+    transform: translateY(0);
+}
+
+.fuddle-tx-bar.hiding {
+    transform: translateY(100%);
+}
+
+.fuddle-tx-bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--fuddle-accent), #00d4ff);
+    transition: width 0.4s ease;
+    border-radius: 0 2px 2px 0;
+}
+
+.fuddle-tx-bar.success .fuddle-tx-bar-fill {
+    background: var(--success, #10b981);
+    width: 100% !important;
+}
+
+.fuddle-tx-bar.error .fuddle-tx-bar-fill {
+    background: var(--error, #ef4444);
+}
+
+.fuddle-tx-bar-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.fuddle-tx-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.fuddle-tx-bar-spinner {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border: 2px solid rgba(191, 255, 0, 0.15);
+    border-top-color: var(--fuddle-accent);
+    border-radius: 50%;
+    animation: fuddleSpinLoader 0.7s linear infinite;
+}
+
+.fuddle-tx-bar.success .fuddle-tx-bar-spinner,
+.fuddle-tx-bar.error .fuddle-tx-bar-spinner {
+    border: none;
+    animation: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fuddle-tx-bar.success .fuddle-tx-bar-spinner {
+    color: var(--success, #10b981);
+}
+
+.fuddle-tx-bar.error .fuddle-tx-bar-spinner {
+    color: var(--error, #ef4444);
+}
+
+.fuddle-tx-bar-info {
+    min-width: 0;
+}
+
+.fuddle-tx-bar-title {
+    font-family: var(--fuddle-font-display, 'Outfit', sans-serif);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fuddle-accent);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fuddle-tx-bar.success .fuddle-tx-bar-title {
+    color: var(--success, #10b981);
+}
+
+.fuddle-tx-bar.error .fuddle-tx-bar-title {
+    color: var(--error, #ef4444);
+}
+
+.fuddle-tx-bar-text {
+    font-size: 11px;
+    color: var(--text-secondary, #94a3b8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+}
+
+.fuddle-tx-bar-close {
+    background: none;
+    border: none;
+    color: var(--text-muted, #64748b);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.fuddle-tx-bar-close:hover {
+    color: var(--text-primary, #f8fafc);
+}
+
+@keyframes fuddleSpinLoader {
+    to { transform: rotate(360deg); }
+}

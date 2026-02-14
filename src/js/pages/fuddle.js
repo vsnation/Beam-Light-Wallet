@@ -82,7 +82,12 @@ async function fuddleCall(action, role, extraArgs) {
         const data = await resp.json();
         if (data.result && data.result.output) {
             try {
-                return JSON.parse(data.result.output);
+                const output = JSON.parse(data.result.output);
+                if (output.error) {
+                    console.error('Fuddle shader error:', output.error);
+                    return { error: output.error };
+                }
+                return output;
             } catch (e) {
                 return data.result;
             }
@@ -346,6 +351,13 @@ function initFuddle() {
     if (fuddleState.countdownTimer) {
         clearInterval(fuddleState.countdownTimer);
         fuddleState.countdownTimer = null;
+    }
+
+    // Clean up any orphaned TX progress overlay
+    if (typeof fuddleHideTxProgress === 'function') fuddleHideTxProgress();
+
+    if (typeof FUDDLE_SHADER === 'undefined') {
+        console.warn('Fuddle: FUDDLE_SHADER not defined — server-side shader injection will be used as fallback');
     }
 
     if (!FUDDLE_CID) {
@@ -995,6 +1007,7 @@ function fuddleShowDonateModal(cTier) {
 
 async function fuddleDonateToPool(cTier) {
     const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const tierName = TIER_NAMES[cTier];
     const input = document.getElementById('donate-amount');
     const beamAmount = parseFloat(input?.value);
     if (!beamAmount || beamAmount <= 0) {
@@ -1003,17 +1016,24 @@ async function fuddleDonateToPool(cTier) {
     }
     const groth = Math.round(beamAmount * 100000000);
 
-    showFuddleToast(`Donating to ${tierAsset.name} prize pool...`, 'info');
+    fuddleShowTxProgress(`Donating ${beamAmount} ${tierAsset.name}`, `${tierName} Prize Pool`, 'Sending transaction...');
+
     const result = await fuddleTx('donate_to_pool', 'user', `tier=${cTier},amount=${groth}`, `Donate ${beamAmount} ${tierAsset.name}`);
-    if (result && !result.error) {
-        showFuddleToast(`Donated ${beamAmount} ${tierAsset.name} to ${TIER_NAMES[cTier]} pool!`, 'success');
-        setTimeout(async () => {
-            await loadAllTournaments();
-            renderFuddleLobby();
-        }, 3000);
-    } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+    if (!result || result.error) {
+        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        return;
     }
+
+    fuddleUpdateTxProgress('Transaction sent. Waiting for confirmation...', 15);
+    fuddleStartTxProgressTimer();
+
+    // Donations don't have a simple poll condition — wait ~30s
+    await new Promise(r => setTimeout(r, 30000));
+    fuddleTxProgressSuccess(`Donated ${beamAmount} ${tierAsset.name}!`);
+    setTimeout(async () => {
+        await loadAllTournaments();
+        renderFuddleLobby();
+    }, 1600);
 }
 
 // =========================================================================
@@ -1120,27 +1140,52 @@ function fuddleShowDiffPicker(cTier) {
 
 async function fuddleCreateGame(difficulty, cTier) {
     const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
-    const t = fuddleState.tournaments[cTier];
-    const tierCostKey = `tier${cTier}_cost`;
-    const entryCost = t ? (t.tier_entry_cost || fuddleState.settings?.[tierCostKey] || 0) : (fuddleState.settings?.[tierCostKey] || 0);
-    if (!confirm(`Play ${difficulty}-letter in ${TIER_NAMES[cTier]} for ${fuddleFormatBeam(entryCost)} ${tierAsset.name}?`)) return;
+    const tierName = TIER_NAMES[cTier];
 
-    showFuddleToast('Creating game...', 'info');
-    const result = await fuddleTx('create_game', 'user', `difficulty=${difficulty},tier=${cTier}`, `New ${difficulty}-letter ${TIER_NAMES[cTier]} game`);
-    if (result && !result.error) {
-        showFuddleToast('Game created! Loading...', 'success');
-        setTimeout(async () => {
-            await loadFuddleGames();
-            const myGames = fuddleState.games.filter(g => g.difficulty === difficulty);
-            if (myGames.length > 0) {
-                const latestGame = myGames[myGames.length - 1];
-                fuddleEnterGame(latestGame.id, difficulty, cTier);
-            } else {
-                renderFuddleLobby();
+    fuddleShowTxProgress(
+        `Creating ${difficulty}-Letter Game`,
+        `${tierName} Tournament`,
+        'Sending transaction...'
+    );
+
+    const result = await fuddleTx('create_game', 'user', `difficulty=${difficulty},tier=${cTier}`, `New ${difficulty}-letter ${tierName} game`);
+    if (!result || result.error) {
+        fuddleTxProgressError('Failed to create game: ' + (result?.error || 'Unknown error'));
+        return;
+    }
+
+    fuddleUpdateTxProgress('Waiting for confirmation...', 15);
+    fuddleStartTxProgressTimer();
+
+    // Poll for the game to appear, also check for tx failure
+    let found = false;
+    for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+
+        // Check for on-chain tx failure every 3rd poll
+        if (i > 0 && i % 3 === 0) {
+            const failReason = await fuddleCheckTxFailed();
+            if (failReason) {
+                fuddleTxProgressError(typeof failReason === 'string' ? failReason : 'Transaction failed');
+                return;
             }
-        }, 4000);
-    } else {
-        showFuddleToast('Failed to create game: ' + (result?.error || 'Unknown error'), 'error');
+        }
+
+        await loadFuddleGames();
+        const myGames = fuddleState.games.filter(g => g.difficulty === difficulty);
+        if (myGames.length > 0) {
+            const latestGame = myGames[myGames.length - 1];
+            fuddleTxProgressSuccess('Game created!');
+            found = true;
+            setTimeout(() => fuddleEnterGame(latestGame.id, difficulty, cTier), 2100);
+            break;
+        }
+    }
+
+    if (!found) {
+        fuddleHideTxProgress();
+        showFuddleToast('Game may still be processing. Check lobby in a moment.', 'warning');
+        renderFuddleLobby();
     }
 }
 
@@ -1168,6 +1213,7 @@ function fuddleBackToLobby() {
     }
     fuddleState.isConfirming = false;
     fuddleStopTxPolling();
+    fuddleHideTxProgress();
     fuddleDetachKeyboard();
     loadFuddleData().then(() => renderFuddleLobby());
 }
@@ -1181,54 +1227,132 @@ function fuddleBackFromShop() {
 }
 
 async function fuddleBuyLetter(charId) {
+    const letter = FUDDLE_LETTERS[charId];
     const letterPrice = fuddleState.settings?.letter_price;
-    if (!confirm(`Buy 1x ${FUDDLE_LETTERS[charId]} for ${fuddleFormatBeam(letterPrice)} BEAM?`)) return;
+    fuddleConfirmModal(
+        `Buy Letter "${letter}"`,
+        `Purchase 1x <strong>${letter}</strong> for <strong>${fuddleFormatBeam(letterPrice)} BEAM</strong>`,
+        `Buy ${letter}`,
+        () => fuddleBuyLetterExecute(charId)
+    );
+}
 
-    showFuddleToast('Buying letter...', 'info');
-    const result = await fuddleTx('buy_letters', 'user', `char_id=${charId},count=1`, `Buy letter ${FUDDLE_LETTERS[charId]}`);
-    if (result && !result.error) {
-        showFuddleToast(`Bought ${FUDDLE_LETTERS[charId]}!`, 'success');
-        setTimeout(async () => {
-            await loadFuddleLetters();
-            fuddleShowShop();
-        }, 3000);
-    } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+async function fuddleBuyLetterExecute(charId) {
+    const letter = FUDDLE_LETTERS[charId];
+    const ownedBefore = fuddleState.letters[charId] || 0;
+
+    fuddleShowTxProgress(`Buying "${letter}"`, '1x letter', 'Sending transaction...');
+
+    const result = await fuddleTx('buy_letters', 'user', `char_id=${charId},count=1`, `Buy letter ${letter}`);
+    if (!result || result.error) {
+        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        return;
     }
+
+    fuddleUpdateTxProgress('Waiting for confirmation...', 15);
+    fuddleStartTxProgressTimer();
+
+    for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        if (i > 0 && i % 3 === 0) {
+            const failReason = await fuddleCheckTxFailed();
+            if (failReason) { fuddleTxProgressError(typeof failReason === 'string' ? failReason : 'Transaction failed'); return; }
+        }
+        await loadFuddleLetters();
+        if ((fuddleState.letters[charId] || 0) > ownedBefore) {
+            fuddleTxProgressSuccess(`Bought ${letter}!`);
+            setTimeout(() => fuddleShowShop(), 2100);
+            return;
+        }
+    }
+
+    fuddleTxProgressSuccess(`Bought ${letter}! (confirming)`);
+    setTimeout(() => fuddleShowShop(), 2100);
 }
 
 async function fuddleBuyLootbox(size) {
     const price = size === 0 ? fuddleState.settings?.lootbox_small_price : fuddleState.settings?.lootbox_large_price;
     const name = size === 0 ? 'Small' : 'Large';
-    if (!confirm(`Buy ${name} Loot Box for ${fuddleFormatBeam(price)} BEAM?`)) return;
+    const letterCount = size === 0 ? 24 : 48;
+    fuddleConfirmModal(
+        `Buy ${name} Loot Box`,
+        `Get <strong>${letterCount} random letters</strong> for <strong>${fuddleFormatBeam(price)} BEAM</strong>`,
+        `Buy ${name} Box`,
+        () => fuddleBuyLootboxExecute(size)
+    );
+}
 
-    showFuddleToast('Buying loot box...', 'info');
+async function fuddleBuyLootboxExecute(size) {
+    const name = size === 0 ? 'Small' : 'Large';
+    const totalBefore = fuddleTotalLetters();
+
+    fuddleShowTxProgress(`Buying ${name} Loot Box`, size === 0 ? '24 random letters' : '48 random letters', 'Sending transaction...');
+
     const result = await fuddleTx('buy_lootbox', 'user', `size=${size}`, `Buy ${name} Loot Box`);
-    if (result && !result.error) {
-        showFuddleToast('Loot box purchased! Letters incoming...', 'success');
-        setTimeout(async () => {
-            await loadFuddleLetters();
-            fuddleShowShop();
-        }, 3000);
-    } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+    if (!result || result.error) {
+        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        return;
     }
+
+    fuddleUpdateTxProgress('Waiting for confirmation...', 15);
+    fuddleStartTxProgressTimer();
+
+    for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        if (i > 0 && i % 3 === 0) {
+            const failReason = await fuddleCheckTxFailed();
+            if (failReason) { fuddleTxProgressError(typeof failReason === 'string' ? failReason : 'Transaction failed'); return; }
+        }
+        await loadFuddleLetters();
+        if (fuddleTotalLetters() > totalBefore) {
+            fuddleTxProgressSuccess(`${name} Loot Box opened!`);
+            setTimeout(() => fuddleShowShop(), 2100);
+            return;
+        }
+    }
+
+    fuddleTxProgressSuccess('Loot box purchased! (confirming)');
+    setTimeout(() => fuddleShowShop(), 2100);
 }
 
 async function fuddleClaimTournamentReward(cTier, round) {
     const tierName = TIER_NAMES[cTier] || 'BEAM';
-    showFuddleToast(`Claiming ${tierName} tournament reward...`, 'info');
+    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+
+    fuddleShowTxProgress(`Claiming ${tierName} Reward`, `Tournament Round ${round}`, 'Sending claim transaction...');
+
     const result = await fuddleTx('claim_tournament_reward', 'user', `tier=${cTier},round=${round}`, `Claim ${tierName} reward`);
-    if (result && !result.error) {
-        showFuddleToast('Reward claimed! Check your balance.', 'success');
-        setTimeout(async () => {
-            await loadAllTournaments();
-            await loadAllMyTournaments();
-            renderFuddleLobby();
-        }, 3000);
-    } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+    if (!result || result.error) {
+        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        return;
     }
+
+    fuddleUpdateTxProgress('Waiting for confirmation...', 15);
+    fuddleStartTxProgressTimer();
+
+    for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        if (i > 0 && i % 3 === 0) {
+            const failReason = await fuddleCheckTxFailed();
+            if (failReason) { fuddleTxProgressError(typeof failReason === 'string' ? failReason : 'Transaction failed'); return; }
+        }
+        await loadAllMyTournaments();
+        if (fuddleState.myTournaments[cTier]?.claimed) {
+            fuddleTxProgressSuccess(`${tierName} reward claimed!`);
+            setTimeout(async () => {
+                await loadAllTournaments();
+                renderFuddleLobby();
+            }, 1600);
+            return;
+        }
+    }
+
+    fuddleTxProgressSuccess('Reward claimed! (confirming)');
+    setTimeout(async () => {
+        await loadAllTournaments();
+        await loadAllMyTournaments();
+        renderFuddleLobby();
+    }, 1600);
 }
 
 // =========================================================================
@@ -1343,33 +1467,47 @@ async function fuddleBuyFromModal(charId) {
     const count = Math.max(1, parseInt(input?.value) || 1);
     const letter = FUDDLE_LETTERS[charId];
 
-    // Close modal
-    const overlay = input?.closest('.fuddle-result-overlay');
-    if (overlay) overlay.remove();
+    // Close buy-letter modal
+    const modalOverlay = input?.closest('.fuddle-result-overlay');
+    if (modalOverlay) modalOverlay.remove();
 
     const ownedBefore = fuddleState.letters[charId] || 0;
-    showFuddleToast(`Buying ${count}x ${letter}...`, 'info');
+
+    fuddleShowTxProgress(`Buying ${count}x "${letter}"`, 'In-game purchase', 'Sending transaction...');
+
     const result = await fuddleTx('buy_letters', 'user', `char_id=${charId},count=${count}`, `Buy ${count}x ${letter}`);
-    if (result && !result.error) {
-        showFuddleToast(`Bought ${count}x ${letter}! Waiting for confirmation...`, 'success');
-        // Poll until letter count increases, then auto-type
-        let pollCount = 0;
-        const pollInterval = setInterval(async () => {
-            pollCount++;
-            await loadFuddleLetters();
-            const nowOwned = fuddleState.letters[charId] || 0;
-            if (nowOwned > ownedBefore || pollCount >= 20) {
-                clearInterval(pollInterval);
-                if (nowOwned > ownedBefore && fuddleState.view === 'game') {
-                    // Auto-type the letter they just bought
-                    fuddleKeyPress(letter);
-                }
-                renderFuddleGame();
-            }
-        }, 3000);
-    } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+    if (!result || result.error) {
+        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        return;
     }
+
+    fuddleUpdateTxProgress('Waiting for confirmation...', 15);
+    fuddleStartTxProgressTimer();
+
+    for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        if (i > 0 && i % 3 === 0) {
+            const failReason = await fuddleCheckTxFailed();
+            if (failReason) { fuddleTxProgressError(typeof failReason === 'string' ? failReason : 'Transaction failed'); return; }
+        }
+        await loadFuddleLetters();
+        const nowOwned = fuddleState.letters[charId] || 0;
+        if (nowOwned > ownedBefore) {
+            fuddleTxProgressSuccess(`Bought ${count}x ${letter}!`);
+            setTimeout(() => {
+                if (fuddleState.view === 'game') {
+                    fuddleKeyPress(letter);
+                    renderFuddleGame();
+                }
+            }, 2100);
+            return;
+        }
+    }
+
+    fuddleTxProgressSuccess(`Bought ${count}x ${letter}! (confirming)`);
+    setTimeout(() => {
+        if (fuddleState.view === 'game') renderFuddleGame();
+    }, 1600);
 }
 
 function fuddleHandlePhysicalKey(e) {
@@ -1473,7 +1611,7 @@ function fuddlePollForResult() {
             fuddleState.isConfirming = false;
             fuddleState.confirmStartTime = null;
             fuddleStopConfirmTimer();
-            showFuddleToast('Timeout waiting for confirmation. Refresh and try again.', 'error');
+            showFuddleToast('Block confirmation timed out. Your guess may still be processing. Go back to lobby and reopen the game to check.', 'warning');
             renderFuddleGame();
             return;
         }
@@ -1966,4 +2104,189 @@ function showFuddleToast(msg, type) {
         return;
     }
     console.log(`[Fuddle ${type}] ${msg}`);
+}
+
+// =========================================================================
+// TX Progress Bar — non-blocking sticky bottom bar for transaction UX
+// =========================================================================
+
+let _fuddleTxProgressTimer = null;
+let _fuddleTxProgressPct = 0;
+let _fuddleTxLastTxId = null;
+
+function fuddleShowTxProgress(title, detail, stepText) {
+    fuddleHideTxProgress();
+    _fuddleTxProgressPct = 5;
+
+    const bar = document.createElement('div');
+    bar.className = 'fuddle-tx-bar';
+    bar.id = 'fuddle-tx-progress-overlay';
+
+    bar.innerHTML = `
+        <div class="fuddle-tx-bar-fill" id="fuddle-txp-bar" style="width:5%"></div>
+        <div class="fuddle-tx-bar-content">
+            <div class="fuddle-tx-bar-left">
+                <div class="fuddle-tx-bar-spinner" id="fuddle-txp-spinner"></div>
+                <div class="fuddle-tx-bar-info">
+                    <div class="fuddle-tx-bar-title" id="fuddle-txp-title">${title}</div>
+                    <div class="fuddle-tx-bar-text" id="fuddle-txp-text">${stepText || 'Sending transaction...'}</div>
+                </div>
+            </div>
+            <button class="fuddle-tx-bar-close" onclick="fuddleHideTxProgress()" title="Dismiss">&times;</button>
+        </div>
+    `;
+
+    document.body.appendChild(bar);
+    // Trigger slide-up animation
+    requestAnimationFrame(() => bar.classList.add('visible'));
+}
+
+function fuddleUpdateTxProgress(text, pct) {
+    const bar = document.getElementById('fuddle-txp-bar');
+    const txt = document.getElementById('fuddle-txp-text');
+    if (bar && pct != null) {
+        _fuddleTxProgressPct = pct;
+        bar.style.width = pct + '%';
+    }
+    if (txt && text) txt.textContent = text;
+}
+
+function fuddleStartTxProgressTimer() {
+    fuddleStopTxProgressTimer();
+    _fuddleTxProgressTimer = setInterval(() => {
+        if (_fuddleTxProgressPct < 90) {
+            _fuddleTxProgressPct += 1.5;
+            const elapsed = Math.round((_fuddleTxProgressPct - 5) / 1.3);
+            fuddleUpdateTxProgress(`Confirming... ${elapsed}s`, _fuddleTxProgressPct);
+        }
+    }, 1000);
+}
+
+function fuddleStopTxProgressTimer() {
+    if (_fuddleTxProgressTimer) {
+        clearInterval(_fuddleTxProgressTimer);
+        _fuddleTxProgressTimer = null;
+    }
+}
+
+function fuddleHideTxProgress() {
+    fuddleStopTxProgressTimer();
+    _fuddleTxLastTxId = null;
+    const el = document.getElementById('fuddle-tx-progress-overlay');
+    if (el) {
+        el.classList.remove('visible');
+        el.classList.add('hiding');
+        setTimeout(() => el.remove(), 300);
+    }
+}
+
+function fuddleTxProgressSuccess(msg) {
+    fuddleStopTxProgressTimer();
+    const el = document.getElementById('fuddle-tx-progress-overlay');
+    if (el) el.classList.add('success');
+    const spinner = document.getElementById('fuddle-txp-spinner');
+    if (spinner) spinner.innerHTML = '<svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.3a1 1 0 00-1.4-1.4L9 10.6 7.7 9.3a1 1 0 00-1.4 1.4l2 2a1 1 0 001.4 0l4-4z"/></svg>';
+    fuddleUpdateTxProgress(msg || 'Confirmed!', 100);
+    setTimeout(() => fuddleHideTxProgress(), 2000);
+}
+
+function fuddleTxProgressError(msg) {
+    fuddleStopTxProgressTimer();
+    _fuddleTxLastTxId = null;
+    const el = document.getElementById('fuddle-tx-progress-overlay');
+    if (!el) return;
+    el.classList.add('error');
+    const spinner = document.getElementById('fuddle-txp-spinner');
+    if (spinner) spinner.innerHTML = '<svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.7 7.3a1 1 0 00-1.4 1.4L8.6 10l-1.3 1.3a1 1 0 101.4 1.4L10 11.4l1.3 1.3a1 1 0 001.4-1.4L11.4 10l1.3-1.3a1 1 0 00-1.4-1.4L10 8.6 8.7 7.3z"/></svg>';
+    const title = document.getElementById('fuddle-txp-title');
+    if (title) title.textContent = 'Transaction Failed';
+    fuddleUpdateTxProgress(msg || 'Unknown error', _fuddleTxProgressPct);
+    // Check if it's a balance error and show buy modal
+    if (msg && (msg.includes('Not enough') || msg.includes('insufficient') || msg.includes('low balance'))) {
+        fuddleShowInsufficientFundsModal();
+    }
+    setTimeout(() => fuddleHideTxProgress(), 5000);
+}
+
+// Check recent tx_list for failed transactions (detects on-chain failures)
+async function fuddleCheckTxFailed() {
+    try {
+        const resp = await fetch('/api/wallet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'tx_list', params: { count: 5 } })
+        });
+        const data = await resp.json();
+        if (data.result && Array.isArray(data.result)) {
+            for (const tx of data.result) {
+                // status 4 = Failed, status 5 = Cancelled
+                if (tx.status === 4 || tx.status === 5) {
+                    const age = Date.now() / 1000 - tx.create_time;
+                    if (age < 120) { // Created within last 2 minutes
+                        return tx.failure_reason || 'Transaction failed on-chain';
+                    }
+                }
+            }
+        }
+    } catch (e) { /* ignore */ }
+    return null;
+}
+
+// =========================================================================
+// Insufficient Funds Modal — links to buybeam.my
+// =========================================================================
+
+function fuddleShowInsufficientFundsModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'fuddle-result-overlay';
+    overlay.id = 'fuddle-insufficient-funds-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+    overlay.innerHTML = `
+        <div class="fuddle-result-modal" style="max-width:400px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:12px;">💰</div>
+            <div style="font-family:var(--fuddle-font-display);font-size:20px;font-weight:700;color:var(--fuddle-accent);letter-spacing:1px;margin-bottom:8px;">Not Enough Funds</div>
+            <div style="color:var(--text-secondary);font-size:14px;line-height:1.6;margin-bottom:20px;">
+                You don't have enough balance to complete this transaction.
+                <br><br>
+                Buy BEAM instantly from <strong>any blockchain</strong> and <strong>any token</strong> in under 10 seconds:
+            </div>
+            <a href="https://buybeam.my" target="_blank" rel="noopener noreferrer" class="btn btn-accent" style="padding:14px 28px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;font-weight:600;text-decoration:none;margin-bottom:12px;">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                Buy BEAM Now
+            </a>
+            <button class="btn btn-outline" style="padding:10px 24px;width:100%;" onclick="this.closest('.fuddle-result-overlay').remove()">Close</button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+}
+
+// =========================================================================
+// Styled Confirm Modal — replaces native confirm()
+// =========================================================================
+
+function fuddleConfirmModal(title, message, confirmText, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fuddle-result-overlay';
+    overlay.id = 'fuddle-confirm-modal-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+    overlay.innerHTML = `
+        <div class="fuddle-result-modal" style="max-width:380px;">
+            <div style="font-family:var(--fuddle-font-display);font-size:18px;font-weight:700;color:var(--fuddle-accent);letter-spacing:1px;margin-bottom:8px;">${title}</div>
+            <div style="color:var(--text-secondary);font-size:13px;line-height:1.6;margin-bottom:20px;">${message}</div>
+            <div class="fuddle-result-btns">
+                <button class="btn btn-accent" style="padding:12px;flex:1;" id="fuddle-confirm-yes">${confirmText || 'Confirm'}</button>
+                <button class="btn btn-outline" style="padding:12px;flex:1;" onclick="this.closest('.fuddle-result-overlay').remove()">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#fuddle-confirm-yes').onclick = () => {
+        overlay.remove();
+        if (onConfirm) onConfirm();
+    };
 }
