@@ -1,13 +1,15 @@
 // =============================================================================
-// Fuddle v2 - On-Chain Wordle with Token Tournaments
+// Fuddle v5 - On-Chain Wordle with Round-Locked Token Tournaments
 // =============================================================================
 // 3 tournament tiers by TOKEN: BEAM, FOMO, BEAMX
 // Player picks tournament (token) + word difficulty (4/5/6) independently
 // Prize pools funded by entry fees + donations, 50% distributed proportionally
+// v5: Settings changes are round-locked — active rounds use asset/cost stored
+//     at creation. Pre-transaction balance checks with helpful modals.
 // =============================================================================
 
 // Contract ID - set after deployment
-const FUDDLE_CID = '28c52aef751ebe40d611660414dc355db7de4ae76bcc1dab5952537010735808';
+const FUDDLE_CID = '54b22372836b853cf61f87e657fbdd60455f2eee6b91c73f4dbf0a2df887a9d7';
 
 // Constants
 const FUDDLE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -42,7 +44,7 @@ function fuddleUpdateTierNames() {
     const s = fuddleState.settings;
     if (!s) return;
     for (let tier = 0; tier < 3; tier++) {
-        // Entry asset = from settings (what contract actually charges)
+        // Entry asset = from settings (what contract will charge for FUTURE rounds)
         const settingsAid = s[`tier${tier}_asset`];
         if (settingsAid != null) {
             const name = fuddleResolveAssetName(settingsAid);
@@ -50,7 +52,7 @@ function fuddleUpdateTierNames() {
             TIER_ENTRY_ASSETS[tier] = { id: settingsAid, name: name, decimals: cfg?.decimals || 8 };
         }
 
-        // Display asset = from active tournament (snapshot at round start)
+        // v5: Display asset = from active tournament (round-locked snapshot)
         // Falls back to settings if no tournament exists
         const tournament = fuddleState.tournaments?.[tier];
         const displayAid = (tournament && tournament.asset != null) ? tournament.asset : settingsAid;
@@ -59,6 +61,12 @@ function fuddleUpdateTierNames() {
             const cfg = (typeof ASSET_CONFIG !== 'undefined') ? ASSET_CONFIG[displayAid] : null;
             TIER_NAMES[tier] = name;
             TIER_ASSETS[tier] = { id: displayAid, name: name, decimals: cfg?.decimals || 8 };
+        }
+
+        // v5: Store tournament's round-locked entry cost (if available)
+        // entry_cost from tournament overrides tier_entry_cost from settings
+        if (tournament && tournament.entry_cost != null && !tournament.finalized) {
+            tournament._roundEntryCost = tournament.entry_cost;
         }
     }
 }
@@ -372,10 +380,107 @@ function fuddleFormatCountdown(blocksRemaining) {
     return `${minutes}m`;
 }
 
+// v5: Get the effective entry cost for a tier (round-locked from tournament, or settings)
+function fuddleGetEffectiveEntryCost(cTier) {
+    const t = fuddleState.tournaments[cTier];
+    // Use tournament's stored entry_cost if active round exists
+    if (t && t.entry_cost != null && !t.finalized) {
+        return t.entry_cost;
+    }
+    // Fall back to settings
+    return fuddleState.settings?.[`tier${cTier}_cost`] || 0;
+}
+
+// v5: Get the effective entry asset for a tier (round-locked from tournament, or settings)
+function fuddleGetEffectiveEntryAsset(cTier) {
+    return TIER_ASSETS[cTier] || TIER_ASSETS[0];
+}
+
 function fuddleEstimateReward(tournament, myScore) {
     if (!tournament || !tournament.total_scores || !myScore) return 0;
     const distributable = tournament.prize_pool * 50 / 100;
     return Math.floor(distributable * myScore / tournament.total_scores);
+}
+
+// =========================================================================
+// v5: Balance checking
+// =========================================================================
+
+async function fuddleGetWalletBalance(assetId) {
+    try {
+        const resp = await fetch('/api/wallet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0', id: Date.now(),
+                method: 'wallet_status', params: {}
+            })
+        });
+        const data = await resp.json();
+        if (!data.result) return 0;
+        if (assetId === 0) return data.result.available || 0;
+        if (data.result.totals) {
+            const asset = data.result.totals.find(t => t.asset_id === assetId);
+            return asset ? (asset.available || 0) : 0;
+        }
+        return 0;
+    } catch (e) {
+        console.error('Balance check failed:', e);
+        return 0;
+    }
+}
+
+async function fuddleCheckBalance(assetId, amount, assetName) {
+    const balance = await fuddleGetWalletBalance(assetId);
+    if (balance >= amount) return true;
+
+    fuddleShowInsufficientBalanceModal(assetId, amount, balance, assetName);
+    return false;
+}
+
+function fuddleShowInsufficientBalanceModal(assetId, required, available, assetName) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fuddle-result-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+    const reqText = fuddleFormatBeam(required);
+    const availText = fuddleFormatBeam(available);
+    const shortfall = required - available;
+    const shortText = fuddleFormatBeam(shortfall);
+
+    let actionBtn = '';
+    if (assetId === 0) {
+        actionBtn = `<button class="btn btn-accent" style="padding:12px;flex:1;" onclick="window.open('https://buybeam.my','_blank'); this.closest('.fuddle-result-overlay').remove();">Buy BEAM</button>`;
+    } else {
+        actionBtn = `<button class="btn btn-accent" style="padding:12px;flex:1;" onclick="this.closest('.fuddle-result-overlay').remove(); if(typeof showPage==='function') showPage('dex');">Swap on DEX</button>`;
+    }
+
+    overlay.innerHTML = `
+        <div class="fuddle-result-modal" style="max-width:380px;">
+            <div style="font-size:48px;text-align:center;margin-bottom:8px;">&#9888;</div>
+            <h2 style="color:var(--warning);margin:0 0 8px;text-align:center;font-size:18px;">Insufficient Balance</h2>
+            <div style="background:var(--bg-tertiary);border-radius:12px;padding:16px;margin:16px 0;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                    <span style="color:var(--text-muted);font-size:13px;">Required</span>
+                    <span style="color:var(--text-primary);font-weight:600;">${reqText} ${assetName}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                    <span style="color:var(--text-muted);font-size:13px;">Available</span>
+                    <span style="color:var(--text-secondary);">${availText} ${assetName}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;">
+                    <span style="color:var(--text-muted);font-size:13px;">Shortfall</span>
+                    <span style="color:var(--error);font-weight:600;">${shortText} ${assetName}</span>
+                </div>
+            </div>
+            <div class="fuddle-result-btns">
+                ${actionBtn}
+                <button class="btn btn-outline" style="padding:12px;flex:1;" onclick="this.closest('.fuddle-result-overlay').remove();">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
 }
 
 // =========================================================================
@@ -524,8 +629,9 @@ function renderFuddleLobby() {
 
         const countdownText = isActive ? fuddleFormatCountdown(blocksLeft) : (isEnded ? 'Ended' : 'Not started');
 
-        // Show entry cost with correct asset; warn if mismatch with tournament pool
-        const entryCostText = t ? fuddleFormatBeam(t.tier_entry_cost) : '?';
+        // v5: Show entry cost from round-locked tournament, or settings
+        const effectiveEntryCost = fuddleGetEffectiveEntryCost(cTier);
+        const entryCostText = fuddleFormatBeam(effectiveEntryCost);
         const entryLabel = `${entryCostText} ${tierAsset.name} per game`;
 
         // USD for prize pool using tournament's actual asset
@@ -537,8 +643,8 @@ function renderFuddleLobby() {
 
         // USD for entry cost using tournament's asset
         let entryUsdHtml = '';
-        if (t && t.tier_entry_cost > 0 && typeof getAssetUsdValue === 'function') {
-            const usd = getAssetUsdValue(tierAsset.id, t.tier_entry_cost);
+        if (effectiveEntryCost > 0 && typeof getAssetUsdValue === 'function') {
+            const usd = getAssetUsdValue(tierAsset.id, effectiveEntryCost);
             if (usd > 0) entryUsdHtml = ` <span style="font-size:11px;color:var(--text-muted);">($${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)})</span>`;
         }
 
@@ -1079,6 +1185,10 @@ async function fuddleDonateToPool(cTier) {
     }
     const groth = Math.round(beamAmount * 100000000);
 
+    // v5: Pre-transaction balance check (donate uses tournament's asset when active)
+    const hasBalance = await fuddleCheckBalance(tierAsset.id, groth, tierAsset.name);
+    if (!hasBalance) return;
+
     fuddleShowTxProgress(`Donating ${beamAmount} ${tierAsset.name}`, `${tierName} Prize Pool`, 'Sending transaction...');
 
     const result = await fuddleTx('donate_to_pool', 'user', `tier=${cTier},amount=${groth}`, `Donate ${beamAmount} ${tierAsset.name}`);
@@ -1162,11 +1272,9 @@ function fuddleShowLossModal() {
 
 // Show difficulty picker popup for a given contract tier
 function fuddleShowDiffPicker(cTier) {
-    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const tierAsset = fuddleGetEffectiveEntryAsset(cTier);
     const tierName = TIER_NAMES[cTier];
-    const t = fuddleState.tournaments[cTier];
-    const tierCostKey = `tier${cTier}_cost`;
-    const entryCost = t ? (t.tier_entry_cost || fuddleState.settings?.[tierCostKey] || 0) : (fuddleState.settings?.[tierCostKey] || 0);
+    const entryCost = fuddleGetEffectiveEntryCost(cTier);
 
     const overlay = document.createElement('div');
     overlay.className = 'fuddle-result-overlay';
@@ -1203,8 +1311,15 @@ function fuddleShowDiffPicker(cTier) {
 }
 
 async function fuddleCreateGame(difficulty, cTier) {
-    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const tierAsset = fuddleGetEffectiveEntryAsset(cTier);
     const tierName = TIER_NAMES[cTier];
+    const entryCost = fuddleGetEffectiveEntryCost(cTier);
+
+    // v5: Pre-transaction balance check
+    if (entryCost > 0) {
+        const hasBalance = await fuddleCheckBalance(tierAsset.id, entryCost, tierAsset.name);
+        if (!hasBalance) return;
+    }
 
     fuddleShowTxProgress(
         `Creating ${difficulty}-Letter Game`,
@@ -1304,6 +1419,13 @@ async function fuddleBuyLetter(charId) {
 async function fuddleBuyLetterExecute(charId) {
     const letter = FUDDLE_LETTERS[charId];
     const ownedBefore = fuddleState.letters[charId] || 0;
+    const letterPrice = fuddleState.settings?.letter_price || 0;
+
+    // v5: Pre-transaction balance check (letters always cost BEAM)
+    if (letterPrice > 0) {
+        const hasBalance = await fuddleCheckBalance(0, letterPrice, 'BEAM');
+        if (!hasBalance) return;
+    }
 
     fuddleShowTxProgress(`Buying "${letter}"`, '1x letter', 'Sending transaction...');
 
@@ -1349,6 +1471,13 @@ async function fuddleBuyLootbox(size) {
 async function fuddleBuyLootboxExecute(size) {
     const name = size === 0 ? 'Small' : 'Large';
     const totalBefore = fuddleTotalLetters();
+    const lootPrice = size === 0 ? fuddleState.settings?.lootbox_small_price : fuddleState.settings?.lootbox_large_price;
+
+    // v5: Pre-transaction balance check (lootboxes always cost BEAM)
+    if (lootPrice > 0) {
+        const hasBalance = await fuddleCheckBalance(0, lootPrice, 'BEAM');
+        if (!hasBalance) return;
+    }
 
     fuddleShowTxProgress(`Buying ${name} Loot Box`, size === 0 ? '24 random letters' : '48 random letters', 'Sending transaction...');
 
@@ -1532,6 +1661,14 @@ async function fuddleBuyFromModal(charId) {
     const input = document.getElementById('fuddle-buy-qty');
     const count = Math.max(1, parseInt(input?.value) || 1);
     const letter = FUDDLE_LETTERS[charId];
+    const letterPrice = fuddleState.settings?.letter_price || 0;
+    const totalCost = letterPrice * count;
+
+    // v5: Pre-transaction balance check (letters always cost BEAM)
+    if (totalCost > 0) {
+        const hasBalance = await fuddleCheckBalance(0, totalCost, 'BEAM');
+        if (!hasBalance) return;
+    }
 
     // Close buy-letter modal
     const modalOverlay = input?.closest('.fuddle-result-overlay');
