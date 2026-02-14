@@ -177,6 +177,12 @@ async function loadFuddleGames() {
     return fuddleState.games;
 }
 
+function getMyFuddleGames() {
+    const myPk = fuddleState.myStats?.pk;
+    if (!myPk) return fuddleState.games;
+    return fuddleState.games.filter(g => g.creator === myPk);
+}
+
 async function loadFuddleLetters() {
     const result = await fuddleCall('view_letters', 'user');
     fuddleState.letters = {};
@@ -552,11 +558,11 @@ function renderFuddleLobby() {
 
         ${stats ? `<div class="fuddle-lobby-section">${statsHtml}</div>` : ''}
 
-        ${fuddleState.games.length > 0 ? `
+        ${getMyFuddleGames().length > 0 ? `
         <div class="fuddle-lobby-section">
             <h3>Your Active Games</h3>
             <div class="fuddle-games-list">
-                ${fuddleState.games.map(g => {
+                ${getMyFuddleGames().map(g => {
                     const diff = g.difficulty || 5;
                     const cTier = g.tier != null ? g.tier : 0;
                     const tierName = TIER_NAMES[cTier] || 'BEAM';
@@ -1172,7 +1178,7 @@ async function fuddleCreateGame(difficulty, cTier) {
         }
 
         await loadFuddleGames();
-        const myGames = fuddleState.games.filter(g => g.difficulty === difficulty);
+        const myGames = getMyFuddleGames().filter(g => g.difficulty === difficulty);
         if (myGames.length > 0) {
             const latestGame = myGames[myGames.length - 1];
             fuddleTxProgressSuccess('Game created!');
