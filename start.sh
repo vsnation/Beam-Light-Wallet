@@ -118,7 +118,7 @@ if [ ! -f "$INSTALL_DIR/serve.py" ]; then
 fi
 
 # ==========================================
-# Auto-update: always pull latest version
+# Auto-update: check and ask user
 # ==========================================
 echo "Checking for updates..."
 cd "$INSTALL_DIR"
@@ -129,9 +129,27 @@ if [ -d "$INSTALL_DIR/.git" ]; then
         LOCAL_REV=$(git rev-parse HEAD 2>/dev/null)
         REMOTE_REV=$(git rev-parse origin/main 2>/dev/null)
         if [ -n "$REMOTE_REV" ] && [ "$LOCAL_REV" != "$REMOTE_REV" ]; then
-            echo "Update available, pulling latest..."
-            git reset --hard origin/main 2>/dev/null || git pull origin main 2>/dev/null || true
-            echo "Updated to $(git log --oneline -1 2>/dev/null)"
+            # Show what changed
+            echo ""
+            echo "============================================"
+            echo "  UPDATE AVAILABLE"
+            echo "============================================"
+            CHANGES=$(git log --oneline HEAD..origin/main 2>/dev/null | head -5)
+            if [ -n "$CHANGES" ]; then
+                echo "  Changes:"
+                echo "$CHANGES" | while read -r line; do echo "    $line"; done
+            fi
+            echo "============================================"
+            echo ""
+            printf "Download update? [y/N]: "
+            read -r UPDATE_CHOICE
+            if [ "$UPDATE_CHOICE" = "y" ] || [ "$UPDATE_CHOICE" = "Y" ]; then
+                echo "Downloading update..."
+                git reset --hard origin/main 2>/dev/null || git pull origin main 2>/dev/null || true
+                echo "Updated to $(git log --oneline -1 2>/dev/null)"
+            else
+                echo "Update skipped. Will ask again next launch."
+            fi
         else
             echo "Already up to date."
         fi
@@ -139,26 +157,46 @@ if [ -d "$INSTALL_DIR/.git" ]; then
         echo "Skipped (no internet connection)"
     fi
 else
-    # Not a git repo - download tarball and overwrite app files
-    TEMP_DIR=$(mktemp -d)
-    if curl -sL --connect-timeout 5 "$REPO_URL/archive/main.tar.gz" -o "$TEMP_DIR/latest.tar.gz" 2>/dev/null; then
-        mkdir -p "$TEMP_DIR/extracted"
-        tar -xzf "$TEMP_DIR/latest.tar.gz" --strip-components=1 -C "$TEMP_DIR/extracted" 2>/dev/null
-        if [ -f "$TEMP_DIR/extracted/serve.py" ]; then
-            # Update app files only (data is in ~/.beam-light-wallet, safe)
-            for item in serve.py start.sh src config shaders README.md build; do
-                if [ -e "$TEMP_DIR/extracted/$item" ]; then
-                    rm -rf "$INSTALL_DIR/$item"
-                    cp -r "$TEMP_DIR/extracted/$item" "$INSTALL_DIR/$item"
+    # Not a git repo - check tarball for updates
+    REMOTE_SHA=$(curl -s --connect-timeout 5 "https://api.github.com/repos/vsnation/Beam-Light-Wallet/commits/main" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha',''))" 2>/dev/null || echo "")
+    LOCAL_SHA_FILE="$INSTALL_DIR/.last_update_sha"
+    LOCAL_SHA=""
+    [ -f "$LOCAL_SHA_FILE" ] && LOCAL_SHA=$(cat "$LOCAL_SHA_FILE" 2>/dev/null)
+
+    if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$LOCAL_SHA" ]; then
+        echo ""
+        echo "============================================"
+        echo "  UPDATE AVAILABLE"
+        echo "============================================"
+        printf "Download update? [y/N]: "
+        read -r UPDATE_CHOICE
+        if [ "$UPDATE_CHOICE" = "y" ] || [ "$UPDATE_CHOICE" = "Y" ]; then
+            echo "Downloading update..."
+            TEMP_DIR=$(mktemp -d)
+            if curl -sL --connect-timeout 5 "$REPO_URL/archive/main.tar.gz" -o "$TEMP_DIR/latest.tar.gz" 2>/dev/null; then
+                mkdir -p "$TEMP_DIR/extracted"
+                tar -xzf "$TEMP_DIR/latest.tar.gz" --strip-components=1 -C "$TEMP_DIR/extracted" 2>/dev/null
+                if [ -f "$TEMP_DIR/extracted/serve.py" ]; then
+                    for item in serve.py start.sh src config shaders README.md build; do
+                        if [ -e "$TEMP_DIR/extracted/$item" ]; then
+                            rm -rf "$INSTALL_DIR/$item"
+                            cp -r "$TEMP_DIR/extracted/$item" "$INSTALL_DIR/$item"
+                        fi
+                    done
+                    chmod +x "$INSTALL_DIR/start.sh" 2>/dev/null || true
+                    echo "$REMOTE_SHA" > "$LOCAL_SHA_FILE"
+                    echo "Updated to latest version!"
                 fi
-            done
-            chmod +x "$INSTALL_DIR/start.sh" 2>/dev/null || true
-            echo "Updated to latest version!"
+            fi
+            rm -rf "$TEMP_DIR" 2>/dev/null
+        else
+            echo "Update skipped. Will ask again next launch."
         fi
-    else
+    elif [ -z "$REMOTE_SHA" ]; then
         echo "Skipped (no internet connection)"
+    else
+        echo "Already up to date."
     fi
-    rm -rf "$TEMP_DIR" 2>/dev/null
 fi
 echo ""
 
