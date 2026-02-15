@@ -650,6 +650,9 @@ function initFuddle() {
 }
 
 async function loadFuddleData() {
+    // Ensure BEAM price is available for USD displays
+    if (typeof fetchBeamPrice === 'function') fetchBeamPrice();
+
     await Promise.all([
         loadFuddleSettings(),
         loadFuddleLetters(),
@@ -755,7 +758,8 @@ function renderFuddleLobby() {
 
         const myScore = my ? (my.score || 0) : 0;
         const myClaimed = my ? !!my.claimed : false;
-        const estReward = t ? fuddleEstimateReward(t, myScore) : 0;
+        // Prefer shader's on-chain estimate, fall back to client calculation
+        const estReward = (my && my.estimated_reward) ? my.estimated_reward : (t ? fuddleEstimateReward(t, myScore) : 0);
 
         let actionBtn = '';
         if (isEnded && myScore > 0 && !myClaimed) {
@@ -807,7 +811,7 @@ function renderFuddleLobby() {
                         <span class="meta-label">Time Left</span>
                     </div>
                     ${myScore > 0 ? `<div class="meta-item meta-reward">
-                        <span class="meta-val reward">~${fuddleFormatBeam(estReward)} ${tierAsset.name}</span>
+                        <span class="meta-val reward">~${fuddleFormatBeam(estReward)} ${tierAsset.name}${estReward > 0 && typeof getAssetUsdValue === 'function' ? (() => { const u = getAssetUsdValue(tierAsset.id, estReward); return u > 0 ? ` <span style="font-size:10px;color:var(--text-muted);">($${u < 1 ? u.toFixed(4) : u.toFixed(2)})</span>` : ''; })() : ''}</span>
                         <span class="meta-label">Est. Reward</span>
                     </div>` : ''}
                 </div>
@@ -1315,11 +1319,12 @@ function fuddleShowShop() {
 }
 
 // =========================================================================
-// Render: Leaderboard
+// Render: Leaderboard — Per-Tournament Standings + All-Time
 // =========================================================================
 
 async function fuddleShowLeaderboard() {
     fuddleState.view = 'leaderboard';
+    if (!fuddleState.lbTier) fuddleState.lbTier = 0;
     const root = document.getElementById('fuddle-root');
     if (!root) return;
 
@@ -1329,17 +1334,129 @@ async function fuddleShowLeaderboard() {
             <div class="fuddle-title">Leaderboard</div>
             <div></div>
         </div>
-        <div class="fuddle-loading">Loading leaderboard...</div>
+        <div class="fuddle-loading">Loading standings...</div>
     `;
 
     await loadFuddleLeaderboard();
 
-    let rowsHtml = '';
+    fuddleRenderLeaderboardContent();
+}
+
+function fuddleSwitchLbTier(tier) {
+    fuddleState.lbTier = tier;
+    fuddleRenderLeaderboardContent();
+}
+
+function fuddleRenderLeaderboardContent() {
+    const root = document.getElementById('fuddle-root');
+    if (!root) return;
+
+    const cTier = fuddleState.lbTier || 0;
+
+    // Tier tabs
+    const tierTabsHtml = [0, 1, 2].map(t => {
+        const tierClass = TIER_CSS[t] || 'tier-beam';
+        const active = t === cTier ? ' active' : '';
+        return `<button class="fuddle-round-filter ${tierClass}${active}" onclick="fuddleSwitchLbTier(${t})">${TIER_NAMES[t]}</button>`;
+    }).join('');
+
+    // Current tournament for selected tier
+    const t = fuddleState.tournaments[cTier];
+    const my = fuddleState.myTournaments[cTier];
+    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    const tierClass = TIER_CSS[cTier] || 'tier-beam';
+
+    let tournamentHtml = '';
+    if (t && t.round > 0) {
+        const prizePool = fuddleFormatBeam(t.prize_pool);
+        const distributed = fuddleFormatBeam(Math.floor(t.prize_pool * 50 / 100));
+        const myScore = my?.score || 0;
+        const estReward = (my && my.estimated_reward) ? my.estimated_reward : fuddleEstimateReward(t, myScore);
+        const totalPlayers = t.total_players || 0;
+        const totalScores = t.total_scores || 0;
+
+        // USD values
+        let poolUsd = '';
+        if (t.prize_pool > 0 && typeof getAssetUsdValue === 'function') {
+            const u = getAssetUsdValue(tierAsset.id, t.prize_pool);
+            if (u > 0) poolUsd = ` <span style="font-size:11px;color:var(--text-muted);">($${u < 1 ? u.toFixed(4) : u.toFixed(2)})</span>`;
+        }
+        let rewardUsd = '';
+        if (estReward > 0 && typeof getAssetUsdValue === 'function') {
+            const u = getAssetUsdValue(tierAsset.id, estReward);
+            if (u > 0) rewardUsd = ` <span style="font-size:10px;color:var(--text-muted);">($${u < 1 ? u.toFixed(4) : u.toFixed(2)})</span>`;
+        }
+
+        // Share percentage
+        const sharePercent = totalScores > 0 && myScore > 0 ? ((myScore / totalScores) * 100).toFixed(1) : '0';
+
+        tournamentHtml = `
+        <div class="fuddle-lb-tournament ${tierClass}">
+            <div class="fuddle-lb-tournament-head">
+                <span class="fuddle-tournament-tier-badge">${TIER_NAMES[cTier]}</span>
+                <span style="color:var(--text-secondary);font-family:var(--fuddle-font-game);font-size:13px;">Round ${t.round}</span>
+                <span class="fuddle-round-status ${t.finalized ? 'ended' : 'active'}">${t.finalized ? 'Ended' : 'Active'}</span>
+            </div>
+            <div class="fuddle-lb-prize-row">
+                <div class="fuddle-lb-prize-item">
+                    <span class="fuddle-lb-prize-val">${prizePool} ${tierAsset.name}</span>
+                    <span class="fuddle-lb-prize-label">Prize Pool${poolUsd}</span>
+                </div>
+                <div class="fuddle-lb-prize-item">
+                    <span class="fuddle-lb-prize-val">${distributed} ${tierAsset.name}</span>
+                    <span class="fuddle-lb-prize-label">To Distribute (50%)</span>
+                </div>
+            </div>
+            <div class="fuddle-lb-stats-row">
+                <div class="fuddle-lb-stat">
+                    <span class="val">${totalPlayers}</span>
+                    <span class="lbl">Players</span>
+                </div>
+                <div class="fuddle-lb-stat">
+                    <span class="val">${totalScores}</span>
+                    <span class="lbl">Total Wins</span>
+                </div>
+                <div class="fuddle-lb-stat">
+                    <span class="val">${fuddleGetEffectiveEntryCost(cTier) ? fuddleFormatBeam(fuddleGetEffectiveEntryCost(cTier)) : '0'}</span>
+                    <span class="lbl">Entry (${tierAsset.name})</span>
+                </div>
+            </div>
+            ${myScore > 0 ? `
+            <div class="fuddle-lb-my-standing">
+                <div class="fuddle-lb-my-title">Your Standing</div>
+                <div class="fuddle-lb-my-grid">
+                    <div class="fuddle-lb-my-item">
+                        <span class="val" style="color:var(--fuddle-accent);">${myScore}</span>
+                        <span class="lbl">Wins</span>
+                    </div>
+                    <div class="fuddle-lb-my-item">
+                        <span class="val" style="color:var(--fuddle-present);">${sharePercent}%</span>
+                        <span class="lbl">Pool Share</span>
+                    </div>
+                    <div class="fuddle-lb-my-item">
+                        <span class="val" style="color:var(--fuddle-correct);">~${fuddleFormatBeam(estReward)}${rewardUsd}</span>
+                        <span class="lbl">Est. Reward</span>
+                    </div>
+                </div>
+            </div>` : `
+            <div class="fuddle-lb-my-standing" style="text-align:center;">
+                <span style="color:var(--text-muted);font-size:13px;">Win games in this tournament to earn a share of the prize pool</span>
+            </div>`}
+        </div>`;
+    } else {
+        tournamentHtml = `
+        <div style="text-align:center;padding:24px;color:var(--text-muted);">
+            No active ${TIER_NAMES[cTier]} tournament round yet.
+        </div>`;
+    }
+
+    // All-time global leaderboard
+    let globalHtml = '';
     if (fuddleState.leaderboard.length === 0) {
-        rowsHtml = '<div style="text-align:center;padding:20px;color:var(--text-muted);">No players yet. Be the first!</div>';
+        globalHtml = '<div style="text-align:center;padding:20px;color:var(--text-muted);">No players yet. Be the first!</div>';
     } else {
         const myPk = fuddleState.myStats?.pk || '';
-        rowsHtml = fuddleState.leaderboard.map((p, i) => {
+        globalHtml = fuddleState.leaderboard.map((p, i) => {
             const isMe = myPk && p.player === myPk;
             return `
             <div class="fuddle-lb-row ${isMe ? 'fuddle-lb-me' : ''}">
@@ -1357,7 +1474,17 @@ async function fuddleShowLeaderboard() {
             <div class="fuddle-title">Leaderboard</div>
             <div></div>
         </div>
-        <div class="fuddle-leaderboard">${rowsHtml}</div>
+
+        <div class="fuddle-lobby-section">
+            <h3>Tournament Standings</h3>
+            <div class="fuddle-round-filters">${tierTabsHtml}</div>
+            ${tournamentHtml}
+        </div>
+
+        <div class="fuddle-lobby-section">
+            <h3>All-Time Rankings</h3>
+            <div class="fuddle-leaderboard">${globalHtml}</div>
+        </div>
     `;
 }
 
