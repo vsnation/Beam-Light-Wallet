@@ -487,6 +487,57 @@
     border-color: rgba(167, 139, 250, 0.15);
 }
 
+/* Tournament card top row (badge + leaderboard icon) */
+.fuddle-tournament-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.fuddle-tournament-lb-btn {
+    background: rgba(191, 255, 0, 0.06);
+    border: 1px solid rgba(191, 255, 0, 0.12);
+    color: var(--fuddle-accent);
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.fuddle-tournament-lb-btn:hover {
+    background: rgba(191, 255, 0, 0.12);
+    border-color: rgba(191, 255, 0, 0.25);
+    box-shadow: 0 0 12px rgba(191, 255, 0, 0.08);
+}
+
+.tier-fomo .fuddle-tournament-lb-btn {
+    color: var(--fuddle-tier-fomo);
+    background: rgba(244, 63, 94, 0.06);
+    border-color: rgba(244, 63, 94, 0.12);
+}
+
+.tier-fomo .fuddle-tournament-lb-btn:hover {
+    background: rgba(244, 63, 94, 0.12);
+    border-color: rgba(244, 63, 94, 0.25);
+    box-shadow: 0 0 12px rgba(244, 63, 94, 0.08);
+}
+
+.tier-beamx .fuddle-tournament-lb-btn {
+    color: var(--fuddle-tier-beamx);
+    background: rgba(167, 139, 250, 0.06);
+    border-color: rgba(167, 139, 250, 0.12);
+}
+
+.tier-beamx .fuddle-tournament-lb-btn:hover {
+    background: rgba(167, 139, 250, 0.12);
+    border-color: rgba(167, 139, 250, 0.25);
+    box-shadow: 0 0 12px rgba(167, 139, 250, 0.08);
+}
+
 /* Tier badge */
 .fuddle-tournament-tier-badge {
     font-family: var(--fuddle-font-display);

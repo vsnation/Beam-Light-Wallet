@@ -370,14 +370,16 @@ async function loadRoundHistory(limit) {
                 const t = await loadPastTournament(cTier, r);
                 const my = await loadMyTournament(cTier, r);
                 if (t) {
-                    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+                    // Use the round's own locked asset, not current settings
+                    const roundAssetId = t.asset != null ? t.asset : (TIER_ASSETS[cTier]?.id || 0);
+                    const roundAssetName = fuddleResolveAssetName(roundAssetId);
                     fuddleState.roundHistory.push({
                         tier: cTier,
                         round: r,
                         tierName: TIER_NAMES[cTier] || 'BEAM',
                         tierClass: TIER_CSS[cTier] || 'tier-beam',
-                        assetName: tierAsset.name,
-                        assetId: tierAsset.id,
+                        assetName: roundAssetName,
+                        assetId: roundAssetId,
                         prizePool: t.prize_pool || 0,
                         totalPlayers: t.total_players || 0,
                         totalScores: t.total_scores || 0,
@@ -791,7 +793,12 @@ function renderFuddleLobby() {
 
         tournamentsHtml += `
             <div class="fuddle-tournament-card ${tierClass}">
-                <div class="fuddle-tournament-tier-badge">${tierName}</div>
+                <div class="fuddle-tournament-card-top">
+                    <div class="fuddle-tournament-tier-badge">${tierName}</div>
+                    <button class="fuddle-tournament-lb-btn" onclick="event.stopPropagation();fuddleState.lbTier=${cTier};fuddleShowLeaderboard();" title="Leaderboard">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="4" y="14" width="4" height="7" rx="1"/><rect x="10" y="9" width="4" height="12" rx="1"/><rect x="16" y="4" width="4" height="17" rx="1"/></svg>
+                    </button>
+                </div>
                 <div class="fuddle-tournament-letters">${entryLabel}${entryUsdHtml}</div>
                 <div class="fuddle-tournament-prize">
                     <span class="prize-amount">${prizePool}</span>
@@ -1059,6 +1066,9 @@ function fuddleRenderRoundCards() {
                 <span class="fuddle-tournament-tier-badge" style="font-size:10px;">${r.tierName}</span>
                 <span style="color:var(--text-secondary);font-family:var(--fuddle-font-game);font-size:12px;">Round ${r.round}</span>
                 <span class="fuddle-round-status ${r.finalized ? 'ended' : 'active'}">${r.finalized ? 'Ended' : 'Active'}</span>
+                <button class="fuddle-tournament-lb-btn" style="width:24px;height:24px;margin-left:auto;" onclick="event.stopPropagation();fuddleShowLeaderboard(${r.tier},${r.round});" title="View Rankings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="4" y="14" width="4" height="7" rx="1"/><rect x="10" y="9" width="4" height="12" rx="1"/><rect x="16" y="4" width="4" height="17" rx="1"/></svg>
+                </button>
             </div>
             <div class="fuddle-round-prize">
                 <span class="fuddle-round-prize-amount">${poolText}</span>
@@ -1354,9 +1364,13 @@ function fuddleBuildTournamentRankings(cTier, round) {
     return rankings;
 }
 
-async function fuddleShowLeaderboard() {
+async function fuddleShowLeaderboard(tier, round) {
     fuddleState.view = 'leaderboard';
+    if (tier != null) fuddleState.lbTier = tier;
     if (fuddleState.lbTier == null) fuddleState.lbTier = 0;
+    // lbRound=0 means current round for selected tier
+    fuddleState.lbRound = round || 0;
+
     const root = document.getElementById('fuddle-root');
     if (!root) return;
 
@@ -1369,13 +1383,33 @@ async function fuddleShowLeaderboard() {
         <div class="fuddle-loading">Loading standings...</div>
     `;
 
-    await loadFuddleLeaderboard();
+    // Load past tournament data if viewing a specific round
+    if (fuddleState.lbRound) {
+        await loadPastTournament(fuddleState.lbTier, fuddleState.lbRound);
+        await loadMyTournament(fuddleState.lbTier, fuddleState.lbRound);
+    }
+
     fuddleRenderLeaderboardContent();
 }
 
 function fuddleSwitchLbTier(tier) {
     fuddleState.lbTier = tier;
+    fuddleState.lbRound = 0; // Reset to current round when switching tier
     fuddleRenderLeaderboardContent();
+}
+
+function fuddleSwitchLbRound(round) {
+    fuddleState.lbRound = round;
+    // Load data for this round if not cached
+    const cTier = fuddleState.lbTier || 0;
+    if (round) {
+        Promise.all([
+            loadPastTournament(cTier, round),
+            loadMyTournament(cTier, round),
+        ]).then(() => fuddleRenderLeaderboardContent());
+    } else {
+        fuddleRenderLeaderboardContent();
+    }
 }
 
 function fuddleRenderLeaderboardContent() {
@@ -1383,6 +1417,9 @@ function fuddleRenderLeaderboardContent() {
     if (!root) return;
 
     const cTier = fuddleState.lbTier || 0;
+    const currentTournament = fuddleState.tournaments[cTier];
+    const currentRound = currentTournament?.round || 0;
+    const viewRound = fuddleState.lbRound || currentRound;
 
     // Tier tabs
     const tierTabsHtml = [0, 1, 2].map(t => {
@@ -1391,14 +1428,35 @@ function fuddleRenderLeaderboardContent() {
         return `<button class="fuddle-round-filter ${tierClass}${active}" onclick="fuddleSwitchLbTier(${t})">${TIER_NAMES[t]}</button>`;
     }).join('');
 
-    // Current tournament for selected tier
-    const t = fuddleState.tournaments[cTier];
-    const my = fuddleState.myTournaments[cTier];
-    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+    // Get tournament data — current round from tournaments state, past from pastTournaments cache
+    let t, my;
+    if (viewRound === currentRound) {
+        t = currentTournament;
+        my = fuddleState.myTournaments[cTier];
+    } else {
+        t = fuddleState.pastTournaments[`${cTier}_${viewRound}`];
+        my = fuddleState.pastMyTournaments[`${cTier}_${viewRound}`];
+    }
+
+    // Use round's own asset (round-locked), fall back to current tier asset
+    const roundAssetId = (t && t.asset != null) ? t.asset : (TIER_ASSETS[cTier]?.id || 0);
+    const roundAssetName = fuddleResolveAssetName(roundAssetId);
     const tierClass = TIER_CSS[cTier] || 'tier-beam';
 
+    // Round selector — show available rounds
+    let roundSelectorHtml = '';
+    if (currentRound > 1) {
+        const rounds = [];
+        for (let r = currentRound; r >= Math.max(1, currentRound - 5); r--) {
+            const label = r === currentRound ? `R${r} (Current)` : `R${r}`;
+            const active = r === viewRound ? ' active' : '';
+            rounds.push(`<button class="fuddle-round-filter${active}" onclick="fuddleSwitchLbRound(${r === currentRound ? 0 : r})">${label}</button>`);
+        }
+        roundSelectorHtml = `<div class="fuddle-round-filters" style="margin-top:8px;">${rounds.join('')}</div>`;
+    }
+
     let tournamentHtml = '';
-    if (t && t.round > 0) {
+    if (t && viewRound > 0) {
         const prizePool = fuddleFormatBeam(t.prize_pool);
         const distributed = fuddleFormatBeam(Math.floor(t.prize_pool * 50 / 100));
         const distributableRaw = Math.floor(t.prize_pool * 50 / 100);
@@ -1410,19 +1468,20 @@ function fuddleRenderLeaderboardContent() {
         // USD values
         let poolUsd = '';
         if (t.prize_pool > 0 && typeof getAssetUsdValue === 'function') {
-            const u = getAssetUsdValue(tierAsset.id, t.prize_pool);
+            const u = getAssetUsdValue(roundAssetId, t.prize_pool);
             if (u > 0) poolUsd = ` <span style="font-size:11px;color:var(--text-muted);">($${u < 1 ? u.toFixed(4) : u.toFixed(2)})</span>`;
         }
         let rewardUsd = '';
         if (estReward > 0 && typeof getAssetUsdValue === 'function') {
-            const u = getAssetUsdValue(tierAsset.id, estReward);
+            const u = getAssetUsdValue(roundAssetId, estReward);
             if (u > 0) rewardUsd = ` <span style="font-size:10px;color:var(--text-muted);">($${u < 1 ? u.toFixed(4) : u.toFixed(2)})</span>`;
         }
 
         const sharePercent = totalScores > 0 && myScore > 0 ? ((myScore / totalScores) * 100).toFixed(1) : '0';
+        const isEnded = !!t.finalized;
 
         // Build per-round player rankings from game data
-        const rankings = fuddleBuildTournamentRankings(cTier, t.round);
+        const rankings = fuddleBuildTournamentRankings(cTier, viewRound);
         const myPk = fuddleState.myStats?.pk || '';
 
         let rankingsHtml = '';
@@ -1449,17 +1508,17 @@ function fuddleRenderLeaderboardContent() {
         <div class="fuddle-lb-tournament ${tierClass}">
             <div class="fuddle-lb-tournament-head">
                 <span class="fuddle-tournament-tier-badge">${TIER_NAMES[cTier]}</span>
-                <span style="color:var(--text-secondary);font-family:var(--fuddle-font-game);font-size:13px;">Round ${t.round}</span>
-                <span class="fuddle-round-status ${t.finalized ? 'ended' : 'active'}">${t.finalized ? 'Ended' : 'Active'}</span>
+                <span style="color:var(--text-secondary);font-family:var(--fuddle-font-game);font-size:13px;">Round ${viewRound}</span>
+                <span class="fuddle-round-status ${isEnded ? 'ended' : 'active'}">${isEnded ? 'Ended' : 'Active'}</span>
             </div>
             <div class="fuddle-lb-prize-row">
                 <div class="fuddle-lb-prize-item">
-                    <span class="fuddle-lb-prize-val">${prizePool} ${tierAsset.name}</span>
+                    <span class="fuddle-lb-prize-val">${prizePool} ${roundAssetName}</span>
                     <span class="fuddle-lb-prize-label">Prize Pool${poolUsd}</span>
                 </div>
                 <div class="fuddle-lb-prize-item">
-                    <span class="fuddle-lb-prize-val">${distributed} ${tierAsset.name}</span>
-                    <span class="fuddle-lb-prize-label">To Distribute (50%)</span>
+                    <span class="fuddle-lb-prize-val">${distributed} ${roundAssetName}</span>
+                    <span class="fuddle-lb-prize-label">${isEnded ? 'Distributed' : 'To Distribute'} (50%)</span>
                 </div>
             </div>
             ${myScore > 0 ? `
@@ -1475,20 +1534,20 @@ function fuddleRenderLeaderboardContent() {
                         <span class="lbl">Pool Share</span>
                     </div>
                     <div class="fuddle-lb-my-item">
-                        <span class="val" style="color:var(--fuddle-correct);">~${fuddleFormatBeam(estReward)}${rewardUsd}</span>
+                        <span class="val" style="color:var(--fuddle-correct);">~${fuddleFormatBeam(estReward)} ${roundAssetName}${rewardUsd}</span>
                         <span class="lbl">Est. Reward</span>
                     </div>
                 </div>
             </div>` : ''}
             <div style="margin-top:16px;">
-                <div style="font-family:var(--fuddle-font-game);font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Round ${t.round} Rankings</div>
+                <div style="font-family:var(--fuddle-font-game);font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Round ${viewRound} Rankings &middot; ${totalPlayers} players &middot; ${totalScores} wins</div>
                 <div class="fuddle-leaderboard">${rankingsHtml}</div>
             </div>
         </div>`;
     } else {
         tournamentHtml = `
         <div style="text-align:center;padding:24px;color:var(--text-muted);">
-            No active ${TIER_NAMES[cTier]} tournament round yet.
+            No ${TIER_NAMES[cTier]} tournament data for this round.
         </div>`;
     }
 
@@ -1501,6 +1560,7 @@ function fuddleRenderLeaderboardContent() {
 
         <div class="fuddle-lobby-section">
             <div class="fuddle-round-filters">${tierTabsHtml}</div>
+            ${roundSelectorHtml}
             ${tournamentHtml}
         </div>
     `;
