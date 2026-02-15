@@ -2526,6 +2526,357 @@
     .fuddle-lootbox-cards {
         grid-template-columns: 1fr;
     }
+
+    .fuddle-round-card {
+        min-width: 220px;
+        max-width: 250px;
+        padding: 14px;
+    }
+
+    .fuddle-round-prize-amount {
+        font-size: 18px;
+    }
+
+    .fuddle-round-filters {
+        flex-wrap: wrap;
+    }
+
+    .fuddle-unclaimed-card {
+        flex-direction: column;
+        gap: 8px;
+        align-items: stretch;
+    }
+
+    .fuddle-unclaimed-info {
+        flex-wrap: wrap;
+    }
+}
+
+/* === Unclaimed Rewards Section === */
+
+.fuddle-unclaimed-section {
+    background: rgba(16, 185, 129, 0.03);
+    border: 1px solid rgba(16, 185, 129, 0.12);
+    border-radius: 14px;
+    padding: 20px;
+}
+
+.fuddle-unclaimed-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fuddle-unclaimed-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--fuddle-card-solid);
+    border: 1px solid rgba(16, 185, 129, 0.15);
+    border-radius: 10px;
+    transition: border-color 0.2s;
+}
+
+.fuddle-unclaimed-card.tier-beam {
+    border-left: 3px solid var(--fuddle-tier-beam);
+}
+
+.fuddle-unclaimed-card.tier-fomo {
+    border-left: 3px solid var(--fuddle-tier-fomo);
+}
+
+.fuddle-unclaimed-card.tier-beamx {
+    border-left: 3px solid var(--fuddle-tier-beamx);
+}
+
+.fuddle-unclaimed-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+}
+
+.fuddle-unclaimed-card .fuddle-tournament-claim {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* === Round History === */
+
+.fuddle-round-filters {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.fuddle-round-filter {
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid var(--fuddle-border);
+    border-radius: 20px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: var(--fuddle-font-display);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.fuddle-round-filter:hover {
+    border-color: var(--fuddle-border-hover);
+    color: var(--text-secondary);
+}
+
+.fuddle-round-filter.active {
+    background: rgba(191, 255, 0, 0.08);
+    border-color: rgba(191, 255, 0, 0.25);
+    color: var(--fuddle-accent);
+}
+
+.fuddle-round-filter.tier-beam.active {
+    background: rgba(37, 194, 160, 0.08);
+    border-color: rgba(37, 194, 160, 0.25);
+    color: var(--fuddle-tier-beam);
+}
+
+.fuddle-round-filter.tier-fomo.active {
+    background: rgba(244, 63, 94, 0.08);
+    border-color: rgba(244, 63, 94, 0.25);
+    color: var(--fuddle-tier-fomo);
+}
+
+.fuddle-round-filter.tier-beamx.active {
+    background: rgba(167, 139, 250, 0.08);
+    border-color: rgba(167, 139, 250, 0.25);
+    color: var(--fuddle-tier-beamx);
+}
+
+.fuddle-round-history {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 4px 0 12px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(191, 255, 0, 0.15) transparent;
+}
+
+.fuddle-round-history::-webkit-scrollbar {
+    height: 4px;
+}
+
+.fuddle-round-history::-webkit-scrollbar-thumb {
+    background: rgba(191, 255, 0, 0.15);
+    border-radius: 2px;
+}
+
+.fuddle-round-card {
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 12px;
+    padding: 16px;
+    min-width: 240px;
+    max-width: 280px;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color 0.2s, transform 0.2s;
+}
+
+.fuddle-round-card:hover {
+    border-color: var(--fuddle-border-hover);
+    transform: translateY(-2px);
+}
+
+/* Tier accent stripe */
+.fuddle-round-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+}
+
+.fuddle-round-card.tier-beam::before {
+    background: linear-gradient(180deg, #25c2a0, #1a9a7e);
+}
+
+.fuddle-round-card.tier-fomo::before {
+    background: linear-gradient(180deg, #F43F5E, #E11D48);
+}
+
+.fuddle-round-card.tier-beamx::before {
+    background: linear-gradient(180deg, #A78BFA, #7C3AED);
+}
+
+.fuddle-round-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fuddle-round-status {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-round-status.ended {
+    background: rgba(168, 162, 158, 0.12);
+    color: var(--text-muted);
+}
+
+.fuddle-round-status.active {
+    background: var(--fuddle-accent-dim);
+    color: var(--fuddle-accent);
+    animation: fuddlePulseText 2s infinite;
+}
+
+.fuddle-round-prize {
+    padding-left: 4px;
+}
+
+.fuddle-round-prize-amount {
+    font-family: var(--fuddle-font-game);
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+}
+
+.tier-beam .fuddle-round-prize-amount { color: var(--fuddle-tier-beam); }
+.tier-fomo .fuddle-round-prize-amount { color: var(--fuddle-tier-fomo); }
+.tier-beamx .fuddle-round-prize-amount { color: var(--fuddle-tier-beamx); }
+
+.fuddle-round-prize-label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+.fuddle-round-meta-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px 0;
+    border-top: 1px solid var(--fuddle-border);
+}
+
+.fuddle-round-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    text-align: center;
+}
+
+.fuddle-round-meta-item .val {
+    font-family: var(--fuddle-font-game);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.fuddle-round-meta-item .lbl {
+    font-size: 8px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 700;
+}
+
+.fuddle-round-my {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: rgba(191, 255, 0, 0.03);
+    border: 1px solid rgba(191, 255, 0, 0.06);
+    border-radius: 8px;
+}
+
+.fuddle-round-my-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.fuddle-round-claim-btn {
+    padding: 3px 10px;
+    background: linear-gradient(135deg, #10B981, #059669);
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.fuddle-round-claim-btn:hover {
+    box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3);
+    transform: translateY(-1px);
+}
+
+.fuddle-round-games-summary {
+    font-family: var(--fuddle-font-game);
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+    letter-spacing: 0.5px;
+    padding-top: 6px;
+    border-top: 1px solid var(--fuddle-border);
+}
+
+/* === Game Status Badges === */
+
+.fuddle-game-badge {
+    font-family: var(--fuddle-font-game);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.fuddle-game-badge.won {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--fuddle-correct);
+}
+
+.fuddle-game-badge.lost {
+    background: rgba(239, 68, 68, 0.15);
+    color: #EF4444;
+}
+
+.fuddle-game-badge.expired {
+    background: rgba(168, 162, 158, 0.12);
+    color: var(--text-muted);
 }
 
 /* Active games list */
