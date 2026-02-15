@@ -1766,6 +1766,138 @@
     text-transform: uppercase;
 }
 
+/* === Leaderboard — Tournament Standings === */
+
+.fuddle-lb-tournament {
+    background: var(--fuddle-card-solid);
+    border: 1px solid var(--fuddle-border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-top: 12px;
+    position: relative;
+    overflow: hidden;
+}
+
+.fuddle-lb-tournament::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--fuddle-tier-beam);
+}
+
+.fuddle-lb-tournament.tier-fomo::before { background: var(--fuddle-tier-fomo); }
+.fuddle-lb-tournament.tier-beamx::before { background: var(--fuddle-tier-beamx); }
+
+.fuddle-lb-tournament-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.fuddle-lb-prize-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.fuddle-lb-prize-item {
+    text-align: center;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+}
+
+.fuddle-lb-prize-val {
+    display: block;
+    font-family: var(--fuddle-font-game);
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.fuddle-lb-prize-label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.fuddle-lb-stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.fuddle-lb-stat {
+    text-align: center;
+    padding: 10px 6px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+}
+
+.fuddle-lb-stat .val {
+    display: block;
+    font-family: var(--fuddle-font-game);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-primary);
+}
+
+.fuddle-lb-stat .lbl {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.fuddle-lb-my-standing {
+    background: rgba(191, 255, 0, 0.04);
+    border: 1px solid rgba(191, 255, 0, 0.1);
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.fuddle-lb-my-title {
+    font-family: var(--fuddle-font-game);
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--fuddle-accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.fuddle-lb-my-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.fuddle-lb-my-item {
+    text-align: center;
+}
+
+.fuddle-lb-my-item .val {
+    display: block;
+    font-family: var(--fuddle-font-game);
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 2px;
+}
+
+.fuddle-lb-my-item .lbl {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
 /* === Admin CLI Warning === */
 
 .fuddle-admin-cli-warning {
