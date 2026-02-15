@@ -99,6 +99,12 @@ let fuddleState = {
     // Tournament v2
     tournaments: {},     // { 0: {...}, 1: {...}, 2: {...} } keyed by contract tier
     myTournaments: {},   // { 0: {score, claimed, ...}, 1: ..., 2: ... }
+    pastMyTournaments: {},  // Keyed by "tier_round" for past round data
+    pastTournaments: {},    // Keyed by "tier_round" for past round tournament data
+    unclaimedRewards: [],   // [{tier, round, score, estimated_reward, tournament}]
+    roundHistory: [],       // [{tier, round, prize_pool, total_players, ...}]
+    roundHistoryTierFilter: -1, // -1=all tiers, 0/1/2=specific tier
+    allGames: [],           // All games (not filtered by status)
     currentHeight: 0,
     wordCounts: null,
     txPollTimer: null,
@@ -217,6 +223,7 @@ async function loadFuddleSettings() {
 async function loadFuddleGames() {
     const result = await fuddleCall('view_games', 'user');
     if (result && result.games) {
+        fuddleState.allGames = result.games;
         fuddleState.games = result.games.filter(g => g.status === 0);
     }
     return fuddleState.games;
@@ -226,6 +233,43 @@ function getMyFuddleGames() {
     const myPk = fuddleState.myStats?.pk;
     if (!myPk) return fuddleState.games;
     return fuddleState.games.filter(g => g.creator === myPk);
+}
+
+function getMyActiveGames() {
+    const myPk = fuddleState.myStats?.pk;
+    if (!myPk) return [];
+    const height = fuddleState.currentHeight;
+    return (fuddleState.allGames || []).filter(g => {
+        if (g.creator !== myPk) return false;
+        if (g.status !== 0) return false;
+        // Skip time-expired games
+        if (height && g.expires_at && g.expires_at < height) return false;
+        // Skip games from previous tournament rounds
+        const cTier = g.tier != null ? g.tier : 0;
+        const currentRound = fuddleState.tournaments[cTier]?.round || 0;
+        if (g.tournament_round && currentRound && g.tournament_round < currentRound) return false;
+        return true;
+    });
+}
+
+function getMyCompletedGames() {
+    const myPk = fuddleState.myStats?.pk;
+    if (!myPk || !fuddleState.allGames) return [];
+    const height = fuddleState.currentHeight;
+    return fuddleState.allGames.filter(g => {
+        if (g.creator !== myPk) return false;
+        // Won (status=1) or explicitly lost/expired (status=2)
+        if (g.status === 1 || g.status === 2) return true;
+        // Time-expired active game
+        if (g.status === 0 && height && g.expires_at && g.expires_at < height) return true;
+        // Game from a previous tournament round (no longer playable)
+        if (g.status === 0 && g.tournament_round) {
+            const cTier = g.tier != null ? g.tier : 0;
+            const currentRound = fuddleState.tournaments[cTier]?.round || 0;
+            if (currentRound && g.tournament_round < currentRound) return true;
+        }
+        return false;
+    });
 }
 
 async function loadFuddleLetters() {
@@ -255,12 +299,19 @@ async function loadAllTournaments() {
     return fuddleState.tournaments;
 }
 
-async function loadMyTournament(contractTier) {
-    const result = await fuddleCall('view_my_tournament', 'user', `tier=${contractTier}`);
+async function loadMyTournament(contractTier, round) {
+    const roundArg = round ? `,round=${round}` : '';
+    const result = await fuddleCall('view_my_tournament', 'user', `tier=${contractTier}${roundArg}`);
     if (result && result.my_tournament) {
-        fuddleState.myTournaments[contractTier] = result.my_tournament;
+        if (round) {
+            fuddleState.pastMyTournaments[`${contractTier}_${round}`] = result.my_tournament;
+        } else {
+            fuddleState.myTournaments[contractTier] = result.my_tournament;
+        }
     }
-    return fuddleState.myTournaments[contractTier];
+    return round
+        ? fuddleState.pastMyTournaments[`${contractTier}_${round}`]
+        : fuddleState.myTournaments[contractTier];
 }
 
 async function loadAllMyTournaments() {
@@ -270,6 +321,87 @@ async function loadAllMyTournaments() {
         loadMyTournament(1),
         loadMyTournament(2),
     ]);
+}
+
+async function loadUnclaimedRewards() {
+    fuddleState.unclaimedRewards = [];
+    for (const cTier of [0, 1, 2]) {
+        const currentRound = fuddleState.tournaments[cTier]?.round || 0;
+        // Check previous 5 rounds for unclaimed rewards
+        for (let r = currentRound - 1; r >= Math.max(1, currentRound - 5); r--) {
+            const my = await loadMyTournament(cTier, r);
+            if (my && my.score > 0 && !my.claimed) {
+                // We need the tournament data for this past round to estimate reward
+                // Use view_tournament with round param if available, else estimate
+                const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+                fuddleState.unclaimedRewards.push({
+                    tier: cTier,
+                    round: r,
+                    score: my.score,
+                    estimated_reward: my.estimated_reward || 0,
+                    tierName: TIER_NAMES[cTier] || 'BEAM',
+                    assetName: tierAsset.name,
+                });
+            }
+        }
+    }
+    return fuddleState.unclaimedRewards;
+}
+
+async function loadPastTournament(cTier, round) {
+    const key = `${cTier}_${round}`;
+    if (fuddleState.pastTournaments[key]) return fuddleState.pastTournaments[key];
+    const result = await fuddleCall('view_tournament', 'user', `tier=${cTier},round=${round}`);
+    if (result && result.tournament) {
+        fuddleState.pastTournaments[key] = result.tournament;
+    }
+    return fuddleState.pastTournaments[key];
+}
+
+async function loadRoundHistory(limit) {
+    limit = limit || 5;
+    fuddleState.roundHistory = [];
+    const promises = [];
+
+    for (const cTier of [0, 1, 2]) {
+        const currentRound = fuddleState.tournaments[cTier]?.round || 0;
+        for (let r = currentRound - 1; r >= Math.max(1, currentRound - limit); r--) {
+            promises.push((async () => {
+                const t = await loadPastTournament(cTier, r);
+                const my = await loadMyTournament(cTier, r);
+                if (t) {
+                    const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
+                    fuddleState.roundHistory.push({
+                        tier: cTier,
+                        round: r,
+                        tierName: TIER_NAMES[cTier] || 'BEAM',
+                        tierClass: TIER_CSS[cTier] || 'tier-beam',
+                        assetName: tierAsset.name,
+                        assetId: tierAsset.id,
+                        prizePool: t.prize_pool || 0,
+                        totalPlayers: t.total_players || 0,
+                        totalScores: t.total_scores || 0,
+                        finalized: !!t.finalized,
+                        startHeight: t.start_height,
+                        endHeight: t.end_height,
+                        myScore: my?.score || 0,
+                        myReward: my?.estimated_reward || 0,
+                        myClaimed: !!my?.claimed,
+                    });
+                }
+            })());
+        }
+    }
+    await Promise.all(promises);
+    // Sort by round descending, then by tier
+    fuddleState.roundHistory.sort((a, b) => b.round - a.round || a.tier - b.tier);
+    return fuddleState.roundHistory;
+}
+
+function getFilteredRoundHistory() {
+    const filter = fuddleState.roundHistoryTierFilter;
+    if (filter < 0) return fuddleState.roundHistory;
+    return fuddleState.roundHistory.filter(r => r.tier === filter);
 }
 
 async function loadFuddleMyGame(gameId) {
@@ -529,6 +661,11 @@ async function loadFuddleData() {
     ]);
     // Update tier names AFTER both settings and tournaments are loaded
     fuddleUpdateTierNames();
+    // Check past rounds for unclaimed rewards + load round history
+    await Promise.all([
+        loadUnclaimedRewards(),
+        loadRoundHistory(5),
+    ]);
 }
 
 // =========================================================================
@@ -721,11 +858,32 @@ function renderFuddleLobby() {
 
         ${stats ? `<div class="fuddle-lobby-section">${statsHtml}</div>` : ''}
 
-        ${getMyFuddleGames().length > 0 ? `
+        ${fuddleState.unclaimedRewards.length > 0 ? `
+        <div class="fuddle-lobby-section fuddle-unclaimed-section">
+            <h3>Unclaimed Rewards</h3>
+            <div class="fuddle-unclaimed-list">
+                ${fuddleState.unclaimedRewards.map(r => {
+                    const tierClass = TIER_CSS[r.tier] || 'tier-beam';
+                    const estText = r.estimated_reward ? `~${fuddleFormatBeam(r.estimated_reward)} ${r.assetName}` : 'Reward available';
+                    return `
+                    <div class="fuddle-unclaimed-card ${tierClass}">
+                        <div class="fuddle-unclaimed-info">
+                            <span class="fuddle-tournament-tier-badge" style="font-size:11px;">${r.tierName}</span>
+                            <span style="color:var(--text-primary);font-family:var(--fuddle-font-game);font-size:13px;">Round ${r.round}</span>
+                            <span style="color:var(--text-muted);font-size:12px;">Score: ${r.score}</span>
+                        </div>
+                        <button class="fuddle-tournament-claim" onclick="fuddleClaimTournamentReward(${r.tier}, ${r.round})">${estText}</button>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>
+        ` : ''}
+
+        ${getMyActiveGames().length > 0 ? `
         <div class="fuddle-lobby-section">
             <h3>Your Active Games</h3>
             <div class="fuddle-games-list">
-                ${getMyFuddleGames().map(g => {
+                ${getMyActiveGames().map(g => {
                     const diff = g.difficulty || 5;
                     const cTier = g.tier != null ? g.tier : 0;
                     const tierName = TIER_NAMES[cTier] || 'BEAM';
@@ -746,6 +904,56 @@ function renderFuddleLobby() {
             <h3>Token Tournaments</h3>
             <div class="fuddle-tournaments-grid">${tournamentsHtml}</div>
         </div>
+
+        ${fuddleState.roundHistory.length > 0 ? `
+        <div class="fuddle-lobby-section">
+            <h3>Round History</h3>
+            <div class="fuddle-round-filters">
+                <button class="fuddle-round-filter${fuddleState.roundHistoryTierFilter < 0 ? ' active' : ''}" onclick="fuddleFilterRounds(-1)">All</button>
+                <button class="fuddle-round-filter tier-beam${fuddleState.roundHistoryTierFilter === 0 ? ' active' : ''}" onclick="fuddleFilterRounds(0)">${TIER_NAMES[0]}</button>
+                <button class="fuddle-round-filter tier-fomo${fuddleState.roundHistoryTierFilter === 1 ? ' active' : ''}" onclick="fuddleFilterRounds(1)">${TIER_NAMES[1]}</button>
+                <button class="fuddle-round-filter tier-beamx${fuddleState.roundHistoryTierFilter === 2 ? ' active' : ''}" onclick="fuddleFilterRounds(2)">${TIER_NAMES[2]}</button>
+            </div>
+            <div class="fuddle-round-history" id="fuddle-round-history">
+                ${fuddleRenderRoundCards()}
+            </div>
+        </div>
+        ` : ''}
+
+        ${getMyCompletedGames().length > 0 ? `
+        <div class="fuddle-lobby-section">
+            <h3>Recent Games</h3>
+            <div class="fuddle-games-list">
+                ${getMyCompletedGames().slice(0, 10).map(g => {
+                    const diff = g.difficulty || 5;
+                    const cTier = g.tier != null ? g.tier : 0;
+                    const tierName = TIER_NAMES[cTier] || 'BEAM';
+                    const tierClass = TIER_CSS[cTier] || 'tier-beam';
+                    const height = fuddleState.currentHeight;
+                    const currentRound = fuddleState.tournaments[cTier]?.round || 0;
+                    const isPastRound = g.tournament_round && currentRound && g.tournament_round < currentRound;
+                    let statusBadge = '';
+                    if (g.status === 1) {
+                        statusBadge = '<span class="fuddle-game-badge won">Won</span>';
+                    } else if (g.status === 2) {
+                        statusBadge = '<span class="fuddle-game-badge lost">Lost</span>';
+                    } else if (isPastRound) {
+                        statusBadge = '<span class="fuddle-game-badge expired">Past Round</span>';
+                    } else if (g.status === 0 && height && g.expires_at && g.expires_at < height) {
+                        statusBadge = '<span class="fuddle-game-badge expired">Expired</span>';
+                    }
+                    const roundLabel = g.tournament_round ? `R${g.tournament_round}` : '';
+                    return `
+                    <div class="fuddle-active-game ${tierClass}" style="opacity:0.8;">
+                        <span class="fuddle-tournament-tier-badge" style="font-size:11px;padding:2px 8px;">${tierName}</span>
+                        <span style="color:var(--text-primary);font-family:var(--fuddle-font-game);font-size:13px;">Game #${g.id}</span>
+                        <span style="color:var(--text-muted);font-size:12px;">${diff}-letter${roundLabel ? ' · ' + roundLabel : ''}</span>
+                        ${statusBadge}
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>
+        ` : ''}
 
         <div class="fuddle-lobby-section">
             <h3>My Letters (${fuddleTotalLetters()} total)</h3>
@@ -782,6 +990,101 @@ function fuddleCopyCid() {
     }).catch(() => {
         showFuddleToast('Copy failed', 'error');
     });
+}
+
+// =========================================================================
+// Round History
+// =========================================================================
+
+function fuddleRenderRoundCards() {
+    const rounds = getFilteredRoundHistory();
+    if (!rounds.length) return '<span style="color:var(--text-muted);font-size:13px;">No past rounds yet</span>';
+
+    return rounds.map(r => {
+        const poolText = fuddleFormatBeam(r.prizePool);
+        const distributed = Math.floor(r.prizePool * 50 / 100);
+        const distText = fuddleFormatBeam(distributed);
+
+        // USD for prize pool
+        let poolUsd = '';
+        if (r.prizePool > 0 && typeof getAssetUsdValue === 'function') {
+            const usd = getAssetUsdValue(r.assetId, r.prizePool);
+            if (usd > 0) poolUsd = `<span style="font-size:10px;color:var(--text-muted);">($${usd < 1 ? usd.toFixed(4) : usd.toFixed(2)})</span>`;
+        }
+
+        // Player score/reward
+        let mySection = '';
+        if (r.myScore > 0) {
+            const rewardText = r.myReward ? fuddleFormatBeam(r.myReward) + ' ' + r.assetName : '—';
+            const claimStatus = r.myClaimed
+                ? '<span style="color:var(--fuddle-correct);font-size:10px;">Claimed</span>'
+                : (r.finalized ? `<button class="fuddle-round-claim-btn" onclick="event.stopPropagation();fuddleClaimTournamentReward(${r.tier},${r.round})">Claim</button>` : '<span style="color:var(--fuddle-present);font-size:10px;">Active</span>');
+            mySection = `
+                <div class="fuddle-round-my">
+                    <div class="fuddle-round-my-row">
+                        <span>Your Score</span>
+                        <span style="color:var(--fuddle-accent);font-weight:700;">${r.myScore}</span>
+                    </div>
+                    <div class="fuddle-round-my-row">
+                        <span>Reward</span>
+                        <span style="color:var(--fuddle-correct);font-weight:700;">${rewardText}</span>
+                    </div>
+                    <div class="fuddle-round-my-row">
+                        <span>Status</span>
+                        ${claimStatus}
+                    </div>
+                </div>`;
+        }
+
+        // Games played this round
+        const roundGames = (fuddleState.allGames || []).filter(g =>
+            g.creator === fuddleState.myStats?.pk &&
+            (g.tier != null ? g.tier : 0) === r.tier &&
+            g.tournament_round === r.round
+        );
+        let gamesSection = '';
+        if (roundGames.length > 0) {
+            const won = roundGames.filter(g => g.status === 1).length;
+            const lost = roundGames.filter(g => g.status === 2 || (g.status === 0 && fuddleState.currentHeight && g.expires_at && g.expires_at < fuddleState.currentHeight)).length;
+            gamesSection = `<div class="fuddle-round-games-summary">${roundGames.length} games (${won}W / ${lost}L)</div>`;
+        }
+
+        return `
+        <div class="fuddle-round-card ${r.tierClass}">
+            <div class="fuddle-round-card-head">
+                <span class="fuddle-tournament-tier-badge" style="font-size:10px;">${r.tierName}</span>
+                <span style="color:var(--text-secondary);font-family:var(--fuddle-font-game);font-size:12px;">Round ${r.round}</span>
+                <span class="fuddle-round-status ${r.finalized ? 'ended' : 'active'}">${r.finalized ? 'Ended' : 'Active'}</span>
+            </div>
+            <div class="fuddle-round-prize">
+                <span class="fuddle-round-prize-amount">${poolText}</span>
+                <span class="fuddle-round-prize-label">${r.assetName} Pool ${poolUsd}</span>
+            </div>
+            <div class="fuddle-round-meta-row">
+                <div class="fuddle-round-meta-item">
+                    <span class="val">${r.totalPlayers}</span>
+                    <span class="lbl">Players</span>
+                </div>
+                <div class="fuddle-round-meta-item">
+                    <span class="val">${distText}</span>
+                    <span class="lbl">Distributed</span>
+                </div>
+            </div>
+            ${mySection}
+            ${gamesSection}
+        </div>`;
+    }).join('');
+}
+
+function fuddleFilterRounds(tier) {
+    fuddleState.roundHistoryTierFilter = tier;
+    const container = document.getElementById('fuddle-round-history');
+    if (container) container.innerHTML = fuddleRenderRoundCards();
+    // Update filter button styles
+    document.querySelectorAll('.fuddle-round-filter').forEach(btn => btn.classList.remove('active'));
+    const activeIdx = tier < 0 ? 0 : tier + 1;
+    const btns = document.querySelectorAll('.fuddle-round-filter');
+    if (btns[activeIdx]) btns[activeIdx].classList.add('active');
 }
 
 function fuddleStartCountdownTimer() {
@@ -1523,17 +1826,25 @@ async function fuddleClaimTournamentReward(cTier, round) {
     fuddleUpdateTxProgress('Waiting for confirmation...', 15);
     fuddleStartTxProgressTimer();
 
+    // Determine if this is a past round claim or current round claim
+    const currentRound = fuddleState.tournaments[cTier]?.round || 0;
+    const isPastRound = round < currentRound;
+
     for (let i = 0; i < 15; i++) {
         await new Promise(r => setTimeout(r, 3000));
         if (i > 0 && i % 3 === 0) {
             const failReason = await fuddleCheckTxFailed();
             if (failReason) { fuddleTxProgressError(typeof failReason === 'string' ? failReason : 'Transaction failed'); return; }
         }
-        await loadAllMyTournaments();
-        if (fuddleState.myTournaments[cTier]?.claimed) {
+        // Poll the specific round, not just current
+        const myData = isPastRound
+            ? await loadMyTournament(cTier, round)
+            : (await loadAllMyTournaments(), fuddleState.myTournaments[cTier]);
+        if (myData?.claimed) {
             fuddleTxProgressSuccess(`${tierName} reward claimed!`);
             setTimeout(async () => {
                 await loadAllTournaments();
+                await loadUnclaimedRewards();
                 fuddleUpdateTierNames();
                 renderFuddleLobby();
             }, 1600);
@@ -1545,6 +1856,7 @@ async function fuddleClaimTournamentReward(cTier, round) {
     setTimeout(async () => {
         await loadAllTournaments();
         await loadAllMyTournaments();
+        await loadUnclaimedRewards();
         fuddleUpdateTierNames();
         renderFuddleLobby();
     }, 1600);
@@ -2087,6 +2399,43 @@ lootbox_small_price=GROTH,lootbox_large_price=GROTH,tournament_duration=BLOCKS" 
                 <button class="btn btn-accent" onclick="fuddleAdminMint()" style="padding:11px 22px;">Mint</button>
             </div>
         </div>
+
+        <div class="fuddle-lobby-section">
+            <h3>Force Finalize Tournament</h3>
+            <p style="color:var(--text-secondary);font-size:12px;margin:0 0 10px;">Force-end an active tournament round early. 50% carryover goes to pending pool for next round.</p>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <select id="admin-ff-tier">
+                    <option value="0">Tier 0 (${TIER_NAMES[0]}) — Round ${t0?.round || '—'}</option>
+                    <option value="1">Tier 1 (${TIER_NAMES[1]}) — Round ${t1?.round || '—'}</option>
+                    <option value="2">Tier 2 (${TIER_NAMES[2]}) — Round ${t2?.round || '—'}</option>
+                </select>
+                <button class="btn btn-accent" onclick="fuddleAdminForceFinalize()" style="padding:11px 22px;background:var(--warning);color:#000;">Force Finalize</button>
+            </div>
+        </div>
+
+        <div class="fuddle-lobby-section">
+            <h3>Emergency Withdraw</h3>
+            <p style="color:var(--text-secondary);font-size:12px;margin:0 0 10px;">Withdraw any asset stuck in the contract (e.g. stranded carryover after asset mismatch).</p>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <input type="number" id="admin-ew-asset" placeholder="Asset ID" value="0" style="width:100px;" min="0">
+                <input type="text" id="admin-ew-amount" placeholder="Amount" style="flex:1;">
+                <button class="btn btn-accent" onclick="fuddleAdminEmergencyWithdraw()" style="padding:11px 22px;background:var(--error);">Withdraw</button>
+            </div>
+        </div>
+
+        <div class="fuddle-lobby-section">
+            <h3>Add Words</h3>
+            <p style="color:var(--text-secondary);font-size:12px;margin:0 0 10px;">Add words to the dictionary. One word per line, all same length. Max 50 per transaction.</p>
+            <div style="display:flex;gap:10px;flex-direction:column;">
+                <select id="admin-word-length">
+                    <option value="4">4-letter words (${len4} existing)</option>
+                    <option value="5">5-letter words (${len5} existing)</option>
+                    <option value="6">6-letter words (${len6} existing)</option>
+                </select>
+                <textarea id="admin-words-input" rows="6" placeholder="WORD&#10;GAME&#10;PLAY&#10;..." style="font-family:var(--font-mono);font-size:13px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px;resize:vertical;"></textarea>
+                <button class="btn btn-accent" onclick="fuddleAdminAddWords()" style="padding:11px 22px;">Add Words</button>
+            </div>
+        </div>
     `;
 }
 
@@ -2163,6 +2512,107 @@ async function fuddleAdminMint() {
         showFuddleToast(`Minted ${count}x ${FUDDLE_LETTERS[charId]}!`, 'success');
         setTimeout(async () => {
             await loadFuddleLetters();
+            fuddleShowAdmin();
+        }, 3000);
+    } else {
+        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+    }
+}
+
+async function fuddleAdminForceFinalize() {
+    const tier = parseInt(document.getElementById('admin-ff-tier')?.value);
+    if (isNaN(tier) || tier < 0 || tier > 2) {
+        showFuddleToast('Select a valid tier', 'error');
+        return;
+    }
+    const t = fuddleState.tournaments[tier];
+    if (!t || !t.round) {
+        showFuddleToast('No active tournament for this tier', 'error');
+        return;
+    }
+    if (t.finalized) {
+        showFuddleToast('Tournament already finalized', 'error');
+        return;
+    }
+    const tierName = TIER_NAMES[tier];
+    if (!confirm(`Force finalize ${tierName} Round ${t.round}?\n\n50% of the prize pool (${fuddleFormatBeam(t.prize_pool / 2)} ${tierName}) will carry over to the next round.`)) return;
+
+    showFuddleToast('Force finalizing...', 'info');
+    const result = await fuddleTx('force_finalize', 'manager', `tier=${tier},round=${t.round}`, `Force finalize ${tierName} R${t.round}`);
+    if (result && !result.error) {
+        showFuddleToast(`${tierName} Round ${t.round} finalized!`, 'success');
+        setTimeout(() => fuddleShowAdmin(), 3000);
+    } else {
+        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+    }
+}
+
+async function fuddleAdminEmergencyWithdraw() {
+    const assetId = parseInt(document.getElementById('admin-ew-asset')?.value);
+    const amountStr = document.getElementById('admin-ew-amount')?.value;
+    const amount = parseFloat(amountStr);
+    if (isNaN(assetId) || assetId < 0) {
+        showFuddleToast('Enter a valid Asset ID', 'error');
+        return;
+    }
+    if (!amount || amount <= 0) {
+        showFuddleToast('Enter a valid amount', 'error');
+        return;
+    }
+    const groth = Math.round(amount * 100000000);
+    const assetName = fuddleResolveAssetName(assetId);
+    if (!confirm(`Emergency withdraw ${amount} ${assetName} (Asset #${assetId}) from contract?`)) return;
+
+    showFuddleToast('Withdrawing...', 'info');
+    const result = await fuddleTx('emergency_withdraw', 'manager', `asset_id=${assetId},amount=${groth}`, `Emergency withdraw ${amount} ${assetName}`);
+    if (result && !result.error) {
+        showFuddleToast(`Withdrew ${amount} ${assetName}!`, 'success');
+        setTimeout(() => fuddleShowAdmin(), 3000);
+    } else {
+        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+    }
+}
+
+async function fuddleAdminAddWords() {
+    const wordLength = parseInt(document.getElementById('admin-word-length')?.value);
+    const rawText = document.getElementById('admin-words-input')?.value?.trim();
+    if (!rawText) {
+        showFuddleToast('Enter words (one per line)', 'error');
+        return;
+    }
+    const words = rawText.split('\n').map(w => w.trim().toUpperCase()).filter(w => w.length === wordLength);
+    if (words.length === 0) {
+        showFuddleToast(`No valid ${wordLength}-letter words found`, 'error');
+        return;
+    }
+    if (words.length > 50) {
+        showFuddleToast('Max 50 words per transaction', 'error');
+        return;
+    }
+    // Encode words as hex blob of uint32_t LE values (A=0x00000000, B=0x01000000, ...)
+    // This matches the contract's Letter::Char type and DocGetBlob("data", ...) expectation
+    let hexData = '';
+    for (const word of words) {
+        for (let i = 0; i < word.length; i++) {
+            const idx = word.charCodeAt(i) - 65; // A=0, B=1, ..., Z=25
+            if (idx < 0 || idx > 25) {
+                showFuddleToast(`Invalid character '${word[i]}' in word '${word}'`, 'error');
+                return;
+            }
+            // uint32_t little-endian: idx as 4 bytes LE
+            hexData += idx.toString(16).padStart(2, '0') + '000000';
+        }
+    }
+
+    if (!confirm(`Add ${words.length} words (${wordLength}-letter) to dictionary?\n\n${words.slice(0, 10).join(', ')}${words.length > 10 ? '...' : ''}`)) return;
+
+    showFuddleToast(`Adding ${words.length} words...`, 'info');
+    const result = await fuddleTx('add_words', 'manager', `length=${wordLength},num_words=${words.length},data=${hexData}`, `Add ${words.length} ${wordLength}-letter words`);
+    if (result && !result.error) {
+        showFuddleToast(`Added ${words.length} words!`, 'success');
+        document.getElementById('admin-words-input').value = '';
+        setTimeout(async () => {
+            await loadFuddleWordCounts();
             fuddleShowAdmin();
         }, 3000);
     } else {
