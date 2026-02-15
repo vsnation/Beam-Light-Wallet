@@ -1205,12 +1205,17 @@ function renderFuddleGame() {
         <div class="fuddle-header">
             <button class="fuddle-back-btn" onclick="fuddleBackToLobby()">&#8592; Back</button>
             <div class="fuddle-title">Fuddle ${fuddleDiffName(diff)}</div>
-            <div></div>
+            <div class="fuddle-game-header-actions">
+                <button class="fuddle-game-action-btn" onclick="fuddleShowShop()" title="Buy Letters">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+                </button>
+                <button class="fuddle-game-action-btn" onclick="fuddleShowHowToPlay()" title="How to Play">?</button>
+            </div>
         </div>
 
         <div class="fuddle-game-header">
             <div class="fuddle-game-prize">${tournamentInfo}</div>
-            <div class="fuddle-game-info">Game #${fuddleState.currentGameId}</div>
+            <div class="fuddle-game-info">Game #${fuddleState.currentGameId} &middot; Letters: ${fuddleTotalLetters()}</div>
         </div>
 
         <div class="fuddle-board">${boardHtml}</div>
@@ -1225,7 +1230,10 @@ function renderFuddleGame() {
 
         <div class="fuddle-status">
             <span>Attempts: ${fuddleState.attemptsUsed}/${maxAttempts}</span>
-            <span>Letters: ${fuddleTotalLetters()}</span>
+            <button class="fuddle-status-shop-btn" onclick="fuddleShowShop()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+                ${fuddleTotalLetters()} letters
+            </button>
         </div>
     `;
 
