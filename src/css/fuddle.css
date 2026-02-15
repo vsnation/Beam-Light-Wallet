@@ -1255,6 +1255,57 @@
     letter-spacing: 0.3px;
 }
 
+.fuddle-game-header-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.fuddle-game-action-btn {
+    background: rgba(191, 255, 0, 0.06);
+    border: 1px solid rgba(191, 255, 0, 0.12);
+    color: var(--fuddle-accent);
+    cursor: pointer;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: var(--fuddle-font-game);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.fuddle-game-action-btn:hover {
+    background: rgba(191, 255, 0, 0.12);
+    border-color: rgba(191, 255, 0, 0.25);
+    box-shadow: 0 0 12px rgba(191, 255, 0, 0.08);
+}
+
+.fuddle-status-shop-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: 1px solid var(--fuddle-border);
+    color: var(--fuddle-accent);
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: var(--fuddle-font-game);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    transition: all 0.15s ease;
+}
+
+.fuddle-status-shop-btn:hover {
+    background: rgba(191, 255, 0, 0.08);
+    border-color: rgba(191, 255, 0, 0.2);
+}
+
 /* === Letter Shop === */
 
 .fuddle-shop-grid {
