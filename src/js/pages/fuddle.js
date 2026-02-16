@@ -348,12 +348,13 @@ async function loadUnclaimedRewards() {
     return fuddleState.unclaimedRewards;
 }
 
-async function loadPastTournament(cTier, round) {
+async function loadPastTournament(cTier, round, forceRefresh) {
     const key = `${cTier}_${round}`;
-    if (fuddleState.pastTournaments[key]) return fuddleState.pastTournaments[key];
+    if (!forceRefresh && fuddleState.pastTournaments[key]) return fuddleState.pastTournaments[key];
     const result = await fuddleCall('view_tournament', 'user', `tier=${cTier},round=${round}`);
     if (result && result.tournament) {
         fuddleState.pastTournaments[key] = result.tournament;
+        console.log(`[Fuddle] Tier ${cTier} Round ${round}: prize_pool=${result.tournament.prize_pool}, players=${result.tournament.total_players}, finalized=${result.tournament.finalized}`);
     }
     return fuddleState.pastTournaments[key];
 }
@@ -367,12 +368,15 @@ async function loadRoundHistory(limit) {
         const currentRound = fuddleState.tournaments[cTier]?.round || 0;
         for (let r = currentRound - 1; r >= Math.max(1, currentRound - limit); r--) {
             promises.push((async () => {
-                const t = await loadPastTournament(cTier, r);
+                const t = await loadPastTournament(cTier, r, true);
                 const my = await loadMyTournament(cTier, r);
                 if (t) {
                     // Use the round's own locked asset, not current settings
                     const roundAssetId = t.asset != null ? t.asset : (TIER_ASSETS[cTier]?.id || 0);
                     const roundAssetName = fuddleResolveAssetName(roundAssetId);
+                    // A past round is "ended" if finalized OR expired by block height
+                    const height = fuddleState.currentHeight;
+                    const isEnded = !!t.finalized || (height && t.end_height && height > t.end_height);
                     fuddleState.roundHistory.push({
                         tier: cTier,
                         round: r,
@@ -383,7 +387,7 @@ async function loadRoundHistory(limit) {
                         prizePool: t.prize_pool || 0,
                         totalPlayers: t.total_players || 0,
                         totalScores: t.total_scores || 0,
-                        finalized: !!t.finalized,
+                        finalized: isEnded,
                         startHeight: t.start_height,
                         endHeight: t.end_height,
                         myScore: my?.score || 0,
@@ -638,6 +642,12 @@ function initFuddle() {
     // Clean up any orphaned TX progress overlay
     if (typeof fuddleHideTxProgress === 'function') fuddleHideTxProgress();
 
+    // Clear cached tournament data to ensure fresh data from contract
+    fuddleState.pastTournaments = {};
+    fuddleState.pastMyTournaments = {};
+    fuddleState.roundHistory = [];
+    fuddleState.unclaimedRewards = [];
+
     if (typeof FUDDLE_SHADER === 'undefined') {
         console.warn('Fuddle: FUDDLE_SHADER not defined — server-side shader injection will be used as fallback');
     }
@@ -807,11 +817,11 @@ function renderFuddleLobby() {
                 <div class="fuddle-tournament-meta">
                     <div class="meta-item">
                         <span class="meta-val">${players}</span>
-                        <span class="meta-label">Players</span>
+                        <span class="meta-label">Winners</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-val score">${myScore}</span>
-                        <span class="meta-label">Your Score</span>
+                        <span class="meta-label">Your Wins</span>
                     </div>
                     <div class="meta-item">
                         <span class="meta-val countdown" data-tier="${cTier}">${countdownText}</span>
@@ -1077,7 +1087,11 @@ function fuddleRenderRoundCards() {
             <div class="fuddle-round-meta-row">
                 <div class="fuddle-round-meta-item">
                     <span class="val">${r.totalPlayers}</span>
-                    <span class="lbl">Players</span>
+                    <span class="lbl">Winners</span>
+                </div>
+                <div class="fuddle-round-meta-item">
+                    <span class="val">${r.totalScores}</span>
+                    <span class="lbl">Total Wins</span>
                 </div>
                 <div class="fuddle-round-meta-item">
                     <span class="val">${distText}</span>
@@ -1478,7 +1492,8 @@ function fuddleRenderLeaderboardContent() {
         }
 
         const sharePercent = totalScores > 0 && myScore > 0 ? ((myScore / totalScores) * 100).toFixed(1) : '0';
-        const isEnded = !!t.finalized;
+        const height = fuddleState.currentHeight;
+        const isEnded = !!t.finalized || (height && t.end_height && height > t.end_height);
 
         // Build per-round player rankings from game data
         const rankings = fuddleBuildTournamentRankings(cTier, viewRound);
