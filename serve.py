@@ -68,6 +68,69 @@ DEFAULT_NODE = "eu-node01.mainnet.beam.mw:8100"
 LOCAL_NODE_ADDR = "127.0.0.1:10005"
 LOCAL_NODE_PORT = 10005
 
+
+# ============================================
+# CROSS-PLATFORM PROCESS HELPERS
+# ============================================
+
+def find_pid_by_name(name):
+    """Find PID of process by name (cross-platform)"""
+    try:
+        if PLATFORM == "windows":
+            exe_name = name if name.endswith(".exe") else f"{name}.exe"
+            result = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {exe_name}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=5
+            )
+            # CSV format: "process.exe","PID","Session","#","Mem"
+            for line in result.stdout.strip().split('\n'):
+                if line.startswith('"'):
+                    parts = line.split(',')
+                    if len(parts) >= 2:
+                        return int(parts[1].strip('"'))
+        else:
+            result = subprocess.run(
+                ["pgrep", "-f", name], capture_output=True, text=True
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return int(result.stdout.strip().split()[0])
+    except Exception:
+        pass
+    return None
+
+
+def kill_pid(pid, force=False):
+    """Kill process by PID (cross-platform)"""
+    try:
+        if PLATFORM == "windows":
+            cmd = ["taskkill", "/PID", str(pid)]
+            if force:
+                cmd.append("/F")
+            subprocess.run(cmd, capture_output=True, timeout=5)
+        else:
+            sig = signal.SIGKILL if force else signal.SIGTERM
+            os.kill(pid, sig)
+    except Exception:
+        pass
+
+
+def kill_by_name(name):
+    """Kill all processes matching name (cross-platform)"""
+    try:
+        if PLATFORM == "windows":
+            exe_name = name if name.endswith(".exe") else f"{name}.exe"
+            subprocess.run(
+                ["taskkill", "/F", "/IM", exe_name],
+                capture_output=True, timeout=5
+            )
+        else:
+            subprocess.run(
+                ["pkill", "-f", name], capture_output=True
+            )
+    except Exception:
+        pass
+
+
 # Contract IDs
 DEX_CONTRACT_ID = "729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf"
 MINTER_CONTRACT_ID = "295fe749dc12c55213d1bd16ced174dc8780c020f59cb17749e900bb0c15d868"
@@ -202,28 +265,20 @@ def shutdown_all():
                 pass
         beam_beam_node_process = None
 
-    # Also kill any orphaned processes
-    try:
-        subprocess.run(["pkill", "-f", "wallet-api.*--port=10000"], capture_output=True)
-        subprocess.run(["pkill", "-f", "beam-node.*--port=10005"], capture_output=True)
-    except:
-        pass
+    # Also kill any orphaned processes (cross-platform)
+    kill_by_name("wallet-api")
+    kill_by_name("beam-node")
 
     print("[SHUTDOWN] All services stopped")
 
 
 def get_wallet_api_pid():
-    """Get wallet-api PID if running"""
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", "wallet-api.*--port=10000"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            return int(result.stdout.strip().split()[0])
-    except:
-        pass
-    return None
+    """Get wallet-api PID if running (cross-platform)"""
+    # Check stored process object first (works on all platforms)
+    if wallet_api_process and wallet_api_process.poll() is None:
+        return wallet_api_process.pid
+    # Fallback: search by name
+    return find_pid_by_name("wallet-api")
 
 
 def is_wallet_api_running():
@@ -254,48 +309,62 @@ def list_wallets():
 def kill_process_on_port(port):
     """Kill any process LISTENING on the specified port (not outgoing connections)"""
     try:
-        # Use lsof with -sTCP:LISTEN to only find processes listening on the port
-        # This prevents killing beam-node which has outgoing connections to peers on port 10000
-        result = subprocess.run(
-            ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            pids = result.stdout.strip().split('\n')
-            for pid in pids:
-                try:
-                    pid = int(pid.strip())
-                    os.kill(pid, signal.SIGTERM)
-                    print(f"Killed process {pid} on port {port}")
-                    time.sleep(1)
-                    # Force kill if still running
-                    try:
-                        os.kill(pid, 0)  # Check if still alive
-                        os.kill(pid, signal.SIGKILL)
-                        print(f"Force killed process {pid}")
-                    except ProcessLookupError:
-                        pass  # Process already dead
-                except (ValueError, ProcessLookupError):
-                    pass
+        if PLATFORM == "windows":
+            # Use netstat to find LISTENING process on the port
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True, text=True, timeout=5
+            )
+            for line in result.stdout.split('\n'):
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.strip().split()
+                    if parts:
+                        try:
+                            pid = int(parts[-1])
+                            kill_pid(pid, force=True)
+                            print(f"Killed process {pid} on port {port}")
+                        except (ValueError, IndexError):
+                            pass
             return True
+        else:
+            # Use lsof with -sTCP:LISTEN to only find processes listening on the port
+            # This prevents killing beam-node which has outgoing connections to peers on port 10000
+            result = subprocess.run(
+                ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                pids = result.stdout.strip().split('\n')
+                for pid in pids:
+                    try:
+                        pid = int(pid.strip())
+                        kill_pid(pid)
+                        print(f"Killed process {pid} on port {port}")
+                        time.sleep(1)
+                        # Force kill if still running
+                        try:
+                            os.kill(pid, 0)  # Check if still alive
+                            kill_pid(pid, force=True)
+                            print(f"Force killed process {pid}")
+                        except ProcessLookupError:
+                            pass  # Process already dead
+                    except (ValueError, ProcessLookupError):
+                        pass
+                return True
     except Exception as e:
         print(f"Error killing process on port {port}: {e}")
     return False
 
 
 def stop_wallet_api():
-    """Stop running wallet-api process"""
+    """Stop running wallet-api process (cross-platform)"""
     global wallet_api_process, active_wallet
 
     pid = get_wallet_api_pid()
     if pid:
-        try:
-            os.kill(pid, signal.SIGKILL)
-            time.sleep(0.2)
-        except ProcessLookupError:
-            pass
-        except Exception as e:
-            print(f"Error killing wallet-api: {e}")
+        kill_pid(pid, force=True)
+        # Windows needs more time to release file locks (SQLite db)
+        time.sleep(2 if PLATFORM == "windows" else 0.5)
 
     wallet_api_process = None
     active_wallet = None
@@ -311,17 +380,12 @@ def stop_wallet_api():
 
 
 def get_beam_node_pid():
-    """Get beam-node PID if running"""
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", f"beam-node.*--port={LOCAL_NODE_PORT}"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            return int(result.stdout.strip().split()[0])
-    except:
-        pass
-    return None
+    """Get beam-node PID if running (cross-platform)"""
+    # Check stored process object first (works on all platforms)
+    if beam_beam_node_process and beam_beam_node_process.poll() is None:
+        return beam_beam_node_process.pid
+    # Fallback: search by name
+    return find_pid_by_name("beam-node")
 
 
 def is_node_running():
@@ -330,71 +394,84 @@ def is_node_running():
 
 
 def get_node_sync_status():
-    """Get local node sync status from node API or by parsing logs"""
+    """Get local node sync status by parsing logs (cross-platform, pure Python)"""
     if not is_node_running():
         return {"running": False, "synced": False, "height": 0, "progress": 0}
 
     try:
-        # Read from node log file to get sync progress
-        # Use tail to read last N lines efficiently
         log_file = LOGS_DIR / "beam-node.log"
-        if log_file.exists():
-            # Use subprocess to efficiently get relevant lines
-            result = subprocess.run(
-                ["grep", "-E", "My Tip:|Updating node:|Initial Tip:|fully synchronized", str(log_file)],
-                capture_output=True, text=True, timeout=5
-            )
-            lines = result.stdout.strip().split('\n')[-50:]  # Last 50 matching lines
+        if not log_file.exists():
+            return {"running": True, "synced": False, "height": 0, "progress": 0}
 
-            current_height = 0
-            target_height = 0
-            progress = 0
-            synced = False
-
-            for line in reversed(lines):
-                # Look for "Updating node: X% (current/total)" format
-                match = re.search(r'Updating node:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
-                if match:
-                    progress = int(match.group(1))
-                    current_height = int(match.group(2))
-                    target_height = int(match.group(3))
-                    if progress == 100:
-                        synced = True
+        # Read log with encoding fallback (Windows beam-node may write UTF-16)
+        content = None
+        for enc in ('utf-8', 'utf-16', 'latin-1'):
+            try:
+                content = log_file.read_text(encoding=enc)
+                # UTF-16 read as UTF-8 produces null bytes — retry with correct encoding
+                if '\x00' not in content:
                     break
+                content = None
+            except (UnicodeDecodeError, ValueError):
+                continue
 
-                # Look for "My Tip" which shows current synced height
-                if "My Tip:" in line:
-                    match = re.search(r'My Tip:\s*(\d+)', line)
-                    if match:
-                        current_height = int(match.group(1))
-                        # If we see My Tip, node is synced to at least this height
-                        if current_height > 3000000:  # Reasonable mainnet height
-                            synced = True
-                            progress = 100
+        if not content:
+            return {"running": True, "synced": False, "height": 0, "progress": 0}
 
-                # Look for "Initial Tip" which shows starting state
-                if current_height == 0 and "Initial Tip:" in line:
-                    match = re.search(r'Initial Tip:\s*(\d+)', line)
-                    if match:
-                        current_height = int(match.group(1))
+        # Filter relevant lines in pure Python (replaces grep subprocess)
+        patterns = ("My Tip:", "Updating node:", "Initial Tip:", "fully synchronized")
+        lines = [l for l in content.split('\n') if any(p in l for p in patterns)]
+        lines = lines[-50:]  # Last 50 matching lines
 
-                # Look for sync complete messages
-                if "fully synchronized" in line.lower():
+        current_height = 0
+        target_height = 0
+        progress = 0
+        synced = False
+
+        for line in reversed(lines):
+            # Look for "Updating node: X% (current/total)" format
+            match = re.search(r'Updating node:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
+            if match:
+                progress = int(match.group(1))
+                current_height = int(match.group(2))
+                target_height = int(match.group(3))
+                if progress == 100:
                     synced = True
-                    progress = 100
-                    break
+                break
 
-            # If we found Updating node: 100%, consider it synced
-            if progress >= 100:
+            # Look for "My Tip" which shows current synced height
+            if "My Tip:" in line:
+                match = re.search(r'My Tip:\s*(\d+)', line)
+                if match:
+                    current_height = int(match.group(1))
+                    # If we see My Tip, node is synced to at least this height
+                    if current_height > 3000000:  # Reasonable mainnet height
+                        synced = True
+                        progress = 100
+
+            # Look for "Initial Tip" which shows starting state
+            if current_height == 0 and "Initial Tip:" in line:
+                match = re.search(r'Initial Tip:\s*(\d+)', line)
+                if match:
+                    current_height = int(match.group(1))
+
+            # Look for sync complete messages
+            if "fully synchronized" in line.lower():
                 synced = True
+                progress = 100
+                break
 
-            return {
-                "running": True,
-                "synced": synced,
-                "height": current_height,
-                "target": target_height,
-                "progress": progress
-            }
+        # If we found Updating node: 100%, consider it synced
+        if progress >= 100:
+            synced = True
+
+        return {
+            "running": True,
+            "synced": synced,
+            "height": current_height,
+            "target": target_height,
+            "progress": progress
+        }
     except Exception as e:
         print(f"Error getting node status: {e}")
 
@@ -402,16 +479,16 @@ def get_node_sync_status():
 
 
 def stop_beam_node():
-    """Stop running beam-node process"""
+    """Stop running beam-node process (cross-platform)"""
     global beam_beam_node_process, node_mode
 
     pid = get_beam_node_pid()
     if pid:
         try:
-            os.kill(pid, signal.SIGTERM)
+            kill_pid(pid)
             time.sleep(2)
             if get_beam_node_pid():
-                os.kill(pid, signal.SIGKILL)
+                kill_pid(pid, force=True)
             print(f"Stopped beam-node (PID: {pid})")
         except Exception as e:
             print(f"Error stopping node: {e}")
@@ -467,8 +544,8 @@ def start_beam_node(owner_key=None, password=None):
             cmd.append(f"--pass={password}")
 
     try:
-        # Check binary is executable
-        if not os.access(str(BEAM_NODE_BINARY), os.X_OK):
+        # Check binary is executable (skip on Windows where os.X_OK is meaningless)
+        if PLATFORM != "windows" and not os.access(str(BEAM_NODE_BINARY), os.X_OK):
             return {"error": f"beam-node binary is not executable: {BEAM_NODE_BINARY}. Try: chmod +x {BEAM_NODE_BINARY}"}
 
         print(f"[start_beam_node] cmd: {' '.join(cmd)}")
@@ -531,7 +608,8 @@ def start_beam_node(owner_key=None, password=None):
             return {"error": error_msg}
 
     except PermissionError as e:
-        return {"error": f"Permission denied running beam-node: {e}. Try: chmod +x {BEAM_NODE_BINARY}"}
+        fix_hint = "" if PLATFORM == "windows" else f" Try: chmod +x {BEAM_NODE_BINARY}"
+        return {"error": f"Permission denied running beam-node: {e}.{fix_hint}"}
     except Exception as e:
         return {"error": str(e)}
 
@@ -820,10 +898,11 @@ def export_owner_key(wallet_name, password):
         return {"error": f"Wallet '{wallet_name}' not found"}
 
     # Stop wallet-api to release database lock
-    was_running = wallet_api_process is not None
+    was_running = wallet_api_process is not None or is_wallet_api_running()
     if was_running:
         stop_wallet_api()
-        time.sleep(1)
+        # Windows needs more time to release SQLite file locks
+        time.sleep(3 if PLATFORM == "windows" else 1)
 
     cmd = [
         str(WALLET_CLI_BINARY),
