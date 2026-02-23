@@ -202,10 +202,10 @@ def shutdown_all():
                 pass
         beam_beam_node_process = None
 
-    # Also kill any orphaned processes
+    # Also kill any orphaned processes on the ports
     try:
-        subprocess.run(["pkill", "-f", "wallet-api.*--port=10000"], capture_output=True)
-        subprocess.run(["pkill", "-f", "beam-node.*--port=10005"], capture_output=True)
+        kill_process_on_port(WALLET_API_PORT)
+        kill_process_on_port(LOCAL_NODE_PORT)
     except:
         pass
 
@@ -214,15 +214,30 @@ def shutdown_all():
 
 def get_wallet_api_pid():
     """Get wallet-api PID if running"""
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", "wallet-api.*--port=10000"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            return int(result.stdout.strip().split()[0])
-    except:
-        pass
+    # First check our own Popen object
+    if wallet_api_process and wallet_api_process.poll() is None:
+        return wallet_api_process.pid
+    if PLATFORM == "windows":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 f"(Get-NetTCPConnection -LocalPort {WALLET_API_PORT} -State Listen -ErrorAction SilentlyContinue).OwningProcess"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return int(result.stdout.strip().split()[0])
+        except:
+            pass
+    else:
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "wallet-api.*--port=10000"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                return int(result.stdout.strip().split()[0])
+        except:
+            pass
     return None
 
 
@@ -253,49 +268,84 @@ def list_wallets():
 
 def kill_process_on_port(port):
     """Kill any process LISTENING on the specified port (not outgoing connections)"""
-    try:
-        # Use lsof with -sTCP:LISTEN to only find processes listening on the port
-        # This prevents killing beam-node which has outgoing connections to peers on port 10000
-        result = subprocess.run(
-            ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            pids = result.stdout.strip().split('\n')
-            for pid in pids:
-                try:
-                    pid = int(pid.strip())
-                    os.kill(pid, signal.SIGTERM)
-                    print(f"Killed process {pid} on port {port}")
-                    time.sleep(1)
-                    # Force kill if still running
+    if PLATFORM == "windows":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 f"(Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue).OwningProcess"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                for pid_str in result.stdout.strip().split():
                     try:
-                        os.kill(pid, 0)  # Check if still alive
-                        os.kill(pid, signal.SIGKILL)
-                        print(f"Force killed process {pid}")
-                    except ProcessLookupError:
-                        pass  # Process already dead
-                except (ValueError, ProcessLookupError):
-                    pass
-            return True
-    except Exception as e:
-        print(f"Error killing process on port {port}: {e}")
-    return False
+                        pid = int(pid_str)
+                        subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                                       capture_output=True, timeout=5)
+                        print(f"Killed process {pid} on port {port}")
+                    except (ValueError, Exception):
+                        pass
+                return True
+        except Exception as e:
+            print(f"Error killing process on port {port}: {e}")
+        return False
+    else:
+        try:
+            result = subprocess.run(
+                ["lsof", "-ti", f"TCP:{port}", "-sTCP:LISTEN"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                pids = result.stdout.strip().split('\n')
+                for pid in pids:
+                    try:
+                        pid = int(pid.strip())
+                        os.kill(pid, signal.SIGTERM)
+                        print(f"Killed process {pid} on port {port}")
+                        time.sleep(1)
+                        try:
+                            os.kill(pid, 0)
+                            os.kill(pid, signal.SIGKILL)
+                            print(f"Force killed process {pid}")
+                        except ProcessLookupError:
+                            pass
+                    except (ValueError, ProcessLookupError):
+                        pass
+                return True
+        except Exception as e:
+            print(f"Error killing process on port {port}: {e}")
+        return False
 
 
 def stop_wallet_api():
     """Stop running wallet-api process"""
     global wallet_api_process, active_wallet
 
+    # First try to kill via our Popen object (works on all platforms)
+    if wallet_api_process:
+        try:
+            wallet_api_process.terminate()
+            try:
+                wallet_api_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                wallet_api_process.kill()
+                wallet_api_process.wait(timeout=2)
+            print(f"Stopped wallet-api via Popen (PID: {wallet_api_process.pid})")
+        except Exception as e:
+            print(f"Error killing wallet-api via Popen: {e}")
+
+    # Fallback: find and kill by PID
     pid = get_wallet_api_pid()
     if pid:
         try:
-            os.kill(pid, signal.SIGKILL)
+            if PLATFORM == "windows":
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                               capture_output=True, timeout=5)
+            else:
+                os.kill(pid, signal.SIGKILL)
             time.sleep(0.2)
-        except ProcessLookupError:
-            pass
+            print(f"Stopped wallet-api by PID {pid}")
         except Exception as e:
-            print(f"Error killing wallet-api: {e}")
+            print(f"Error killing wallet-api by PID: {e}")
 
     wallet_api_process = None
     active_wallet = None
@@ -312,15 +362,30 @@ def stop_wallet_api():
 
 def get_beam_node_pid():
     """Get beam-node PID if running"""
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", f"beam-node.*--port={LOCAL_NODE_PORT}"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            return int(result.stdout.strip().split()[0])
-    except:
-        pass
+    # First check our own Popen object
+    if beam_beam_node_process and beam_beam_node_process.poll() is None:
+        return beam_beam_node_process.pid
+    if PLATFORM == "windows":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 f"(Get-NetTCPConnection -LocalPort {LOCAL_NODE_PORT} -State Listen -ErrorAction SilentlyContinue).OwningProcess"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return int(result.stdout.strip().split()[0])
+        except:
+            pass
+    else:
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", f"beam-node.*--port={LOCAL_NODE_PORT}"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                return int(result.stdout.strip().split()[0])
+        except:
+            pass
     return None
 
 
@@ -336,15 +401,16 @@ def get_node_sync_status():
 
     try:
         # Read from node log file to get sync progress
-        # Use tail to read last N lines efficiently
         log_file = LOGS_DIR / "beam-node.log"
         if log_file.exists():
-            # Use subprocess to efficiently get relevant lines
-            result = subprocess.run(
-                ["grep", "-E", "My Tip:|Updating node:|Initial Tip:|fully synchronized", str(log_file)],
-                capture_output=True, text=True, timeout=5
-            )
-            lines = result.stdout.strip().split('\n')[-50:]  # Last 50 matching lines
+            # Pure Python log parsing (cross-platform, no grep dependency)
+            patterns = ("My Tip:", "Updating node:", "Initial Tip:", "fully synchronized")
+            matching_lines = []
+            with open(log_file, "r", errors="ignore") as f:
+                for raw_line in f:
+                    if any(p in raw_line for p in patterns):
+                        matching_lines.append(raw_line)
+            lines = matching_lines[-50:]  # Last 50 matching lines
 
             current_height = 0
             target_height = 0
@@ -405,18 +471,35 @@ def stop_beam_node():
     """Stop running beam-node process"""
     global beam_beam_node_process, node_mode
 
+    # First try to kill via our Popen object (works on all platforms)
+    if beam_beam_node_process:
+        try:
+            beam_beam_node_process.terminate()
+            try:
+                beam_beam_node_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                beam_beam_node_process.kill()
+                beam_beam_node_process.wait(timeout=2)
+            print(f"Stopped beam-node via Popen (PID: {beam_beam_node_process.pid})")
+        except Exception as e:
+            print(f"Error stopping node via Popen: {e}")
+
+    # Fallback: find and kill by PID
+    beam_beam_node_process = None
     pid = get_beam_node_pid()
     if pid:
         try:
-            os.kill(pid, signal.SIGTERM)
-            time.sleep(2)
-            if get_beam_node_pid():
-                os.kill(pid, signal.SIGKILL)
+            if PLATFORM == "windows":
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)],
+                               capture_output=True, timeout=5)
+            else:
+                os.kill(pid, signal.SIGTERM)
+                time.sleep(2)
+                if get_beam_node_pid():
+                    os.kill(pid, signal.SIGKILL)
             print(f"Stopped beam-node (PID: {pid})")
         except Exception as e:
             print(f"Error stopping node: {e}")
-
-    beam_beam_node_process = None
 
     # Also kill any process using the node port
     kill_process_on_port(LOCAL_NODE_PORT)
