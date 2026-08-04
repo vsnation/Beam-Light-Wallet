@@ -33,6 +33,16 @@ async function checkForUpdates(showNoUpdateMsg = false) {
         const latestVersion = (release.tag_name || '').replace(/^v/, '').trim();
         const currentVersion = APP_VERSION.trim();
 
+        // APP_VERSION comes from the server and is a placeholder until then.
+        // Comparing against it makes every release look newer, which prompts a
+        // DOWNGRADE - the exact opposite of what an update banner is for, and
+        // an especially bad thing to ask a user to approve.
+        if (!/^\d+\.\d+/.test(currentVersion)) {
+            console.log('Skipping update check: local version not known yet');
+            if (showNoUpdateMsg) showToast('Still starting up - try again in a moment', 'info');
+            return null;
+        }
+
         console.log(`Current version: "${currentVersion}", Latest: "${latestVersion}"`);
 
         // Compare versions - only show update if latest is strictly greater
@@ -3721,13 +3731,26 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
 }
 
 // Change node - actually restarts wallet-api with new node
+let nodeSwitchInFlight = false;
+
 async function changeNode(costConfirmed = false) {
     const selector = document.getElementById('node-selector');
     const newNode = selector.value;
     const isLocal = newNode.includes('127.0.0.1') || newNode.includes('localhost');
 
     if (newNode === currentNode) return;
+    // A second change event arriving mid-switch would stack a second cost
+    // prompt and a second /api/node/switch on top of the first.
+    if (nodeSwitchInFlight) return;
+    nodeSwitchInFlight = true;
+    try {
+        await performNodeChange(selector, newNode, isLocal, costConfirmed);
+    } finally {
+        nodeSwitchInFlight = false;
+    }
+}
 
+async function performNodeChange(selector, newNode, isLocal, costConfirmed) {
     // Picking the local entry out of this dropdown starts the same ~9 GB sync
     // as the mode button, so it asks the same question.
     if (isLocal && !costConfirmed) {
@@ -3770,11 +3793,15 @@ async function changeNode(costConfirmed = false) {
 
             showToastAdvanced('Node Switched', `Now connected to ${newNode}`, 'success');
 
-            // Hide sync banner when on local node, show when switching to public
+            // Only watch a local node that exists. This used to be started
+            // unconditionally, so switching to a public node pinned a
+            // "Local node syncing..." banner over an app with no local node.
             if (isLocal) {
                 updateNodeSyncBanner(false);
             } else {
-                startNodeSyncChecker();
+                const after = await checkServerStatus();
+                if (after?.node_running) startNodeSyncChecker();
+                else updateNodeSyncBanner(false);
             }
 
             // Refresh wallet status
@@ -3899,7 +3926,7 @@ function closeRescanWarningModal() {
 async function switchToLocalAndRescan() {
     const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
     if (!password) {
-        showToastAdvanced('Error', 'No password available. Please re-unlock your wallet.', 'error');
+        showToast({ title: 'Session expired', message: 'The wallet password is no longer held in this session, and switching to a local node needs it.', hint: 'Unlock the wallet again, then retry.' }, 'error');
         return;
     }
 
@@ -5048,11 +5075,17 @@ function showLockedOverlay(message) {
         loadWelcomeWallets();
     }
     overlay.style.display = 'flex';
+    // The dashboard skeletons stay mounted underneath so unlocking reveals the
+    // page's shape, but the overlay is opaque: their shimmers would sweep
+    // unseen for as long as the wallet sits locked. Keep the shape, drop the
+    // motion (see body.wallet-locked .skeleton::after).
+    document.body.classList.add('wallet-locked');
 }
 
 function hideLockedOverlay() {
     const overlay = document.getElementById('locked-overlay');
     if (overlay) overlay.style.display = 'none';
+    document.body.classList.remove('wallet-locked');
 }
 
 // Lock wallet and show unlock screen
@@ -5961,8 +5994,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Restored password from session');
     }
 
-    // Check for updates (async, non-blocking)
-    checkForUpdates().catch(e => console.log('Update check skipped:', e.message));
 
     // Show loading state. These stay on screen through the locked overlay, so
     // unlocking reveals the shape of the dashboard rather than an empty page.
@@ -5978,6 +6009,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (serverStatus) {
         console.log('Server status:', serverStatus);
+
+        // Only now is APP_VERSION real, so only now can we compare against a
+        // release. Still non-blocking.
+        checkForUpdates().catch(e => console.log('Update check skipped:', e.message));
 
         if (!serverStatus.wallet_api_running) {
             // Explorer routes can work without wallet API
@@ -7738,14 +7773,16 @@ async function loadDexPools() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" width="48" height="48" style="margin-bottom:16px;">
                     <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
-                <h3 style="margin-bottom:8px;color:var(--warning);">DEX Unavailable</h3>
-                <p style="color:var(--text-secondary);margin-bottom:16px;max-width:400px;margin-left:auto;margin-right:auto;">
-                    DEX features require a node with shader support. Public nodes typically don't support smart contract calls.
+                <h3 style="margin-bottom:8px;color:var(--warning);">Could not load pools</h3>
+                <p style="color:var(--text-secondary);margin-bottom:16px;max-width:420px;margin-left:auto;margin-right:auto;">
+                    The DEX contract did not respond. This is usually temporary &mdash; the
+                    node may be busy or still catching up.
                 </p>
                 <p style="color:var(--text-muted);font-size:12px;margin-bottom:20px;">
-                    To use DEX: Switch to a local node in Settings
+                    A local node is <em>not</em> required: contract calls work over public nodes.
                 </p>
-                <button class="quick-btn" onclick="showPage('settings')">
+                <button class="quick-btn" onclick="loadDexPools()" style="margin-right:8px;">Try again</button>
+                <button class="quick-btn quick-btn-secondary" onclick="showPage('settings')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="margin-right:8px;">
                         <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
                     </svg>
@@ -10394,6 +10431,11 @@ function startNodeSyncMonitoring() {
     nodeSyncLast = { height: -1, at: 0 };
     loadForkInfo();
 
+    // Most installs never start a local node. Polling for one forever is pure
+    // noise, so the monitor gives a newly launched node ~30s to appear and then
+    // stops; anything that starts one calls this again.
+    let absentPolls = 0;
+
     const check = async () => {
         try {
             // The tip is what makes the percentage mean anything. It comes from
@@ -10407,6 +10449,13 @@ function startNodeSyncMonitoring() {
             const nodeStatus = await resp.json();
             updateNodeButtons(!!nodeStatus.running);
             const synced = renderNodeSync(nodeStatus);
+
+            if (!nodeStatus.running) {
+                absentPolls++;
+                if (absentPolls >= 3 && currentNodeType !== 'local') stopNodeSyncMonitoring();
+                return;
+            }
+            absentPolls = 0;
 
             if (synced) {
                 if (localNodeSyncProgress < 100) {
@@ -10470,7 +10519,7 @@ async function startLocalNode() {
             updateNodeButtons(true);
             startNodeSyncMonitoring();
         } else {
-            showToastAdvanced('Start Failed', result.error || 'Unknown error', 'error');
+            showErrorToast(result.error, 'Could not start the local node');
         }
     } catch (e) {
         showErrorToast(e, 'Could not start the local node');
@@ -14207,7 +14256,7 @@ async function sponsorAirdropGas() {
         input.value = '';
         setTimeout(() => { loadAirdropGas(); loadAirdropStats(); }, 1500);
     } catch (e) {
-        showToast(e.message || 'Failed to sponsor gas', 'error');
+        showErrorToast(e, 'Could not sponsor gas');
     } finally {
         btn.disabled = false;
         btn.textContent = prev;
