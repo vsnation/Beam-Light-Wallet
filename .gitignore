@@ -192,3 +192,8 @@ build/releases/
 
 # Data directory (runtime)
 data/
+
+# Third-party Stadium web app kept alongside for reference; not part of the
+# wallet. 152 MB of videos and build artifacts once got swept in by `git add -A`
+# and had to be filtered back out of an unpushed branch.
+meme_game/
