@@ -587,6 +587,19 @@ const API_URL = '/api/wallet';
 const GROTH = 100000000;
 
 // Centralized interval management
+/**
+ * Feature flags.
+ *
+ * P2P ships disabled. It is ~10,000 lines of alpha whose sync backbone
+ * (gun-manhattan.herokuapp.com) returns 404 — Heroku killed free dynos in 2022 —
+ * it writes JSON into the install directory, which is read-only inside a signed
+ * app bundle, and it derives trust scores from a file any local process can
+ * edit. It is being replaced by a cross-chain DEX; see docs/P2P_REWORK.md.
+ *
+ * Flip to true to bring the existing page back verbatim.
+ */
+const FEATURE_P2P = false;
+
 const activeIntervals = {};
 // Remembered so a timer suspended while the window is hidden can be restarted.
 const intervalMeta = {};
@@ -1114,7 +1127,20 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
     });
 });
 
+/** Hide anything whose feature flag is off. */
+function applyFeatureFlags() {
+    document.querySelectorAll('[data-feature="p2p"]').forEach(el => {
+        el.hidden = !FEATURE_P2P;
+    });
+}
+
 function showPage(pageId, updateUrl = true) {
+    // A disabled feature must not be reachable by URL or bookmark either.
+    if (pageId === 'p2p' && !FEATURE_P2P) {
+        pageId = 'dashboard';
+        updateUrl = true;
+    }
+
     // Every page-scoped poller stops here. This used to stop exactly two of
     // them, so fuddle, MemeClash and airdrop kept polling forever after you
     // navigated away — and MemeClash started a fresh uncancellable interval on
@@ -1215,6 +1241,9 @@ function showPage(pageId, updateUrl = true) {
             frame.src = frame.dataset.src;
         }
     }
+
+    // Reflect feature flags in the chrome every time we render it.
+    applyFeatureFlags();
 }
 
 // Handle browser back/forward navigation
@@ -5350,6 +5379,7 @@ function renderAppStore() {
                 </div>
             </div>
 
+            ${FEATURE_P2P ? `
             <div class="appstore-card" onclick="showPage('p2p')">
                 <div class="appstore-card-icon" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
@@ -5362,7 +5392,7 @@ function renderAppStore() {
                     <h3>P2P Marketplace</h3>
                     <p>Trade crypto peer-to-peer</p>
                 </div>
-            </div>
+            </div>` : ''}
 
             <div class="appstore-card" onclick="showPage('airdrop')">
                 <div class="appstore-card-icon" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">

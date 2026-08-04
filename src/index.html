@@ -82,7 +82,11 @@
                         <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
                     </svg>
                 </button>
-                <button type="button" class="nav-item" data-page="p2p" data-tooltip="P2P Trading" aria-label="P2P Trading">
+                <!-- P2P is disabled in the default build (FEATURE_P2P in app.js).
+                     Its Gun relay is dead and it is being reworked as a
+                     cross-chain DEX — see docs/P2P_REWORK.md. -->
+                <button type="button" class="nav-item" data-page="p2p" data-tooltip="P2P Trading"
+                        aria-label="P2P Trading" data-feature="p2p" hidden>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="6" cy="6" r="3"/>
                         <circle cx="18" cy="18" r="3"/>
