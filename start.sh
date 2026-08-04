@@ -9,15 +9,16 @@
 set -e
 
 # Configuration
-BEAM_VERSION="7.5.13882"
+# BEAM_VERSION is NOT set here on purpose: config/binaries.json is the single
+# source of truth for versions, asset names and checksums (see load_manifest).
 PORT=9080
 REPO_URL="https://github.com/vsnation/Beam-Light-Wallet"
 
-# Detect OS
+# Detect OS (PLATFORM doubles as the key into the manifest's "platforms" object)
 OS="$(uname -s)"
 case "$OS" in
-    Darwin) PLATFORM="macos"; PREFIX="mac" ;;
-    Linux)  PLATFORM="linux"; PREFIX="linux" ;;
+    Darwin) PLATFORM="macos" ;;
+    Linux)  PLATFORM="linux" ;;
     *)      echo "Error: Unsupported OS: $OS"; exit 1 ;;
 esac
 
@@ -59,6 +60,199 @@ migrate_old_data "$HOME/BEAM-LightWallet"
 if [ "$PLATFORM" = "macos" ]; then
     migrate_old_data "$HOME/Library/Application Support/BEAM Light Wallet"
 fi
+
+# ==========================================
+# Version manifest (config/binaries.json)
+# Single source of truth for versions, asset names and checksums.
+# Parsed with python3 - jq is not installed on a clean machine.
+# ==========================================
+MANIFEST=""
+BEAM_VERSION=""
+GITHUB_BASE=""
+HF6_COMPATIBLE=""
+
+# manifest_get <dotted.key.path> - prints the value; fails if missing or null
+manifest_get() {
+    if [ -z "$MANIFEST" ]; then return 1; fi
+    python3 -c '
+import json, sys
+try:
+    node = json.load(open(sys.argv[1]))
+    for key in sys.argv[2].split("."):
+        node = node[key]
+except Exception:
+    sys.exit(1)
+if node is None:
+    sys.exit(1)
+print("true" if node is True else "false" if node is False else node)
+' "$MANIFEST" "$1" 2>/dev/null
+}
+
+load_manifest() {
+    for CANDIDATE in "$SCRIPT_DIR/config/binaries.json" "$INSTALL_DIR/config/binaries.json"; do
+        if [ -f "$CANDIDATE" ]; then MANIFEST="$CANDIDATE"; break; fi
+    done
+
+    if [ -z "$MANIFEST" ]; then
+        echo "Error: config/binaries.json not found."
+        echo "       Looked in: $SCRIPT_DIR/config/ and $INSTALL_DIR/config/"
+        echo "       This file pins the BEAM binary versions and checksums;"
+        echo "       binaries cannot be downloaded safely without it."
+        exit 1
+    fi
+
+    if ! command -v python3 &> /dev/null; then
+        echo "Error: python3 is required to read $MANIFEST."
+        echo "       (BEAM Light Wallet needs python3 anyway - install it and re-run.)"
+        exit 1
+    fi
+
+    BEAM_VERSION=$(manifest_get "platforms.$PLATFORM.beam_version" || true)
+    RELEASE_BASE=$(manifest_get "release_base" || true)
+    HF6_COMPATIBLE=$(manifest_get "platforms.$PLATFORM.hf6_compatible" || true)
+
+    if [ -z "$BEAM_VERSION" ] || [ -z "$RELEASE_BASE" ]; then
+        echo "Error: $MANIFEST has no usable entry for platform '$PLATFORM'."
+        exit 1
+    fi
+
+    # GitHub release tag convention: beam-<version>
+    GITHUB_BASE="${RELEASE_BASE}/beam-${BEAM_VERSION}"
+}
+
+# Loud warning when the newest build for this platform predates the hardfork
+warn_if_not_hf6_compatible() {
+    if [ "$HF6_COMPATIBLE" = "true" ]; then
+        return 0
+    fi
+
+    HF_NAME=$(manifest_get "hardfork.name" || echo "the latest hardfork")
+    HF_HEIGHT=$(manifest_get "hardfork.height" || echo "?")
+    HF_REASON=$(manifest_get "platforms.$PLATFORM.unsupported_reason" || true)
+
+    echo ""
+    echo "################################################################"
+    echo "#  WARNING: NO ${HF_NAME}-COMPATIBLE BEAM BUILD FOR ${PLATFORM}"
+    echo "################################################################"
+    echo "#"
+    echo "#  Newest ${PLATFORM} binaries published by BeamMW: v${BEAM_VERSION}"
+    echo "#  ${HF_NAME} activated at block ${HF_HEIGHT}."
+    echo "#"
+    echo "#  These binaries CANNOT follow mainnet past the fork height."
+    echo "#  A local node stalls one block before it and never recovers, so"
+    echo "#  BALANCES AND TRANSACTION HISTORY WILL BE STALE."
+    echo "#  Do not treat what this wallet shows as current."
+    echo "#"
+    if [ -n "$HF_REASON" ]; then
+        echo "#  $HF_REASON"
+        echo "#"
+    fi
+    echo "################################################################"
+    echo ""
+}
+
+# sha256 of a file - sha256sum on Linux, shasum on macOS
+sha256_of() {
+    if command -v sha256sum &> /dev/null; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum &> /dev/null; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        return 1
+    fi
+}
+
+# asset_url <binary-name> - built from release_base + the asset name in the manifest
+asset_url() {
+    ASSET=$(manifest_get "platforms.$PLATFORM.binaries.$1.asset" || true)
+    if [ -z "$ASSET" ]; then
+        echo "Error: no '$1' asset listed for platform '$PLATFORM' in $MANIFEST" >&2
+        return 1
+    fi
+    echo "${GITHUB_BASE}/${ASSET}"
+}
+
+# verify_binary <binary-name> - checks the EXTRACTED binary against the manifest.
+# The pinned hash is authoritative; the *-checksum.txt shipped inside the archive
+# is only a secondary check (it travels with the binary, so it proves less).
+verify_binary() {
+    local NAME="$1"
+    local WANT HAVE SHIPPED
+
+    if [ ! -f "$NAME" ]; then
+        echo "  ERROR: $NAME is missing after extraction - archive layout changed?"
+        exit 1
+    fi
+
+    HAVE=$(sha256_of "$NAME" || true)
+    if [ -z "$HAVE" ]; then
+        echo "  WARNING: no sha256sum/shasum found - cannot verify $NAME"
+        return 0
+    fi
+
+    WANT=$(manifest_get "platforms.$PLATFORM.binaries.$NAME.sha256" || true)
+    if [ -n "$WANT" ]; then
+        if [ "$WANT" != "$HAVE" ]; then
+            echo ""
+            echo "  ERROR: checksum mismatch for $NAME"
+            echo "         expected (config/binaries.json): $WANT"
+            echo "         actual   (downloaded file):      $HAVE"
+            echo "         Refusing to install it. Delete $BINARIES_DIR and retry."
+            rm -f "$NAME"
+            exit 1
+        fi
+        echo "  $NAME sha256 verified"
+    else
+        echo "  $NAME: no pinned sha256 in manifest"
+    fi
+
+    # Secondary check against the checksum file shipped inside the archive
+    if [ -f "${NAME}-checksum.txt" ]; then
+        SHIPPED=$(awk '{print $1; exit}' "${NAME}-checksum.txt" 2>/dev/null || true)
+        if [ -n "$SHIPPED" ] && [ "$SHIPPED" != "$HAVE" ]; then
+            echo "  ERROR: $NAME does not match its own ${NAME}-checksum.txt"
+            echo "         expected: $SHIPPED"
+            echo "         actual:   $HAVE"
+            rm -f "$NAME"
+            exit 1
+        fi
+        rm -f "${NAME}-checksum.txt"
+    fi
+}
+
+# Version stamp for the binaries currently installed in $BINARIES_DIR
+VERSION_STAMP="$BINARIES_DIR/.beam_version"
+
+# check_installed_binaries - binaries already on disk may predate this manifest.
+# Existence alone is not freshness: a machine installed before a version bump would
+# otherwise keep its old build forever, which is exactly how a wallet ends up running
+# a pre-hardfork binary while the manifest claims the platform is fine.
+# The stamp records the version the last successful download installed.
+check_installed_binaries() {
+    local STAMPED NAME WANT HAVE
+    STAMPED=$(cat "$VERSION_STAMP" 2>/dev/null || true)
+    if [ "$STAMPED" = "$BEAM_VERSION" ]; then
+        return 0
+    fi
+
+    for NAME in wallet-api beam-wallet beam-node; do
+        if [ ! -f "$BINARIES_DIR/$NAME" ]; then continue; fi
+
+        WANT=$(manifest_get "platforms.$PLATFORM.binaries.$NAME.sha256" || true)
+        if [ -n "$WANT" ]; then
+            HAVE=$(sha256_of "$BINARIES_DIR/$NAME" || true)
+            if [ -z "$HAVE" ] || [ "$WANT" = "$HAVE" ]; then continue; fi
+        elif [ -z "$STAMPED" ]; then
+            # No pinned hash and no record of what was installed: which build this
+            # is cannot be determined, so leave it rather than re-download blindly.
+            continue
+        fi
+
+        echo "  Replacing $NAME: not the v${BEAM_VERSION} build named in $MANIFEST"
+        rm -f "$BINARIES_DIR/$NAME"
+        NEEDS_BINARIES=true
+    done
+}
 
 # Check if binaries need download
 NEEDS_BINARIES=false
@@ -200,21 +394,26 @@ else
 fi
 echo ""
 
+# Read the version manifest, then warn if this platform has no post-fork build
+load_manifest
+warn_if_not_hf6_compatible
+check_installed_binaries
+
 # Download binaries if needed (to ~/.beam-light-wallet/binaries/)
 if [ "$NEEDS_BINARIES" = true ]; then
-    echo "Downloading BEAM binaries v${BEAM_VERSION}..."
+    echo "Downloading BEAM binaries v${BEAM_VERSION} (per $MANIFEST)..."
     echo ""
 
-    GITHUB_BASE="https://github.com/BeamMW/beam/releases/download/beam-${BEAM_VERSION}"
     cd "$BINARIES_DIR"
 
     # wallet-api
     if [ ! -f "wallet-api" ]; then
         echo "  Downloading wallet-api..."
-        curl -L -# "${GITHUB_BASE}/${PREFIX}-wallet-api-${BEAM_VERSION}.zip" -o wallet-api.zip
+        curl -L -# "$(asset_url wallet-api)" -o wallet-api.zip
         unzip -o wallet-api.zip
         [ -f wallet-api.tar ] && tar -xf wallet-api.tar
         rm -f wallet-api.zip wallet-api.tar
+        verify_binary wallet-api
         chmod +x wallet-api
         echo "  wallet-api ready!"
     fi
@@ -222,10 +421,11 @@ if [ "$NEEDS_BINARIES" = true ]; then
     # beam-wallet
     if [ ! -f "beam-wallet" ]; then
         echo "  Downloading beam-wallet..."
-        curl -L -# "${GITHUB_BASE}/${PREFIX}-beam-wallet-cli-${BEAM_VERSION}.zip" -o beam-wallet.zip
+        curl -L -# "$(asset_url beam-wallet)" -o beam-wallet.zip
         unzip -o beam-wallet.zip
         [ -f beam-wallet.tar ] && tar -xf beam-wallet.tar
         rm -f beam-wallet.zip beam-wallet.tar
+        verify_binary beam-wallet
         chmod +x beam-wallet
         echo "  beam-wallet ready!"
     fi
@@ -233,12 +433,16 @@ if [ "$NEEDS_BINARIES" = true ]; then
     # beam-node (optional)
     if [ ! -f "beam-node" ]; then
         echo "  Downloading beam-node (optional)..."
-        curl -L -# "${GITHUB_BASE}/${PREFIX}-beam-node-${BEAM_VERSION}.zip" -o beam-node.zip 2>/dev/null || true
+        curl -L -# "$(asset_url beam-node)" -o beam-node.zip 2>/dev/null || true
         if [ -f beam-node.zip ]; then
             unzip -o beam-node.zip 2>/dev/null || true
             [ -f beam-node.tar ] && tar -xf beam-node.tar 2>/dev/null || true
             rm -f beam-node.zip beam-node.tar
-            [ -f beam-node ] && chmod +x beam-node && echo "  beam-node ready!"
+            if [ -f beam-node ]; then
+                verify_binary beam-node
+                chmod +x beam-node
+                echo "  beam-node ready!"
+            fi
         fi
     fi
 
@@ -252,6 +456,9 @@ if [ "$NEEDS_BINARIES" = true ]; then
     echo "Binaries downloaded to: $BINARIES_DIR"
     echo ""
 fi
+
+# Record what is installed, so the next manifest version bump is noticed
+echo "$BEAM_VERSION" > "$VERSION_STAMP" 2>/dev/null || true
 
 # Start the wallet
 echo "Starting BEAM Light Wallet..."

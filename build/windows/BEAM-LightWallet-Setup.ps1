@@ -18,15 +18,91 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"  # Faster downloads
 
-# Configuration
-$BEAM_VERSION = "7.5.13882"
-$GITHUB_BASE = "https://github.com/BeamMW/beam/releases/download/beam-$BEAM_VERSION"
+# Configuration - versions, asset names and checksums live in config/binaries.json
+$manifestPath = $null
+# $InstallDir is searched last on purpose: it holds the manifest of whatever was
+# installed before, and preferring that over the one shipped with this installer
+# would pin the machine to the old build forever.
+foreach ($candidate in @("$PSScriptRoot\config\binaries.json",
+                         "$PSScriptRoot\..\..\config\binaries.json",
+                         "$(Get-Location)\config\binaries.json",
+                         "$InstallDir\config\binaries.json")) {
+    if ($candidate -and (Test-Path $candidate)) { $manifestPath = (Resolve-Path $candidate).Path; break }
+}
+if (-not $manifestPath) {
+    Write-Host "[!] config\binaries.json not found." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  This installer reads the pinned BEAM version, release asset names and" -ForegroundColor Yellow
+    Write-Host "  SHA-256 checksums from config\binaries.json. Run it from a checkout of" -ForegroundColor Yellow
+    Write-Host "  the wallet repository, or place config\binaries.json next to this script." -ForegroundColor Yellow
+    Write-Host ""
+    if (-not $Silent) { Read-Host "Press Enter to exit" }
+    exit 1
+}
+
+$MANIFEST = Get-Content -Raw -Path $manifestPath | ConvertFrom-Json
+$PLATFORM = $MANIFEST.platforms.windows
+if (-not $PLATFORM) {
+    Write-Host "[!] config\binaries.json has no 'windows' platform entry." -ForegroundColor Red
+    if (-not $Silent) { Read-Host "Press Enter to exit" }
+    exit 1
+}
+$BEAM_VERSION = $PLATFORM.beam_version
+$GITHUB_BASE = "$($MANIFEST.release_base)/beam-$BEAM_VERSION"
 
 # Colors for console output
 function Write-Status($msg) { Write-Host "[*] $msg" -ForegroundColor Cyan }
 function Write-Success($msg) { Write-Host "[+] $msg" -ForegroundColor Green }
 function Write-Error($msg) { Write-Host "[!] $msg" -ForegroundColor Red }
 function Write-Warning($msg) { Write-Host "[!] $msg" -ForegroundColor Yellow }
+
+# Release asset for a binary, straight from the manifest. Windows assets are
+# prefixed "win-", not "windows-"; asking for the latter is a 404.
+function Get-BeamAsset($name) {
+    $asset = $PLATFORM.binaries.$name.asset
+    if (-not $asset) { throw "config\binaries.json has no asset for '$name' on windows" }
+    return $asset
+}
+
+# Name of the executable inside the archive, per the manifest.
+function Get-BeamFile($name) {
+    $file = $PLATFORM.binaries.$name.file
+    if ($file) { return $file }
+    return "$name.exe"
+}
+
+# True when the file on disk is the build pinned in the manifest (or when there
+# is nothing pinned to compare against).
+function Test-BeamHash($name, $path) {
+    $expected = $PLATFORM.binaries.$name.sha256
+    if (-not $expected) { return $true }
+    return ((Get-FileHash -Path $path -Algorithm SHA256).Hash -eq $expected.ToUpper())
+}
+
+# Verify an extracted binary against the hash pinned in the manifest. The pinned
+# hash is authoritative: the *-checksum.txt shipped next to the download only
+# proves the file arrived intact, not that upstream shipped what we expected.
+function Assert-BeamHash($name, $path) {
+    $expected = $PLATFORM.binaries.$name.sha256
+    if (-not $expected) {
+        Write-Warning "No pinned sha256 for $name, skipping verification"
+        return
+    }
+    $actual = (Get-FileHash -Path $path -Algorithm SHA256).Hash
+    if ($actual -ne $expected.ToUpper()) {
+        Remove-Item $path -Force -ErrorAction SilentlyContinue
+        Write-Host ""
+        Write-Host "[!] $name failed SHA-256 verification. Aborting install." -ForegroundColor Red
+        Write-Host "    expected: $($expected.ToLower())" -ForegroundColor Red
+        Write-Host "    actual:   $($actual.ToLower())" -ForegroundColor Red
+        Write-Host "    The download was corrupt or the release asset was replaced." -ForegroundColor Red
+        Write-Host "    The file has been deleted. Do not run it." -ForegroundColor Red
+        Write-Host ""
+        if (-not $Silent) { Read-Host "Press Enter to exit" }
+        exit 1
+    }
+    Write-Success "$name sha256 verified"
+}
 
 # Show banner
 Clear-Host
@@ -42,6 +118,27 @@ Write-Host ""
 Write-Host "  Donations: " -NoNewline -ForegroundColor Gray
 Write-Host "e17cc06481d9ae88e1e0181efee407fa8c36a861b9df723845eddc8fb1ba552048" -ForegroundColor Yellow
 Write-Host ""
+
+# A build older than the hard fork cannot follow mainnet past the fork height.
+# It keeps reporting itself as synced while its view of the chain is frozen.
+if ($PLATFORM.hf6_compatible -eq $false) {
+    $fork = $MANIFEST.hardfork
+    Write-Host "  ======================================================" -ForegroundColor Yellow
+    Write-Host "     WARNING: BEAM $BEAM_VERSION IS OUT OF CONSENSUS" -ForegroundColor Yellow
+    Write-Host "  ======================================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  These binaries stall at block $($fork.height) ($($fork.name), activated" -ForegroundColor Yellow
+    Write-Host "  $($fork.activated)) and cannot follow mainnet past it." -ForegroundColor Yellow
+    Write-Host "  $($fork.name) requires BEAM $($fork.min_beam_version) or newer." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Balances and transaction history will be STALE. Do not rely on them," -ForegroundColor Yellow
+    Write-Host "  and do not treat a received payment as confirmed." -ForegroundColor Yellow
+    if ($PLATFORM.unsupported_reason) {
+        Write-Host ""
+        Write-Host "  $($PLATFORM.unsupported_reason)" -ForegroundColor Yellow
+    }
+    Write-Host ""
+}
 
 # Check Python
 Write-Status "Checking Python installation..."
@@ -82,8 +179,14 @@ Write-Success "Directories created"
 function Download-Binary($name, $filename, $url) {
     $targetPath = "$InstallDir\binaries\windows\$filename"
     if (Test-Path $targetPath) {
-        Write-Success "$name already exists"
-        return
+        # An existing binary from an older pinned version has to go, or this
+        # machine keeps running the old build forever.
+        if (Test-BeamHash $name $targetPath) {
+            Write-Success "$name already exists"
+            return
+        }
+        Write-Warning "$name is not the pinned v$BEAM_VERSION build, replacing it"
+        Remove-Item $targetPath -Force
     }
 
     Write-Status "Downloading $name..."
@@ -109,6 +212,10 @@ function Download-Binary($name, $filename, $url) {
     } catch {
         Write-Warning "Failed to download $name`: $_"
     }
+
+    # Outside the catch: a hash mismatch must abort the install, not be swallowed
+    # as "download failed".
+    if (Test-Path $targetPath) { Assert-BeamHash $name $targetPath }
 }
 
 # Download binaries
@@ -117,9 +224,9 @@ Write-Status "Downloading BEAM binaries v$BEAM_VERSION..."
 Write-Host "  This may take a few minutes..." -ForegroundColor Gray
 Write-Host ""
 
-Download-Binary "wallet-api" "wallet-api.exe" "$GITHUB_BASE/windows-wallet-api-$BEAM_VERSION.zip"
-Download-Binary "beam-wallet" "beam-wallet.exe" "$GITHUB_BASE/windows-beam-wallet-cli-$BEAM_VERSION.zip"
-Download-Binary "beam-node" "beam-node.exe" "$GITHUB_BASE/windows-beam-node-$BEAM_VERSION.zip"
+Download-Binary "wallet-api" $(Get-BeamFile 'wallet-api') "$GITHUB_BASE/$(Get-BeamAsset 'wallet-api')"
+Download-Binary "beam-wallet" $(Get-BeamFile 'beam-wallet') "$GITHUB_BASE/$(Get-BeamAsset 'beam-wallet')"
+Download-Binary "beam-node" $(Get-BeamFile 'beam-node') "$GITHUB_BASE/$(Get-BeamAsset 'beam-node')"
 
 # Create start script
 Write-Host ""
