@@ -3208,7 +3208,7 @@ function errorToMessage(e) {
         return {
             title: 'The node rejected the transaction',
             message: 'The transaction was built and signed, but the node refused to accept it.',
-            hint: 'The node is usually out of sync or unable to run contracts. Switch to Local Node under Settings and try again.'
+            hint: 'Usually the wallet is behind the network, or a coin it wanted to spend was already used. Wait for it to catch up, check Transactions, then try again.'
         };
     }
 
@@ -10331,10 +10331,16 @@ function renderNodeSync(nodeStatus) {
     const tip = Math.max(knownTip, height);
     const behind = haveTip ? Math.max(tip - height, 0) : 0;
     const atTip = haveTip && behind <= 2;
+    // A node that has not reported a height yet is starting up, not sitting at
+    // block 0: serve.py returns 0 until beam-node.log has a parseable line.
+    const starting = height <= 0;
 
     if (height !== nodeSyncLast.height) {
         nodeSyncLast = { height: height, at: now };
-        if (!nodeSyncFirst.at) nodeSyncFirst = { height: height, at: now };
+        // Anchoring the rate baseline at that placeholder 0 makes the first
+        // fast_sync jump look like millions of blocks in one poll, which turned
+        // a multi-hour sync into "under a minute left".
+        if (!nodeSyncFirst.at && !starting) nodeSyncFirst = { height: height, at: now };
     } else if (!nodeSyncLast.at) {
         nodeSyncLast.at = now;
     }
@@ -10365,7 +10371,7 @@ function renderNodeSync(nodeStatus) {
         return false;
     }
 
-    const pct = haveTip ? Math.min(100, Math.max(0, (height / tip) * 100)) : null;
+    const pct = (haveTip && !starting) ? Math.min(100, Math.max(0, (height / tip) * 100)) : null;
     // No tip means no denominator, and a 0% bar next to a height of 3.5M is
     // worse than no bar at all.
     bar.hidden = (pct === null);
@@ -10373,10 +10379,12 @@ function renderNodeSync(nodeStatus) {
 
     if (pct === null) {
         setNodeSyncField('sync-percentage', '—', 'var(--text-muted)');
-        setNodeSyncField('sync-status-text', stalled ? 'Not advancing' : 'Syncing',
+        setNodeSyncField('sync-status-text',
+                         stalled ? 'Not advancing' : (starting ? 'Starting up' : 'Syncing'),
                          stalled ? 'var(--warning)' : 'var(--text-secondary)');
-        setNodeSyncField('sync-blocks', height ? `${height.toLocaleString()} blocks` : 'Starting up');
-        setNodeSyncField('sync-remaining', 'Network height unavailable');
+        setNodeSyncField('sync-blocks', starting ? 'No height reported yet' : `${height.toLocaleString()} blocks`);
+        // Only one of these is the actual reason there is no bar.
+        setNodeSyncField('sync-remaining', starting ? '' : 'Network height unavailable');
     } else {
         // One decimal, rounded down: the last percent of a ~9 GB sync is hours
         // long, and a "100%" that still has 400 blocks to go is the same lie
@@ -10407,7 +10415,8 @@ function renderNodeSync(nodeStatus) {
     let neutral = false;
     if (stalled) {
         stallHtml = `<strong>No progress for ${Math.round(stuckMs / 60000)} minutes.</strong>
-            The node has been at block ${height.toLocaleString()} since then.`;
+            ${starting ? 'The node has not reported a block height at all.'
+                       : `The node has been at block ${height.toLocaleString()} since then.`}`;
         if (belowFork) {
             stallHtml += ` Block ${forkHeight.toLocaleString()} is the ${escapeHtml(forkInfo.name)} fork, and builds older
                 than ${escapeHtml(forkInfo.minVersion)} stop one block short of it and never recover.`;

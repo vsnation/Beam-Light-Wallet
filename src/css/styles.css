@@ -1,38 +1,10 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        :root {
-            /* Core Colors */
-            --void: #050a0f;
-            --void-light: #0a1019;
-            --void-lighter: #0f1923;
-            --beam-cyan: #25c2a0;
-            --beam-cyan-dim: rgba(37, 194, 160, 0.15);
-            --beam-cyan-glow: rgba(37, 194, 160, 0.4);
-            --beam-pink: #da70d6;
-            --beam-pink-dim: rgba(218, 112, 214, 0.15);
-            --warning: #f59e0b;
-            --warning-dim: rgba(245, 158, 11, 0.15);
-            --error: #ef4444;
-            --success: #10b981;
-
-            /* Glass */
-            --glass: rgba(255, 255, 255, 0.03);
-            --glass-border: rgba(255, 255, 255, 0.06);
-            --glass-hover: rgba(255, 255, 255, 0.06);
-
-            /* Text */
-            --text-primary: #f0f4f8;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-
-            /* Sizing */
-            --sidebar-width: 72px;
-            --header-height: 64px;
-
-            /* Shadows */
-            --shadow-glow: 0 0 40px rgba(37, 194, 160, 0.15);
-            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
-        }
+        /* The tokens this file used to redeclare all live in variables.css now.
+           Keeping a copy here was actively harmful: this file loads second, so
+           every value in it beat the token file at equal specificity, and
+           --text-muted silently reverted app-wide to the pre-audit #64748b
+           (4.18:1 on --void, below the AA floor). */
 
         html { font-size: 16px; }
 
@@ -6640,11 +6612,6 @@ tr.skeleton-row {
     padding: var(--space-3) var(--space-4);
     padding-right: var(--space-8);
     line-height: var(--leading-normal);
-    /* The stale :root at the top of this file still sets --text-muted to the
-       pre-audit #64748b (4.18:1) and, loading after variables.css, wins. Pin
-       the intended value here so hint text clears AA without touching the ~300
-       other uses. Delete this line once that duplicate :root block goes. */
-    --text-muted: #8b98ab;
 }
 
 .toast-warning {
