@@ -316,7 +316,7 @@
     cursor: pointer;
     transition: all 0.15s ease;
     font-family: var(--fuddle-font-game);
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .fuddle-cid-display:hover {
@@ -404,7 +404,7 @@
 }
 
 .fuddle-stat-label {
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -561,7 +561,7 @@
 }
 
 .fuddle-tournament-letters {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     margin-top: -6px;
     letter-spacing: 0.5px;
@@ -597,7 +597,7 @@
 }
 
 .fuddle-tournament-prize .prize-label {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -656,7 +656,7 @@
 }
 
 .fuddle-tournament-meta .meta-label {
-    font-size: 8px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -666,7 +666,7 @@
 /* Round badge */
 .fuddle-tournament-round {
     font-family: var(--fuddle-font-game);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     text-align: center;
     letter-spacing: 1px;
@@ -738,7 +738,7 @@
     border: 1px solid var(--fuddle-border);
     color: var(--text-muted);
     border-radius: 8px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -790,7 +790,7 @@
 
 .fuddle-letter-chip .count {
     color: var(--fuddle-accent);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 400;
     opacity: 0.8;
 }
@@ -898,7 +898,7 @@
 }
 
 .fuddle-game-info {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     margin-top: 4px;
     letter-spacing: 0.5px;
@@ -1076,7 +1076,7 @@
 }
 
 .fuddle-key .key-count {
-    font-size: 9px;
+    font-size: 12px;
     color: var(--fuddle-accent);
     font-weight: 400;
     margin-top: 1px;
@@ -1170,7 +1170,7 @@
 .fuddle-key.enter-key {
     background: rgba(244, 63, 94, 0.15);
     color: #F43F5E;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 800;
     letter-spacing: 1px;
 }
@@ -1206,7 +1206,7 @@
 
 .fuddle-confirm-step {
     font-family: var(--fuddle-font-game);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.5px;
     color: var(--text-muted);
@@ -1262,7 +1262,7 @@
 
 .fuddle-confirm-text {
     font-family: var(--fuddle-font-game);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     text-align: center;
     letter-spacing: 0.3px;
@@ -1402,7 +1402,7 @@
 
 .fuddle-shop-letter .owned {
     font-family: var(--fuddle-font-game);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--fuddle-accent);
     margin-top: 3px;
     font-weight: 400;
@@ -1698,7 +1698,7 @@
 }
 
 .fuddle-buy-letter-unit {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     text-align: right;
     margin-top: 4px;
@@ -1810,7 +1810,7 @@
 }
 
 .fuddle-lb-you {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 800;
     color: var(--fuddle-accent);
     letter-spacing: 0.5px;
@@ -1873,7 +1873,7 @@
 }
 
 .fuddle-lb-prize-label {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
 }
 
@@ -1900,7 +1900,7 @@
 }
 
 .fuddle-lb-stat .lbl {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1943,7 +1943,7 @@
 }
 
 .fuddle-lb-my-item .lbl {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.4px;
@@ -2000,7 +2000,7 @@
     border: 1px solid var(--fuddle-border);
     border-radius: 8px;
     overflow-x: auto;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.6;
 }
 
@@ -2096,7 +2096,7 @@
 .fuddle-admin-stat:nth-child(4)::before { background: var(--fuddle-present); }
 
 .fuddle-admin-stat .label {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -2123,7 +2123,7 @@
 }
 
 .fuddle-admin-field label {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.8px;
@@ -2264,7 +2264,7 @@
 
 .fuddle-game-card-type {
     font-family: var(--fuddle-font-game);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 2px;
@@ -2288,7 +2288,7 @@
 }
 
 .fuddle-game-card-players {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
 }
 
@@ -2373,7 +2373,7 @@
 }
 
 .fuddle-diff-btn .diff-label {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
     font-weight: 600;
     letter-spacing: 0.5px;
@@ -2381,7 +2381,7 @@
 
 .fuddle-diff-btn .diff-mult {
     font-family: var(--fuddle-font-game);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--fuddle-accent);
     font-weight: 700;
     letter-spacing: 0.3px;
@@ -2458,7 +2458,7 @@
 
 .fuddle-tx-meta {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 12px;
     margin-top: 2px;
     font-family: var(--fuddle-font-game);
     display: flex;
@@ -2478,7 +2478,7 @@
 
 .fuddle-tx-badge {
     font-family: var(--fuddle-font-game);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 10px;
@@ -2507,14 +2507,14 @@
 }
 
 .fuddle-tx-fee {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     font-family: var(--fuddle-font-game);
 }
 
 .fuddle-tx-id {
     font-family: var(--fuddle-font-game);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     cursor: pointer;
     letter-spacing: 0.3px;
@@ -2527,7 +2527,7 @@
 /* Amount chips inside meta row */
 .fuddle-tx-amount {
     font-family: var(--fuddle-font-game);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.3px;
 }
@@ -2627,7 +2627,7 @@
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 0.5px;
 }
 
@@ -2740,7 +2740,7 @@
     }
 
     .fuddle-cid-display {
-        font-size: 10px;
+        font-size: 12px;
     }
 
     .appstore-featured-content {
@@ -2854,7 +2854,7 @@
     border: 1px solid var(--fuddle-border);
     border-radius: 20px;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -2965,7 +2965,7 @@
     margin-left: auto;
     padding: 2px 8px;
     border-radius: 10px;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -3000,7 +3000,7 @@
 
 .fuddle-round-prize-label {
     display: block;
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -3031,7 +3031,7 @@
 }
 
 .fuddle-round-meta-item .lbl {
-    font-size: 8px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.8px;
@@ -3052,7 +3052,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary);
 }
 
@@ -3062,7 +3062,7 @@
     border: none;
     color: #fff;
     border-radius: 6px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -3076,7 +3076,7 @@
 
 .fuddle-round-games-summary {
     font-family: var(--fuddle-font-game);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     text-align: center;
     letter-spacing: 0.5px;
@@ -3088,7 +3088,7 @@
 
 .fuddle-game-badge {
     font-family: var(--fuddle-font-game);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     padding: 3px 10px;
     border-radius: 10px;
@@ -3258,7 +3258,7 @@
 }
 
 .fuddle-tx-bar-text {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary, #94a3b8);
     white-space: nowrap;
     overflow: hidden;

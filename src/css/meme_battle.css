@@ -187,7 +187,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-subtitle {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     letter-spacing: 3px;
     text-transform: uppercase;
@@ -295,7 +295,7 @@ img, .mc-team-avatar img {
     border: none;
     border-radius: 2px;
     padding: 6px 16px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);
     font-family: var(--pixel-font);
@@ -319,7 +319,7 @@ img, .mc-team-avatar img {
     border-radius: 2px;
     padding: 6px 16px;
     font-family: var(--pixel-font);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--chad-color);
     line-height: 1.6;
@@ -342,7 +342,7 @@ img, .mc-team-avatar img {
     gap: 4px;
     padding: 4px 12px;
     border-radius: 2px;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -472,7 +472,7 @@ img, .mc-team-avatar img {
 
 /* Treasury display */
 .mc-team-treasury {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -543,7 +543,7 @@ img, .mc-team-avatar img {
     display: flex;
     justify-content: space-between;
     margin-bottom: 8px;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--pixel-font);
     line-height: 1.6;
@@ -573,7 +573,7 @@ img, .mc-team-avatar img {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--pixel-font);
     color: #fff;
@@ -623,7 +623,7 @@ img, .mc-team-avatar img {
     padding: 12px 28px;
     border-radius: 2px;
     border: none;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--pixel-font);
     cursor: pointer;
@@ -731,14 +731,14 @@ img, .mc-team-avatar img {
 
 .mc-btn-sm {
     padding: 8px 18px;
-    font-size: 9px;
+    font-size: 12px;
     border-radius: 2px;
 }
 
 .mc-arena-status {
     text-align: center;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 12px;
     padding: 8px 0;
     position: relative;
     z-index: 3;
@@ -875,7 +875,7 @@ img, .mc-team-avatar img {
 
 .mc-swap-header h3 {
     font-family: var(--pixel-font);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-primary);
     text-transform: uppercase;
@@ -885,7 +885,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-swap-fee-badge {
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 600;
     font-family: var(--pixel-font);
     color: var(--mc-gold);
@@ -913,7 +913,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-swap-unit {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--pixel-font);
     color: var(--text-secondary);
@@ -954,7 +954,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-swap-quote-row.detail {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     font-family: var(--font-mono);
 }
@@ -963,7 +963,7 @@ img, .mc-team-avatar img {
 .mc-swap-quote-row.detail .giga { color: var(--giga-color); }
 
 .mc-swap-quote-row.fee {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
 }
 
@@ -1004,7 +1004,7 @@ img, .mc-team-avatar img {
 .mc-swap-pct-btn {
     flex: 1;
     padding: 6px 0;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     font-family: var(--pixel-font);
     color: var(--text-secondary);
@@ -1127,7 +1127,7 @@ img, .mc-team-avatar img {
 
 .mc-howto-title {
     font-family: var(--pixel-font);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: 1px;
@@ -1215,7 +1215,7 @@ img, .mc-team-avatar img {
 .mc-howto-bonus {
     padding: 0 24px 12px;
     text-align: center;
-    font-size: 11px;
+    font-size: 12px;
     font-family: var(--pixel-font);
     color: var(--mc-gold);
     opacity: 0.85;
@@ -1230,7 +1230,7 @@ img, .mc-team-avatar img {
 .mc-whitepaper-link {
     display: inline-block;
     font-family: var(--pixel-font);
-    font-size: 11px;
+    font-size: 12px;
     color: #00d4ff;
     text-decoration: none;
     padding: 8px 18px;
@@ -1311,7 +1311,7 @@ img, .mc-team-avatar img {
 
 .mc-deposit-section h3 {
     font-family: var(--pixel-font);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 4px;
@@ -1332,7 +1332,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-deposit-detail {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--chad-color);
     margin-bottom: 14px;
     padding: 8px 12px;
@@ -1366,7 +1366,7 @@ img, .mc-team-avatar img {
     background: rgba(0, 0, 0, 0.3);
     color: var(--text-secondary);
     font-weight: 700;
-    font-size: 11px;
+    font-size: 12px;
     font-family: var(--pixel-font);
     cursor: pointer;
     transition: all 0.25s ease;
@@ -1441,7 +1441,7 @@ img, .mc-team-avatar img {
     border-radius: 2px;
     background: rgba(0, 0, 0, 0.3);
     color: var(--text-secondary);
-    font-size: 10px;
+    font-size: 12px;
     font-family: var(--pixel-font);
     cursor: pointer;
     transition: all 0.2s;
@@ -1511,7 +1511,7 @@ img, .mc-team-avatar img {
 
 .mc-section-title {
     font-family: var(--pixel-font);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: 1.5px;
@@ -1579,7 +1579,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-stat-label {
-    font-size: 9px;
+    font-size: 12px;
     font-family: var(--pixel-font);
     color: var(--text-muted);
     text-transform: uppercase;
@@ -1677,7 +1677,7 @@ img, .mc-team-avatar img {
 .mc-history-table th {
     text-align: left;
     padding: 12px 16px;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--pixel-font);
     color: var(--text-muted);
@@ -1725,7 +1725,7 @@ img, .mc-team-avatar img {
     gap: 4px;
     padding: 3px 10px;
     border-radius: 2px;
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 800;
     font-family: var(--pixel-font);
     letter-spacing: 0.5px;
@@ -1769,7 +1769,7 @@ img, .mc-team-avatar img {
     gap: 6px;
     padding: 6px 0;
     margin-bottom: 8px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
 }
 
@@ -1840,7 +1840,7 @@ img, .mc-team-avatar img {
     cursor: pointer;
     user-select: none;
     transition: background 0.2s;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--pixel-font);
     color: var(--mc-gold);
@@ -1881,7 +1881,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-admin-group-title {
-    font-size: 9px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--pixel-font);
     color: var(--text-secondary);
@@ -1909,7 +1909,7 @@ img, .mc-team-avatar img {
 .mc-admin-kv code {
     color: var(--text-secondary);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .mc-admin-form-row {
@@ -2037,7 +2037,7 @@ img, .mc-team-avatar img {
     }
 
     .mc-team-name {
-        font-size: 11px;
+        font-size: 12px;
     }
 }
 
@@ -2133,7 +2133,7 @@ img, .mc-team-avatar img {
 
 .mc-tx-bar-title {
     font-family: var(--pixel-font);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--chad-color);
     letter-spacing: 0.5px;
@@ -2152,7 +2152,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-tx-bar-text {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-secondary, #94a3b8);
     white-space: nowrap;
     overflow: hidden;
@@ -2187,7 +2187,7 @@ img, .mc-team-avatar img {
     text-align: center;
     padding: 20px;
     color: var(--text-muted, #64748b);
-    font-size: 11px;
+    font-size: 12px;
     font-family: var(--pixel-font);
     line-height: 1.6;
 }
@@ -2262,7 +2262,7 @@ img, .mc-team-avatar img {
 }
 
 .mc-tx-fail-tag {
-    font-size: 8px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--pixel-font);
     color: var(--error, #ef4444);
@@ -2276,7 +2276,7 @@ img, .mc-team-avatar img {
 
 .mc-tx-meta {
     color: var(--text-muted, #64748b);
-    font-size: 11px;
+    font-size: 12px;
     margin-top: 1px;
     display: flex;
     gap: 6px;
@@ -2285,7 +2285,7 @@ img, .mc-team-avatar img {
 
 .mc-tx-id {
     font-family: var(--font-mono, monospace);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted, #475569);
     cursor: pointer;
     opacity: 0.6;
@@ -2332,14 +2332,14 @@ img, .mc-team-avatar img {
 
 .mc-tx-amount-sub {
     font-family: var(--font-mono, monospace);
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-muted, #64748b);
 }
 
 /* Status badge */
 .mc-tx-badge {
     font-family: var(--pixel-font);
-    font-size: 8px;
+    font-size: 12px;
     font-weight: 600;
     padding: 2px 7px;
     border-radius: 2px;

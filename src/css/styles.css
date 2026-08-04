@@ -147,6 +147,12 @@
             cursor: pointer;
             transition: all 0.2s ease;
             position: relative;
+            /* These are <button> now, for keyboard and screen-reader access;
+               strip the default chrome so they look exactly as before. */
+            background: none;
+            border: none;
+            padding: 0;
+            font: inherit;
         }
 
         .nav-item:hover {
@@ -403,7 +409,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             transition: all 0.2s ease;
             position: relative;
@@ -673,7 +679,7 @@
             border: 1px solid var(--glass-border);
             border-radius: 6px;
             padding: 4px 8px;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-secondary);
             cursor: pointer;
             transition: all 0.2s;
@@ -722,7 +728,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
             color: #fff;
             overflow: hidden;
@@ -825,14 +831,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 8px;
+            font-size: 12px;
             color: #fff;
             overflow: hidden;
         }
         .tx-asset-icon img { width: 100%; height: 100%; }
         .tx-asset-id {
             color: var(--text-muted);
-            font-size: 10px;
+            font-size: 12px;
         }
 
         .tx-amount-col {
@@ -843,7 +849,7 @@
             font-size: 14px;
         }
         .tx-fee {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -864,7 +870,7 @@
             align-items: center;
             gap: 3px 10px;
             padding: 2px 16px 10px 76px;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
         .tx-meta .meta-dot { opacity: 0.4; }
@@ -873,7 +879,7 @@
         }
         .tx-meta .meta-value.mono {
             font-family: var(--font-mono, 'JetBrains Mono', monospace);
-            font-size: 10px;
+            font-size: 12px;
             letter-spacing: -0.3px;
         }
         .tx-meta .copyable {
@@ -914,7 +920,7 @@
             flex-direction: column;
         }
         .tx-detail-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             margin-bottom: 2px;
         }
@@ -1032,7 +1038,7 @@
 
         .asset-id {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             background: var(--glass);
             padding: 4px 8px;
@@ -1055,7 +1061,7 @@
         }
 
         .asset-usd-below {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             opacity: 0.6;
             margin-top: -2px;
@@ -1180,7 +1186,7 @@
 
             .action-btn {
                 padding: 4px 8px;
-                font-size: 10px;
+                font-size: 12px;
             }
         }
 
@@ -1225,7 +1231,7 @@
         .balances-table th {
             text-align: left;
             padding: 12px 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -1322,7 +1328,7 @@
             border: 1px solid var(--glass-border);
             color: var(--text-secondary);
             font-family: inherit;
-            font-size: 11px;
+            font-size: 12px;
             cursor: pointer;
             transition: all 0.2s ease;
             white-space: nowrap;
@@ -1400,7 +1406,7 @@
         .utxo-table th {
             text-align: left;
             padding: 14px 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -1427,7 +1433,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
         }
 
@@ -1468,7 +1474,7 @@
 
         /* UTXO Health Badge */
         .utxo-health-badge {
-            font-size: 11px;
+            font-size: 12px;
             padding: 2px 8px;
             border-radius: 4px;
             font-weight: 500;
@@ -1488,7 +1494,7 @@
 
         /* UTXO Split Action Button */
         .utxo-split-action {
-            font-size: 11px;
+            font-size: 12px;
             padding: 4px 12px;
             border-radius: 6px;
             background: var(--beam-cyan-dim);
@@ -1505,7 +1511,7 @@
         }
 
         .utxo-combine-action {
-            font-size: 11px;
+            font-size: 12px;
             padding: 4px 12px;
             border-radius: 6px;
             background: var(--beam-pink-dim);
@@ -1580,7 +1586,7 @@
             transform: translateY(-1px);
         }
         .utxo-rec-meta {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -1660,7 +1666,7 @@
 
         /* Dashboard UTXO Hint Badge */
         .utxo-split-hint {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--warning);
             cursor: pointer;
             padding: 2px 0;
@@ -1794,7 +1800,7 @@
         }
 
         .confirm-asset-label {
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--text-muted);
@@ -1953,7 +1959,7 @@
         }
 
         .receive-tab-desc {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -1983,7 +1989,7 @@
         }
 
         .address-hint {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 400;
             text-transform: none;
             letter-spacing: 0;
@@ -2111,7 +2117,7 @@
             padding: 2px 8px;
             background: var(--beam-cyan-dim);
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--beam-cyan);
             cursor: help;
             position: relative;
@@ -2194,7 +2200,7 @@
             padding: 4px 10px;
             background: rgba(16, 185, 129, 0.15);
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--success);
             text-transform: uppercase;
@@ -2486,7 +2492,7 @@
 
         .owner-key-value {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
+            font-size: 12px;
             word-break: break-all;
             padding: 12px;
             background: var(--void-lighter);
@@ -2775,7 +2781,7 @@
                             box-shadow: 0 0 8px #25c2a0;
                         }
                         .welcome-version {
-                            font-size: 11px;
+                            font-size: 12px;
                             color: #64748b;
                             font-family: 'JetBrains Mono', monospace;
                         }
@@ -2826,7 +2832,7 @@
                             -webkit-text-fill-color: transparent;
                         }
                         .welcome-subtitle {
-                            font-size: 11px;
+                            font-size: 12px;
                             color: #da70d6;
                             letter-spacing: 3px;
                             text-transform: uppercase;
@@ -3027,11 +3033,11 @@
                             border: 1px solid rgba(100, 116, 139, 0.15);
                             border-radius: 6px;
                             font-family: 'JetBrains Mono', monospace;
-                            font-size: 11px;
+                            font-size: 12px;
                         }
                         .seed-number {
                             color: #64748b;
-                            font-size: 10px;
+                            font-size: 12px;
                             min-width: 16px;
                         }
                         .welcome-warning {
@@ -3040,7 +3046,7 @@
                             border-radius: 8px;
                             padding: 10px 12px;
                             color: #fbbf24;
-                            font-size: 11px;
+                            font-size: 12px;
                             margin: 12px 0;
                             line-height: 1.4;
                         }
@@ -3150,7 +3156,7 @@
                     }
                     .debug-btn {
                         padding: 4px 12px;
-                        font-size: 11px;
+                        font-size: 12px;
                         background: var(--glass);
                         border: 1px solid var(--glass-border);
                         border-radius: 4px;
@@ -3173,7 +3179,7 @@
                     .debug-stats {
                         display: flex;
                         gap: 16px;
-                        font-size: 11px;
+                        font-size: 12px;
                         color: var(--text-muted);
                     }
                     .debug-stat {
@@ -3254,7 +3260,7 @@
         }
 
         .explorer-section-title {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -3278,7 +3284,7 @@
             text-align: center;
         }
         .explorer-stat-label {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             margin-bottom: 4px;
         }
@@ -3360,7 +3366,7 @@
             color: var(--text-secondary);
         }
         .explorer-block-time {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -3590,7 +3596,7 @@
             gap: 2px;
         }
         .stat-pill-label {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -3620,7 +3626,7 @@
         .explorer-table th {
             padding: 14px 16px;
             text-align: left;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -3649,7 +3655,7 @@
         }
         .explorer-table .mono-text {
             font-family: var(--font-mono);
-            font-size: 11px;
+            font-size: 12px;
         }
         .explorer-table .negative {
             color: var(--error);
@@ -3805,7 +3811,7 @@
             margin-bottom: 8px;
         }
         .explorer-blocks-header span {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -3881,7 +3887,7 @@
             text-align: center;
         }
         .explorer-asset-card .asset-stat-label {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
             margin-bottom: 4px;
@@ -3921,7 +3927,7 @@
             background: var(--beam-cyan);
             color: var(--void);
             border-radius: 12px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
         }
@@ -3941,7 +3947,7 @@
             flex-direction: column;
         }
         .explorer-contract-card .contract-stat-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
         .explorer-contract-card .contract-stat-value {
@@ -4084,7 +4090,7 @@
             grid-column: 1 / -1;
         }
         .detail-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -4243,7 +4249,7 @@
             grid-column: 1 / -1;
         }
         .pool-card .pool-stat-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
         }
@@ -4268,7 +4274,7 @@
             border-bottom: 1px solid var(--glass-border);
         }
         .data-table th {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--text-muted);
             text-transform: uppercase;
@@ -4345,7 +4351,7 @@
         .copy-btn {
             display: inline-block;
             padding: 4px 8px;
-            font-size: 11px;
+            font-size: 12px;
             background: var(--glass);
             border: 1px solid var(--glass-border);
             border-radius: 4px;
@@ -4371,7 +4377,7 @@
             gap: 8px;
         }
         .asset-aid {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -4465,7 +4471,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 9px;
+            font-size: 12px;
             font-weight: 600;
             color: white;
             text-transform: uppercase;
@@ -4476,7 +4482,7 @@
             color: var(--text-primary);
         }
         .asset-badge-aid {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             margin-left: 2px;
         }
@@ -4510,7 +4516,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
             color: white;
             text-transform: uppercase;
@@ -4527,7 +4533,7 @@
             line-height: 1.2;
         }
         .asset-badge-full .asset-badge-aid {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             line-height: 1.2;
             margin-left: 0;
@@ -4559,11 +4565,11 @@
             color: var(--text-primary);
         }
         .reserve-symbol {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
         .reserve-usd {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--beam-cyan);
             font-weight: 500;
         }
@@ -4577,14 +4583,14 @@
             color: var(--text-secondary);
         }
         .tvl-value {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--beam-cyan);
             font-weight: 500;
         }
         .volatility-badge {
             padding: 4px 10px;
             border-radius: 12px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
         }
@@ -4625,7 +4631,7 @@
         .trade-type {
             padding: 3px 8px;
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 500;
             background: var(--beam-cyan-dim);
             color: var(--beam-cyan);
@@ -4697,7 +4703,7 @@
         .status-badge {
             padding: 4px 8px;
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 500;
         }
         .status-badge.active {
@@ -6134,4 +6140,56 @@
 }
 .node-sync-banner.synced .node-sync-bar-fill {
     background: var(--success);
+}
+/* ---- Portfolio headline -------------------------------------------------
+   The dashboard went quick-actions -> asset carousel -> balances table with no
+   aggregate figure anywhere. */
+.portfolio-headline {
+    padding: var(--space-5, 20px) 0 var(--space-4, 16px);
+}
+.portfolio-label {
+    font-size: var(--text-xs, 12px);
+    font-weight: var(--weight-medium, 500);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2, 8px);
+}
+.portfolio-value {
+    font-size: var(--text-display, 32px);
+    font-weight: var(--weight-semibold, 600);
+    line-height: var(--leading-tight, 1.25);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.portfolio-sub {
+    margin-top: var(--space-1, 4px);
+    font-size: var(--text-sm, 13px);
+    color: var(--text-secondary);
+}
+
+/* ---- Accessibility floor ------------------------------------------------ */
+:focus-visible {
+    outline: 2px solid var(--beam-cyan);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+.nav-item:focus-visible {
+    outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap; border: 0;
 }

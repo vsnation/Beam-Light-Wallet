@@ -1308,7 +1308,48 @@ if (window.App) {
 }
 
 // Render asset cards
+/**
+ * Sum every asset into one figure. The per-asset USD values already existed via
+ * getAssetUsdValue; the dashboard just never added them up.
+ */
+function renderPortfolioTotal() {
+    const valueEl = document.getElementById('portfolio-total');
+    const subEl = document.getElementById('portfolio-sub');
+    if (!valueEl) return;
+
+    const assets = (walletData && walletData.assets) || [];
+    let usd = 0;
+    let beamGroth = 0;
+    let priced = 0;
+
+    assets.forEach(a => {
+        const total = (a.balance || 0) + (a.locked || 0);
+        if (total <= 0) return;
+        if (a.id === 0) beamGroth += total;
+        const v = getAssetUsdValue(a.id, total);
+        if (v > 0) { usd += v; priced++; }
+    });
+
+    if (usd > 0) {
+        valueEl.textContent = '$' + usd.toLocaleString(undefined, {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+        const held = assets.filter(a => ((a.balance || 0) + (a.locked || 0)) > 0).length;
+        const unpriced = held - priced;
+        subEl.textContent = `${formatAmount(beamGroth)} BEAM · ${held} asset${held === 1 ? '' : 's'}`
+            + (unpriced > 0 ? ` · ${unpriced} without a price` : '');
+    } else if (beamGroth > 0) {
+        // No price feed — still show something true rather than nothing.
+        valueEl.textContent = formatAmount(beamGroth) + ' BEAM';
+        subEl.textContent = 'USD value unavailable';
+    } else {
+        valueEl.textContent = '0';
+        subEl.textContent = 'No funds yet';
+    }
+}
+
 function renderAssetCards() {
+    renderPortfolioTotal();
     const container = document.getElementById('asset-cards');
 
     // Filter to show only assets with balance, or at least BEAM
@@ -2503,13 +2544,70 @@ async function executeCombine() {
 }
 
 // Modal functions
+// Which modal is on top, so Escape and backdrop clicks know what to close.
+const _modalStack = [];
+let _focusBeforeModal = null;
+
 function openModal(id) {
-    document.getElementById(id).classList.add('active');
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!_modalStack.length) _focusBeforeModal = document.activeElement;
+    el.classList.add('active');
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    if (!_modalStack.includes(id)) _modalStack.push(id);
+
+    // Move focus into the dialog, or keyboard users are left stranded outside it.
+    const focusable = el.querySelector(
+        'input:not([type=hidden]), select, textarea, button, [href], [tabindex]:not([tabindex="-1"])');
+    if (focusable) setTimeout(() => focusable.focus(), 30);
 }
 
 function closeModal(id) {
-    document.getElementById(id).classList.remove('active');
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('active');
+    el.removeAttribute('aria-modal');
+    const i = _modalStack.indexOf(id);
+    if (i >= 0) _modalStack.splice(i, 1);
+    if (!_modalStack.length && _focusBeforeModal && _focusBeforeModal.focus) {
+        try { _focusBeforeModal.focus(); } catch (e) {}
+        _focusBeforeModal = null;
+    }
 }
+
+function closeTopModal() {
+    if (_modalStack.length) closeModal(_modalStack[_modalStack.length - 1]);
+}
+
+// Escape closes the top dialog, and Cmd/Ctrl+S/R/L do the three things people
+// actually do. Before this, the only global key binding in the whole wallet was
+// Ctrl+` for the debug console.
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _modalStack.length) {
+        e.preventDefault();
+        closeTopModal();
+        return;
+    }
+
+    const t = e.target;
+    const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
+                         t.tagName === 'SELECT' || t.isContentEditable);
+    if (typing || _modalStack.length) return;
+
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); openSendModal(); }
+    else if (k === 'r') { e.preventDefault(); openReceiveModal(); }
+    else if (k === 'l') { e.preventDefault(); if (typeof lockWallet === 'function') lockWallet(); }
+});
+
+// Clicking the backdrop closes the dialog, as every desktop app does.
+document.addEventListener('click', (e) => {
+    if (!_modalStack.length) return;
+    const top = document.getElementById(_modalStack[_modalStack.length - 1]);
+    if (top && e.target === top) closeTopModal();
+});
 
 function openReceiveModal() {
     openModal('receive-modal');
@@ -4495,16 +4593,66 @@ function updateWelcomeWalletSelect() {
     const select = document.getElementById('welcome-wallet-select');
     if (!select) return;
 
+    // With no wallets, the login form is the wrong screen entirely: an account
+    // picker reading "No wallets found" above a full-width UNLOCK WALLET button
+    // the user cannot possibly use, with Create and Restore demoted to 12px
+    // ghost links. Branch on wallet count instead.
+    applyFirstRunLayout(welcomeWallets.length === 0);
+
     if (welcomeWallets.length === 0) {
         select.innerHTML = '<option value="">No wallets found</option>';
         return;
     }
 
     select.innerHTML = welcomeWallets.map(w =>
-        `<option value="${w}">${w}</option>`
+        `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`
     ).join('');
 
     welcomeSelectedWallet = welcomeWallets[0];
+}
+
+/**
+ * First run has one job: get the user to a wallet. Hide the login controls,
+ * promote "Create a new wallet", and offer restore as the secondary path.
+ */
+function applyFirstRunLayout(isFirstRun) {
+    const view = document.getElementById('welcome-main-view');
+    if (!view) return;
+
+    const existing = document.getElementById('welcome-firstrun');
+    const fields = view.querySelectorAll('.welcome-field');
+    const unlockBtn = document.getElementById('welcome-unlock-btn');
+    const links = view.querySelector('.welcome-links');
+
+    if (!isFirstRun) {
+        if (existing) existing.remove();
+        fields.forEach(f => { f.style.display = ''; });
+        if (unlockBtn) unlockBtn.style.display = '';
+        if (links) links.style.display = '';
+        return;
+    }
+
+    fields.forEach(f => { f.style.display = 'none'; });
+    if (unlockBtn) unlockBtn.style.display = 'none';
+    if (links) links.style.display = 'none';
+    if (existing) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'welcome-firstrun';
+    panel.innerHTML = `
+        <p class="welcome-firstrun-lead">Welcome. You don't have a wallet on this computer yet.</p>
+        <button class="welcome-btn-primary" id="welcome-firstrun-create" onclick="showWelcomeView('create')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Create a new wallet
+        </button>
+        <button class="welcome-btn-secondary" id="welcome-firstrun-restore" onclick="showWelcomeView('restore')">
+            I already have a seed phrase
+        </button>
+        <p class="welcome-firstrun-note">Your wallet is created on this machine. Nothing is uploaded anywhere.</p>
+    `;
+    view.appendChild(panel);
 }
 
 function onWelcomeWalletSelect() {
