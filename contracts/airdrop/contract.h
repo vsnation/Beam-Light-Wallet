@@ -69,10 +69,17 @@ namespace Airdrop
     // itself and no coin selection happens at all.
     //
     // Anyone may top this pool up; it is not owner-only. Griefing is bounded:
-    // a voucher can only be redeemed once, and the attacker pays a kernel fee
+    // a voucher can only be redeemed once, and the attacker pays the call cost
     // per claim plus a fee to create the batch in the first place, so draining
     // the pool costs more than it yields as long as m_PerClaim stays close to
-    // one fee.
+    // one call cost.
+    //
+    // MEASURED: a BVM contract call costs 0.011 BEAM (1'100'000 groth), not the
+    // 0.001 BEAM of a plain transfer. Verified against BEAM's own live Faucet
+    // shader from a wallet holding nothing: unlocking 0.01 still left it
+    // "Missing 0.001", unlocking 0.03 completed and left 0.019. Set m_PerClaim
+    // to 1'200'000 groth. Below 1'100'000 every gasless claim fails; well above
+    // it the pool becomes farmable. See docs/GASLESS_CLAIMS.md.
     struct GasPool {
         Amount m_Balance;          // BEAM currently available to sponsor claims
         Amount m_PerClaim;         // released per gasless claim (0 disables)

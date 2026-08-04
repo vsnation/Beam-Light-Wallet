@@ -36,6 +36,30 @@ party in the flow and no extra signature: the claimer still signs their own
 transaction with `Env::AddSig(redeemer)`. The fee simply comes out of the
 contract rather than the claimer's pocket.
 
+### Measured, not assumed
+
+BEAM ships a `Faucet` shader (`bvm/Shaders/faucet`) that is this same pattern,
+and two instances are live on mainnet. Running it against a wallet created
+seconds earlier, holding nothing:
+
+| From a 0-balance wallet | Result |
+|---|---|
+| ordinary `tx_send` of 0.01 BEAM | fails, `Missing 0.011 BEAM` |
+| faucet withdraw of **0.01** BEAM | fails, `Missing 0.001 BEAM` |
+| faucet withdraw of **0.03** BEAM | **completed**, wallet ends with 0.019 BEAM |
+
+The middle row is the useful one. The shortfall dropped from 0.011 to 0.001
+purely because the contract unlocked BEAM — the mechanism works — but it was
+still short. Solve `0.01 - fee = -0.001` and `0.03 - fee = 0.019` and both give
+the same answer:
+
+> **A contract call costs 0.011 BEAM, not one 0.001 BEAM kernel fee.**
+
+That is an order of magnitude more than a plain transfer, and it is the number
+the subsidy has to clear. A per-claim value of 0.001–0.002 BEAM — which is what
+"cover the kernel fee" sounds like it should mean — produces a claim that still
+fails, just with a smaller shortfall.
+
 ---
 
 ## Contract changes
@@ -75,13 +99,24 @@ them repeatedly to drain the pool. It does not pay:
 
 - A voucher can only ever be redeemed once, so the total exposure is bounded by
   the number of vouchers in existence, not by attacker effort.
-- Creating the batch costs a kernel fee **and** the contract's 1% creation fee.
-- Each claim costs the attacker a kernel fee of roughly `m_PerClaim`.
+- Creating the batch costs 0.011 BEAM **and** the contract's 1% creation fee.
+- Each claim burns 0.011 BEAM of the attacker's own fee to release `m_PerClaim`.
 
-So the attacker spends about one fee to extract about one fee, having already
-paid to create the batch. Keep `m_PerClaim` close to a single kernel fee
-(~0.001–0.002 BEAM) and the arithmetic never turns positive. Raising it well
-above the real fee is what would make this exploitable — do not.
+So set `m_PerClaim` to **0.012 BEAM** — just over the measured 0.011 call cost.
+The claim then succeeds with ~0.001 BEAM left over, and an attacker spends
+0.011 to extract 0.012, netting 0.001 per voucher after having paid 0.011 plus
+1% to mint each one. The arithmetic stays negative for them and positive for a
+real claimant.
+
+Raising `m_PerClaim` well above 0.011 is what makes this exploitable, and
+setting it below 0.011 makes every gasless claim fail. The window is narrow and
+the value is empirical — re-measure it if BEAM changes contract call pricing.
+
+BEAM's own faucet reaches the same conclusion by a different route: it caps
+withdrawals per account per period (`m_MaxWithdraw`, `m_BacklogPeriod`) rather
+than relying on fee economics. The live instances use 0.061 BEAM/1440 blocks
+and 0.01 BEAM/5 blocks. Note that the second one **cannot** bootstrap an empty
+wallet at all — 0.01 is below the 0.011 call cost.
 
 ---
 

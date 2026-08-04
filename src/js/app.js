@@ -797,6 +797,23 @@ async function apiCall(method, params = {}) {
 }
 
 // Format amount from groth to display
+// A failed panel that only says "Failed to load" is a dead end: the user's
+// only escape is to navigate away and back, and most never work that out.
+// Every load failure gets a retry that re-runs the same loader.
+//
+// retry is a bare global function name plus optional literal args, because
+// these render into innerHTML where a closure cannot survive.
+function errorState(message, retry, opts) {
+    const o = opts || {};
+    const detail = o.detail ? `<div class="error-state-detail">${escapeHtml(String(o.detail))}</div>` : '';
+    const button = retry
+        ? `<button class="error-state-retry" onclick="${escapeHtml(retry)}">Try again</button>`
+        : '';
+    const body = `<div class="error-state-box"><div class="error-state-msg">${escapeHtml(message)}</div>${detail}${button}</div>`;
+    // Table bodies cannot take a div child, so wrap when asked.
+    return o.colspan ? `<tr><td colspan="${o.colspan}">${body}</td></tr>` : body;
+}
+
 function formatAmount(groth, decimals = 8) {
     if (!groth && groth !== 0) return '0';
     const value = groth / GROTH;
@@ -1780,6 +1797,11 @@ function updateQuickTradeUI() {
     document.getElementById('qt-swap-btn').disabled = true;
     document.getElementById('qt-swap-btn').textContent = 'Enter Amount';
 }
+
+// The two asset chips in the quick-trade modal look clickable, so they must
+// be. Both reuse the DEX token selector rather than growing a second picker.
+function openQuickTradeFromSelector() { openTokenSelector('qt-from'); }
+function openQuickTradeToSelector()   { openTokenSelector('qt-to'); }
 
 function quickTradeSwapDirection() {
     [qtFromAsset, qtToAsset] = [qtToAsset, qtFromAsset];
@@ -3180,11 +3202,29 @@ function errorToMessage(e) {
         };
     }
 
-    if (code === -32601 || has('method not found', 'unknown method')) {
+    if (has('invalid address', 'address is invalid', 'unrecognized address')) {
+        return {
+            title: 'That address is not valid',
+            message: 'BEAM did not recognise the recipient address.',
+            hint: 'Paste the full address again — a truncated or partly copied address is the usual cause.'
+        };
+    }
+
+    // "Procedure not found." is what wallet-api actually returns; the spec
+    // wording never appears.
+    if (code === -32601 || has('procedure not found', 'method not found', 'unknown method')) {
         return {
             title: 'This action is not supported here',
             message: 'The wallet service does not offer that call.',
             hint: 'Your BEAM binaries may be out of date. Update them and restart the app.'
+        };
+    }
+
+    if (code === -32602 || has('invalid parameters', 'invalid params', 'missing parameter')) {
+        return {
+            title: 'The wallet service rejected the request',
+            message: 'A value the wallet service needed was missing or malformed, so the request never ran.',
+            hint: 'That is a fault in the wallet rather than something you did. The terminal window running serve.py logs the failing call.'
         };
     }
 
@@ -3406,31 +3446,27 @@ async function loadSettings() {
             // Update node info from server status
             if (serverStatus) {
                 loadForkInfo();
+                // Before applyNodeModeUI: whether the node is running decides
+                // whether the sync panel stays visible in public mode.
+                updateNodeButtons(serverStatus.node_running);
                 currentNodeType = serverStatus.node_mode || 'public';
                 selectNodeType(currentNodeType);
 
                 // Update the actual node address display
                 if (currentNodeType === 'local') {
                     nodeEl.textContent = '127.0.0.1:10005';
-                    document.getElementById('settings-node-type').textContent = 'Local';
                 } else {
                     nodeEl.textContent = serverStatus.node_address || currentNode || 'eu-node01.mainnet.beam.mw:8100';
-                    document.getElementById('settings-node-type').textContent = 'Public';
                 }
 
-                // A running local node is worth watching even from the public
-                // mode, since that is exactly the state where the user is
-                // waiting on it. A stopped one gets an honest empty panel
-                // rather than a 0% bar left over from last time.
-                const localSection = document.getElementById('local-node-section');
+                // A stopped node gets an honest empty panel rather than the 0%
+                // bar left over from the last time one ran.
                 if (serverStatus.node_running) {
-                    if (localSection) localSection.style.display = 'block';
                     startNodeSyncMonitoring();
                 } else {
                     stopNodeSyncMonitoring();
                     renderNodeSync(null);
                 }
-                updateNodeButtons(serverStatus.node_running);
             }
 
             // Check DEX support
@@ -3545,7 +3581,10 @@ function closeLocalNodeCost(accepted) {
 }
 
 /** Start/Stop should reflect what the node is actually doing. */
+let localNodeRunning = false;
+
 function updateNodeButtons(running) {
+    localNodeRunning = !!running;
     const startBtn = document.getElementById('node-start-btn');
     const stopBtn = document.getElementById('node-stop-btn');
     if (startBtn) {
@@ -3555,6 +3594,41 @@ function updateNodeButtons(running) {
     if (stopBtn) {
         stopBtn.disabled = !running;
         stopBtn.title = running ? '' : 'The local node is not running';
+    }
+}
+
+/**
+ * Paint the mode toggle, the capability list and the local-node panel. Kept
+ * separate from selectNodeType so a handler that already knows which node it
+ * connected to can refresh the UI without having its address overwritten by
+ * the canonical one for that mode.
+ */
+function applyNodeModeUI(type) {
+    const publicBtn = document.getElementById('node-public-btn');
+    const localBtn = document.getElementById('node-local-btn');
+    if (publicBtn) {
+        publicBtn.classList.toggle('active', type === 'public');
+        publicBtn.disabled = (type === 'public');
+    }
+    if (localBtn) {
+        localBtn.classList.toggle('active', type === 'local');
+        localBtn.disabled = (type === 'local');
+    }
+
+    const typeEl = document.getElementById('settings-node-type');
+    if (typeEl) typeEl.textContent = type === 'public' ? 'Public' : 'Local';
+
+    // Show the capabilities and the cost of whichever mode is selected.
+    const publicFacts = document.getElementById('node-facts-public');
+    const localFacts = document.getElementById('node-facts-local');
+    if (publicFacts) publicFacts.hidden = (type !== 'public');
+    if (localFacts) localFacts.hidden = (type !== 'local');
+
+    // A running local node stays visible even from public mode — that is
+    // precisely when the user is waiting on its progress.
+    const localSection = document.getElementById('local-node-section');
+    if (localSection) {
+        localSection.style.display = (type === 'local' || localNodeRunning) ? 'block' : 'none';
     }
 }
 
@@ -3569,30 +3643,10 @@ async function selectNodeType(type, triggerChange = false) {
     }
 
     currentNodeType = type;
+    applyNodeModeUI(type);
 
-    publicBtn.classList.toggle('active', type === 'public');
-    localBtn.classList.toggle('active', type === 'local');
-    document.getElementById('settings-node-type').textContent = type === 'public' ? 'Public' : 'Local';
-
-    // Update button disabled states - disable the active one
-    publicBtn.disabled = (type === 'public');
-    localBtn.disabled = (type === 'local');
-
-    // Show the capabilities and the cost of whichever mode is selected.
-    const publicFacts = document.getElementById('node-facts-public');
-    const localFacts = document.getElementById('node-facts-local');
-    if (publicFacts) publicFacts.hidden = (type !== 'public');
-    if (localFacts) localFacts.hidden = (type !== 'local');
-
-    const localSection = document.getElementById('local-node-section');
     const selector = document.getElementById('node-selector');
     const newValue = type === 'local' ? '127.0.0.1:10005' : 'eu-node01.mainnet.beam.mw:8100';
-
-    if (type === 'local') {
-        localSection.style.display = 'block';
-    } else {
-        localSection.style.display = 'none';
-    }
 
     // Update selector value and currentNode to match current state
     selector.value = newValue;
@@ -3646,7 +3700,7 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
         if (result.success) {
             currentNode = nodeAddr;
             currentNodeType = mode;
-            selectNodeType(mode);
+            applyNodeModeUI(mode);
             document.getElementById('settings-node').textContent = nodeAddr;
             showToastAdvanced('Node Switched', `Now connected to ${nodeAddr}`, 'success');
             // Hide sync banner when on local node, show when switching to public
@@ -3711,7 +3765,7 @@ async function changeNode(costConfirmed = false) {
         if (result.success) {
             currentNode = newNode;
             currentNodeType = isLocal ? 'local' : 'public';
-            selectNodeType(currentNodeType);
+            applyNodeModeUI(currentNodeType);
             document.getElementById('settings-node').textContent = newNode;
 
             showToastAdvanced('Node Switched', `Now connected to ${newNode}`, 'success');
@@ -3808,7 +3862,8 @@ function showRescanWarningModal() {
 
                 <div class="info-section">
                     <h4>Option 1: Switch to Local Node (Recommended)</h4>
-                    <p>Start a local node which will automatically scan for your transactions. This provides full balance recovery.</p>
+                    <p>Start a local node which will automatically scan for your transactions. This provides full balance recovery,
+                       and costs about 9&nbsp;GB of disk and several hours of syncing before the scan can finish.</p>
                     <button class="quick-btn quick-btn-primary" onclick="closeRescanWarningModal(); switchToLocalAndRescan();" style="width: 100%; margin-top: 12px;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                             <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -5298,7 +5353,9 @@ async function seamlessSwitchToLocalNode() {
 
             // One place applies the mode to the UI, so the capability list and
             // the toggle cannot disagree about which node is in use.
-            selectNodeType('local');
+            applyNodeModeUI('local');
+            const nodeSelector = document.getElementById('node-selector');
+            if (nodeSelector) nodeSelector.value = '127.0.0.1:10005';
             const nodeAddrEl = document.getElementById('settings-node');
             if (nodeAddrEl) nodeAddrEl.textContent = '127.0.0.1:10005';
 
@@ -6598,7 +6655,7 @@ async function loadTransactions() {
         renderTransactions(txs);
     } catch (e) {
         console.error('Load transactions error:', e);
-        container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Failed to load transactions</div>';
+        container.innerHTML = errorState('Could not load transactions', 'loadTransactions()', { detail: e.message });
     }
 }
 
@@ -7209,7 +7266,7 @@ async function loadAddresses() {
         renderAddresses(addrs);
     } catch (e) {
         console.error('Load addresses error:', e);
-        container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Failed to load addresses</div>';
+        container.innerHTML = errorState('Could not load addresses', 'loadAddresses()', { detail: e.message });
     }
 }
 
@@ -7426,7 +7483,7 @@ async function loadDexActivity() {
         if (status) status.textContent = `${dexActivity.length} recent`;
     } catch (error) {
         console.error('Failed to load activity:', error);
-        feed.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">Failed to load activity</div>`;
+        feed.innerHTML = errorState('Could not load activity', 'loadActivityFeed()', { detail: e.message });
     }
 }
 
@@ -9258,7 +9315,8 @@ function initializeDexDefaults() {
 function renderTokenList() {
     const container = document.getElementById('token-select-list');
     const search = document.getElementById('token-search-input')?.value.toLowerCase() || '';
-    const isFromMode = tokenSelectMode === 'from';
+    // "From" sides only list what the user can actually spend.
+    const isFromMode = tokenSelectMode === 'from' || tokenSelectMode === 'qt-from';
 
     // Build comprehensive token list from all sources
     const tokenSet = new Map();
@@ -9375,6 +9433,18 @@ function selectToken(aid) {
         dexToAsset = info;
         updateSwapUI();
         debounceGetQuote();
+    } else if (tokenSelectMode === 'qt-from' || tokenSelectMode === 'qt-to') {
+        // Quick-trade picker. Swapping an asset onto the side that already
+        // holds it would leave both sides identical and quote against a pool
+        // that cannot exist, so flip instead of producing a dead pair.
+        if (tokenSelectMode === 'qt-from') {
+            if (qtToAsset && info.aid === qtToAsset.aid) qtToAsset = qtFromAsset;
+            qtFromAsset = info;
+        } else {
+            if (qtFromAsset && info.aid === qtFromAsset.aid) qtFromAsset = qtToAsset;
+            qtToAsset = info;
+        }
+        updateQuickTradeUI();
     } else if (tokenSelectMode === 'liq-a' || tokenSelectMode === 'liq-b') {
         setLiqToken(tokenSelectMode, info);
     }
@@ -10202,7 +10272,7 @@ function renderNodeSync(nodeStatus) {
         setNodeSyncField('sync-remaining', '');
         fill.style.width = '0%';
         fill.classList.remove('stalled');
-        bar.hidden = false;
+        bar.hidden = true;
         stall.hidden = true;
         return false;
     }
@@ -10227,6 +10297,8 @@ function renderNodeSync(nodeStatus) {
     const consensus = lastServerStatus && lastServerStatus.consensus;
     const forkHeight = forkInfo ? forkInfo.height : 0;
     const belowFork = forkHeight > 0 && height > 0 && height < forkHeight;
+    const stuckMs = now - nodeSyncLast.at;
+    const stalled = !atTip && stuckMs >= NODE_STALL_MS;
 
     // A build that cannot cross the fork will never fill this bar, so it does
     // not get one.
@@ -10239,6 +10311,7 @@ function renderNodeSync(nodeStatus) {
         setNodeSyncField('sync-blocks', height ? `${height.toLocaleString()} blocks` : '—');
         setNodeSyncField('sync-remaining', '');
         stall.hidden = false;
+        stall.classList.remove('neutral');
         stall.innerHTML = `<strong>This node cannot finish syncing.</strong>
             BEAM ${escapeHtml(consensus.beam_version || 'unknown')} stops at block
             ${forkAt.toLocaleString()}${forkInfo ? ' (' + escapeHtml(forkInfo.name) + ')' : ''}, and
@@ -10247,8 +10320,10 @@ function renderNodeSync(nodeStatus) {
         return false;
     }
 
-    bar.hidden = false;
     const pct = haveTip ? Math.min(100, Math.max(0, (height / tip) * 100)) : null;
+    // No tip means no denominator, and a 0% bar next to a height of 3.5M is
+    // worse than no bar at all.
+    bar.hidden = (pct === null);
     fill.style.width = (pct === null ? 0 : pct) + '%';
 
     if (pct === null) {
@@ -10257,11 +10332,15 @@ function renderNodeSync(nodeStatus) {
         setNodeSyncField('sync-blocks', height ? `${height.toLocaleString()} blocks` : 'Starting up');
         setNodeSyncField('sync-remaining', 'Network height unavailable');
     } else {
-        // One decimal: the last percent of a ~9 GB sync is hours long, and a
-        // rounded "99%" that sits there for an evening reads as broken.
-        setNodeSyncField('sync-percentage', pct.toFixed(1) + '%', atTip ? 'var(--success)' : 'var(--beam-cyan)');
-        setNodeSyncField('sync-status-text', atTip ? 'At the network tip' : 'Syncing',
-                         atTip ? 'var(--success)' : 'var(--text-secondary)');
+        // One decimal, rounded down: the last percent of a ~9 GB sync is hours
+        // long, and a "100%" that still has 400 blocks to go is the same lie
+        // this panel is here to stop telling.
+        const shown = atTip ? 100 : Math.floor(pct * 10) / 10;
+        const tone = atTip ? 'var(--success)' : (stalled ? 'var(--warning)' : 'var(--beam-cyan)');
+        setNodeSyncField('sync-percentage', shown.toFixed(1) + '%', tone);
+        setNodeSyncField('sync-status-text',
+                         atTip ? 'At the network tip' : (stalled ? 'Not advancing' : 'Syncing'),
+                         atTip ? 'var(--success)' : (stalled ? 'var(--warning)' : 'var(--text-secondary)'));
         setNodeSyncField('sync-blocks', `${height.toLocaleString()} / ${tip.toLocaleString()} blocks`);
 
         let remaining = atTip ? '' : `${behind.toLocaleString()} blocks to go`;
@@ -10274,11 +10353,12 @@ function renderNodeSync(nodeStatus) {
         setNodeSyncField('sync-remaining', remaining);
     }
 
-    const stuckMs = now - nodeSyncLast.at;
-    const stalled = !atTip && stuckMs >= NODE_STALL_MS;
     fill.classList.toggle('stalled', stalled);
 
     let stallHtml = '';
+    // Amber is for "something is wrong"; a node that is merely still short of
+    // the fork is on schedule and gets the quiet treatment.
+    let neutral = false;
     if (stalled) {
         stallHtml = `<strong>No progress for ${Math.round(stuckMs / 60000)} minutes.</strong>
             The node has been at block ${height.toLocaleString()} since then.`;
@@ -10288,11 +10368,13 @@ function renderNodeSync(nodeStatus) {
         }
         stallHtml += ' Check logs/beam-node.log, or switch back to the public node.';
     } else if (belowFork) {
+        neutral = true;
         stallHtml = `<strong>Below the ${escapeHtml(forkInfo.name)} fork block (${forkHeight.toLocaleString()}).</strong>
             The wallet keeps using the public node until the local node passes it. Builds older than
             ${escapeHtml(forkInfo.minVersion)} stop one block short — this app ships
             ${escapeHtml((lastServerStatus && lastServerStatus.beam_version) || 'the pinned build')}.`;
     }
+    stall.classList.toggle('neutral', neutral);
     stall.innerHTML = stallHtml;
     stall.hidden = !stallHtml;
 
@@ -12153,7 +12235,7 @@ async function loadExplorerBlocks(startHeight = null) {
         }
     } catch (e) {
         console.error('Explorer blocks error:', e);
-        container.innerHTML = `<tr><td colspan="${selectedCols.length}" class="loading-state">Failed to load blocks</td></tr>`;
+        container.innerHTML = errorState('Could not load blocks', 'loadBlocks()', { detail: e.message, colspan: selectedCols.length });
     }
 }
 
@@ -12335,7 +12417,7 @@ async function showBlockDetail(height) {
         `;
     } catch (e) {
         console.error('Block detail error:', e);
-        content.innerHTML = `<div class="error-state">Failed to load block: ${e.message}</div>`;
+        content.innerHTML = errorState('Could not load this block', null, { detail: e.message });
     }
 }
 
@@ -12614,7 +12696,7 @@ async function showAssetDetail(assetId) {
         `;
     } catch (e) {
         console.error('Asset detail error:', e);
-        content.innerHTML = `<div class="error-state">Failed to load asset: ${e.message}</div>`;
+        content.innerHTML = errorState('Could not load this asset', null, { detail: e.message });
     }
 }
 
@@ -12825,7 +12907,7 @@ async function showContractDetail(cid) {
         `;
     } catch (e) {
         console.error('Contract detail error:', e);
-        content.innerHTML = `<div class="error-state">Failed to load contract: ${e.message}</div>`;
+        content.innerHTML = errorState('Could not load this contract', null, { detail: e.message });
     }
 }
 
@@ -12879,7 +12961,7 @@ async function loadExplorerAssets(force = false) {
         }
     } catch (e) {
         console.error('Explorer assets error:', e);
-        container.innerHTML = '<div class="loading-state">Failed to load assets</div>';
+        container.innerHTML = errorState('Could not load assets', 'loadExplorerAssets()', { detail: e.message });
     }
 }
 
@@ -13068,7 +13150,7 @@ async function loadExplorerContracts(force = false) {
         }
     } catch (e) {
         console.error('Explorer contracts error:', e);
-        container.innerHTML = '<tr><td colspan="5" class="loading-state">Failed to load contracts</td></tr>';
+        container.innerHTML = errorState('Could not load contracts', 'loadExplorerContracts()', { detail: e.message, colspan: 5 });
     }
 }
 
@@ -13239,10 +13321,10 @@ async function loadExplorerDexPools(force = false) {
     } catch (e) {
         console.error('Explorer DEX error:', e);
         if (poolsContainer) {
-            poolsContainer.innerHTML = '<tr><td colspan="9" class="loading-state">Failed to load pools</td></tr>';
+            poolsContainer.innerHTML = errorState('Could not load pools', 'loadExplorerDex()', { detail: e.message, colspan: 9 });
         }
         if (tradesContainer) {
-            tradesContainer.innerHTML = '<tr><td colspan="6" class="loading-state">Failed to load trades</td></tr>';
+            tradesContainer.innerHTML = errorState('Could not load trades', 'loadExplorerDex()', { detail: e.message, colspan: 6 });
         }
     }
 }
@@ -13649,10 +13731,10 @@ async function loadExplorerAtomicSwaps() {
     } catch (e) {
         console.error('Explorer Atomic Swaps error:', e);
         if (totalsContainer) {
-            totalsContainer.innerHTML = '<div class="error-state">Failed to load swap data</div>';
+            totalsContainer.innerHTML = errorState('Could not load swap data', 'loadExplorerSwaps()', { detail: e.message });
         }
         if (offersContainer) {
-            offersContainer.innerHTML = '<tr><td colspan="5" class="loading-state">Failed to load offers</td></tr>';
+            offersContainer.innerHTML = errorState('Could not load offers', 'loadExplorerSwaps()', { detail: e.message, colspan: 5 });
         }
     }
 }
@@ -13667,8 +13749,11 @@ function changeExplorerNode() {
     }
 }
 
-// Test Explorer connection
-async function testExplorerConnection() {
+// Test Explorer connection.
+// `announce` is false for the automatic check on load: an unreachable explorer
+// is already reported by the status dot, and an error toast now persists until
+// dismissed — so an offline user would be greeted by a sticky toast every time.
+async function testExplorerConnection(announce = true) {
     const statusEl = document.getElementById('explorer-connection-status');
     if (statusEl) {
         statusEl.innerHTML = '<span class="status-dot status-checking"></span> Testing...';
@@ -13680,7 +13765,7 @@ async function testExplorerConnection() {
             const data = await resp.json();
             explorerConnected = true;
             updateExplorerConnectionStatus(true);
-            showToast(`Connected to Explorer (Height: ${data.height?.toLocaleString()})`, 'success');
+            if (announce) showToast(`Connected to Explorer (Height: ${data.height?.toLocaleString()})`, 'success');
 
             // Reload explorer page if active
             if (document.getElementById('page-explorer')?.classList.contains('active')) {
@@ -13692,7 +13777,7 @@ async function testExplorerConnection() {
     } catch (e) {
         explorerConnected = false;
         updateExplorerConnectionStatus(false);
-        showErrorToast(e, 'Could not reach the explorer');
+        if (announce) showErrorToast(e, 'Could not reach the explorer');
     }
 }
 
@@ -13717,8 +13802,8 @@ async function initExplorerSettings() {
     if (selector) {
         selector.value = EXPLORER_API;
     }
-    // Test connection on init
-    testExplorerConnection();
+    // Test connection on init, silently — the status dot carries the result.
+    testExplorerConnection(false);
 }
 
 // Fetch from Explorer API
@@ -14356,7 +14441,7 @@ async function loadAirdropFees() {
             listEl.appendChild(card);
         });
     } catch (e) {
-        listEl.innerHTML = `<div class="airdrop-tx-empty">Error loading fees: ${e.message}</div>`;
+        listEl.innerHTML = errorState('Could not load fees', 'loadAirdropFees()', { detail: e.message });
     }
 }
 
@@ -15011,7 +15096,7 @@ async function loadMyBatches() {
             listEl.appendChild(card);
         });
     } catch (e) {
-        listEl.innerHTML = `<div class="empty-state">Error loading batches: ${e.message}</div>`;
+        listEl.innerHTML = errorState('Could not load your airdrops', 'loadMyBatches()', { detail: e.message });
     }
 }
 
@@ -15397,7 +15482,7 @@ async function loadAirdropTransactions() {
             listEl.appendChild(row);
         });
     } catch (e) {
-        listEl.innerHTML = '<div class="airdrop-tx-empty">Failed to load transactions</div>';
+        listEl.innerHTML = errorState('Could not load transactions', 'loadAirdropTransactions()', { detail: e.message });
     }
 }
 
