@@ -2464,9 +2464,8 @@ function openReceiveModal() {
     generateAddress();
 }
 
-function openSendModal(assetId = 0) {
-    openModal('send-modal');
-}
+// (openSendModal is defined properly further down; the stub that used to sit
+// here was shadowed by it, so this one never ran. Removed to avoid the trap.)
 
 // Current address type for receive modal
 let currentReceiveType = 'regular';
@@ -4452,30 +4451,10 @@ let storedWalletPassword = null;
 async function startBackgroundNodeSync() {
     if (!storedWalletPassword) return;
 
-    // Start local node in background (with owner key)
-    try {
-        const exportRes = await fetch('/api/wallet/export_owner_key', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet: welcomeSelectedWallet, password: storedWalletPassword })
-        });
-        const exportResult = await exportRes.json();
-
-        if (exportResult.success && exportResult.owner_key) {
-            // Start local node with owner key
-            await fetch('/api/node/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ owner_key: exportResult.owner_key, password: storedWalletPassword })
-            });
-            console.log('Local node started in background');
-
-            // Start periodic check for sync status
-            startNodeSyncChecker();
-        }
-    } catch (e) {
-        console.log('Background node start failed:', e);
-    }
+    // Deliberately NOT starting a local node here. Contract calls do not need
+    // one — serve.py injects the shader and public nodes serve contract state —
+    // so this used to impose a ~9 GB download on every unlock for nothing.
+    // The local node is now an explicit choice in Settings → Node.
 }
 
 function updateNodeSyncBanner(show, progress, synced, label) {
@@ -4663,23 +4642,10 @@ async function welcomeUnlock() {
             console.log('Owner key export error:', e);
         }
 
-        // Step 3: Start beam-node with owner_key (non-blocking, for background sync)
+        // Step 3: No local node. A new wallet has no history to rescan, and a
+        // public node serves everything the wallet needs including contracts.
+        // Starting one here cost every new user a multi-hour, ~9 GB sync.
         let nodeStarted = false;
-        if (ownerKey) {
-            btn.innerHTML = '<div class="welcome-spinner"></div> Starting node...';
-            try {
-                const nodeRes = await fetch('/api/node/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ owner_key: ownerKey, password: password })
-                });
-                const nodeResult = await nodeRes.json();
-                nodeStarted = !!nodeResult.success;
-                console.log('Local node started with owner key');
-            } catch (e) {
-                console.log('Node start failed (will use public node):', e);
-            }
-        }
 
         // Step 3.5: Check if local node is already synced — if so, connect to it
         let unlockNode = 'eu-node01.mainnet.beam.mw:8100';
@@ -4742,8 +4708,13 @@ async function welcomeUnlock() {
             }
         }, 30000);
 
-        // Step 7: Start background sync checker to auto-switch to local node when synced
-        startNodeSyncChecker();
+        // Step 7: Only watch a local node the user actually asked for. This
+        // used to run unconditionally and silently migrate wallet-api onto the
+        // local node the moment it claimed to be synced — which, post-HF6,
+        // meant moving people onto a dead fork they could not get off.
+        if (currentNodeType === 'local') {
+            startNodeSyncChecker();
+        }
 
         // Step 8: Start node sync monitoring for settings UI
         startNodeSyncMonitoring();
@@ -6446,7 +6417,7 @@ async function renderTransactions(txs) {
                 '<div class="tx-expand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M6 9l6 6 6-6"/></svg></div>' +
             '</div>' +
             metaHtml +
-            (tx.comment ? '<div class="tx-comment-visible">' + tx.comment + '</div>' : '') +
+            (tx.comment ? '<div class="tx-comment-visible">' + escapeHtml(tx.comment) + '</div>' : '') +
             '<div class="tx-details" id="tx-details-' + idx + '">' +
                 '<div class="tx-detail-grid">' +
                     '<div class="tx-detail-item"><span class="tx-detail-label">Transaction ID</span><span class="tx-detail-value" onclick="event.stopPropagation();copyToClipboard(\'' + txId + '\')" title="Click to copy">' + txId + '</span></div>' +
@@ -6588,7 +6559,7 @@ function renderAddresses(addrs) {
                                  onclick="copyToClipboard('${a.address}')" title="Click to copy">
                                 ${addrShort}
                             </div>
-                            ${a.comment ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${a.comment}</div>` : ''}
+                            ${a.comment ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${escapeHtml(a.comment)}</div>` : ''}
                         </div>
                         <div style="display:flex;gap:6px;margin-left:8px;">
                             <button class="action-btn" onclick="copyToClipboard('${a.address}')" title="Copy" style="padding:6px;">
@@ -6619,12 +6590,40 @@ async function deleteAddress(address) {
 }
 
 // Copy to clipboard helper
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('Copied to clipboard!', 'success');
-    }).catch(e => {
-        showToast('Failed to copy', 'error');
-    });
+/**
+ * There used to be two of these ~4,900 lines apart. The later one won, so every
+ * single-argument caller (tx ids, kernels, addresses) copied with no feedback
+ * and swallowed failures. This is the union of both: button feedback when a
+ * button is passed, a toast otherwise, and errors surfaced either way.
+ */
+function copyToClipboard(text, btn) {
+    const ok = () => {
+        if (btn) {
+            btn.classList.add('copied');
+            const prev = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.classList.remove('copied'); btn.textContent = prev || 'Copy'; }, 2000);
+        } else {
+            showToast('Copied to clipboard!', 'success');
+        }
+    };
+    const fail = () => showToast('Failed to copy', 'error');
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok).catch(fail);
+        return;
+    }
+    // Fallback for embedded browsers without the async clipboard API.
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;';
+        document.body.appendChild(ta);
+        ta.select();
+        const done = document.execCommand('copy');
+        document.body.removeChild(ta);
+        done ? ok() : fail();
+    } catch (e) { fail(); }
 }
 
 // =============================================
@@ -7119,7 +7118,26 @@ function renderDexPools() {
 }
 
 // Get asset info from config or cache
+/**
+ * Asset name/symbol/description come from on-chain metadata, which anyone can
+ * set to anything when they mint a Confidential Asset. These strings reach
+ * innerHTML in ~110 places, so they are escaped once here at the source rather
+ * than at every render site, where one miss is a scripting hole in a wallet.
+ */
+function sanitizeAssetMeta(info) {
+    if (!info) return info;
+    const clean = { ...info };
+    ['symbol', 'name', 'description', 'shortDesc', 'longDesc'].forEach(k => {
+        if (typeof clean[k] === 'string') clean[k] = escapeHtml(clean[k]);
+    });
+    return clean;
+}
+
 function getAssetInfo(aid) {
+    return sanitizeAssetMeta(getAssetInfoRaw(aid));
+}
+
+function getAssetInfoRaw(aid) {
     // Priority tokens from config (with local/known icons)
     const config = ASSET_CONFIG[aid];
     if (config) return { aid, ...config };
@@ -7246,11 +7264,12 @@ function getAssetInfoBasic(aid) {
     if (cached) {
         const meta = cached.metadata_pairs || cached.metadata || {};
         const name = meta.N || meta.name || `Asset #${aid}`;
-        return {
+        // Same reasoning as getAssetInfo: attacker-controlled, headed for innerHTML.
+        return sanitizeAssetMeta({
             aid,
             symbol: meta.UN || meta.SN || (name !== `Asset #${aid}` ? name.split(' ')[0].substring(0, 10) : `CA${aid}`),
             name
-        };
+        });
     }
 
     return { aid, symbol: `CA${aid}`, name: `Asset #${aid}` };
@@ -11510,18 +11529,8 @@ function copyBtnHtml(text) {
 }
 
 // Copy to clipboard
-function copyToClipboard(text, btn) {
-    navigator.clipboard.writeText(text).then(() => {
-        if (btn) {
-            btn.classList.add('copied');
-            btn.textContent = 'Copied!';
-            setTimeout(() => {
-                btn.classList.remove('copied');
-                btn.textContent = 'Copy';
-            }, 2000);
-        }
-    });
-}
+// (copyToClipboard is defined once, above — the duplicate here shadowed it)
+
 
 // Show asset detail (full page, like BeamExplorer.html)
 async function showAssetDetail(assetId) {
@@ -14345,7 +14354,7 @@ async function loadAirdropTransactions() {
         airdropTxs.slice(0, 10).forEach(tx => {
             const status = tx.status;
             const statusText = tx.status_string || 'unknown';
-            const comment = tx.comment || 'Contract call';
+            const comment = escapeHtml(tx.comment || 'Contract call');
             const fee = tx.fee ? (tx.fee / 100000000).toFixed(4) : '0';
             const time = tx.create_time ? new Date(tx.create_time * 1000).toLocaleString() : '';
             const txId = tx.txId || '';

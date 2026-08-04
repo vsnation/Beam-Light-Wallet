@@ -1,0 +1,2369 @@
+/* =============================================================================
+   MemeClash v3 — PIXEL ART RETRO GAME EDITION
+   Each section = a different game level. Press Start 2P headings.
+   All backgrounds CSS-only (gradients, box-shadows, pseudo-elements).
+   ============================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+/* ===== Team Colors & Pixel Palette ===== */
+:root {
+    --chad-color: #25c2a0;
+    --chad-bright: #00ffcc;
+    --chad-glow: rgba(37, 194, 160, 0.35);
+    --chad-glow-strong: rgba(37, 194, 160, 0.6);
+    --chad-bg: rgba(37, 194, 160, 0.08);
+    --giga-color: #a855f7;
+    --giga-bright: #d4a0ff;
+    --giga-glow: rgba(168, 85, 247, 0.35);
+    --giga-glow-strong: rgba(168, 85, 247, 0.6);
+    --giga-bg: rgba(168, 85, 247, 0.08);
+    --mc-bg-dark: #060a12;
+    --mc-bg-card: #0d1320;
+    --mc-bg-card-hover: #111827;
+    --mc-border: rgba(255, 255, 255, 0.06);
+    --mc-gold: #f59e0b;
+    --mc-gold-glow: rgba(245, 158, 11, 0.3);
+    /* Pixel palette extras */
+    --pixel-shadow: #000000;
+    --pixel-highlight: rgba(255, 255, 255, 0.15);
+    --pixel-font: 'Press Start 2P', monospace;
+    --pixel-border-light: rgba(255, 255, 255, 0.12);
+    --pixel-border-dark: rgba(0, 0, 0, 0.6);
+}
+
+/* ===== Global Pixel Rendering ===== */
+img, .mc-team-avatar img {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+/* ===== Pixel Border Mixin (via box-shadow) ===== */
+/* Use class .pixel-card or apply directly */
+
+/* ===================================================================
+   KEYFRAME ANIMATIONS — Floating elements, twinkling, particles
+   =================================================================== */
+
+/* --- Stars twinkling (Space level) --- */
+@keyframes mc-twinkle {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+}
+
+@keyframes mc-twinkle-alt {
+    0%, 100% { opacity: 0.6; }
+    40% { opacity: 0.1; }
+    80% { opacity: 0.9; }
+}
+
+/* --- Floating pixel coins --- */
+@keyframes mc-float-coin {
+    0% { transform: translateY(0) rotate(0deg); opacity: 0.6; }
+    25% { transform: translateY(-18px) rotate(4deg); opacity: 0.9; }
+    50% { transform: translateY(-30px) rotate(0deg); opacity: 0.7; }
+    75% { transform: translateY(-18px) rotate(-4deg); opacity: 0.9; }
+    100% { transform: translateY(0) rotate(0deg); opacity: 0.6; }
+}
+
+@keyframes mc-float-gem {
+    0% { transform: translateY(0px) scale(1); opacity: 0.5; }
+    50% { transform: translateY(-22px) scale(1.1); opacity: 0.85; }
+    100% { transform: translateY(0px) scale(1); opacity: 0.5; }
+}
+
+/* --- Bubbles floating up (Underwater level) --- */
+@keyframes mc-bubble-rise {
+    0% { transform: translateY(0) scale(1); opacity: 0.5; }
+    40% { transform: translateY(-40px) scale(1.15); opacity: 0.7; }
+    100% { transform: translateY(-90px) scale(0.6); opacity: 0; }
+}
+
+@keyframes mc-bubble-rise-2 {
+    0% { transform: translateY(0) scale(0.8); opacity: 0.4; }
+    50% { transform: translateY(-55px) scale(1); opacity: 0.6; }
+    100% { transform: translateY(-110px) scale(0.4); opacity: 0; }
+}
+
+/* --- Pixel fish swimming (Underwater) --- */
+@keyframes mc-fish-swim {
+    0% { transform: translateX(-30px) scaleX(1); }
+    48% { transform: translateX(calc(100% + 30px)) scaleX(1); }
+    50% { transform: translateX(calc(100% + 30px)) scaleX(-1); }
+    98% { transform: translateX(-30px) scaleX(-1); }
+    100% { transform: translateX(-30px) scaleX(1); }
+}
+
+/* --- Torch flicker (Stadium & Castle) --- */
+@keyframes mc-torch-flicker {
+    0%, 100% { opacity: 0.7; text-shadow: 0 0 6px #f59e0b, 0 0 12px #f97316; }
+    25% { opacity: 0.9; text-shadow: 0 0 8px #fbbf24, 0 0 16px #f59e0b; }
+    50% { opacity: 0.6; text-shadow: 0 0 5px #f97316, 0 0 10px #ea580c; }
+    75% { opacity: 1; text-shadow: 0 0 10px #fbbf24, 0 0 20px #f59e0b; }
+}
+
+/* --- Floating leaf (Forest level) --- */
+@keyframes mc-leaf-fall {
+    0% { transform: translate(0, 0) rotate(0deg); opacity: 0.6; }
+    25% { transform: translate(12px, -15px) rotate(20deg); opacity: 0.8; }
+    50% { transform: translate(-8px, -28px) rotate(-10deg); opacity: 0.5; }
+    75% { transform: translate(15px, -10px) rotate(15deg); opacity: 0.7; }
+    100% { transform: translate(0, 0) rotate(0deg); opacity: 0.6; }
+}
+
+/* --- Ember particles (Lava level) --- */
+@keyframes mc-ember-rise {
+    0% { transform: translateY(0) scale(1); opacity: 0.8; }
+    50% { transform: translateY(-35px) scale(0.7); opacity: 0.5; }
+    100% { transform: translateY(-70px) scale(0.3); opacity: 0; }
+}
+
+@keyframes mc-ember-glow {
+    0%, 100% { background: #ef4444; box-shadow: 0 0 4px #ef4444; }
+    50% { background: #fbbf24; box-shadow: 0 0 8px #f59e0b; }
+}
+
+/* --- VS pulse (retro game blink) --- */
+@keyframes mc-vs-pulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.08); }
+}
+
+/* --- CRT scanline scroll --- */
+@keyframes mc-scanline {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(4px); }
+}
+
+/* --- Pixel avatar pulse glow --- */
+@keyframes mc-avatar-pulse {
+    0%, 100% { box-shadow: 0 0 8px var(--glow-color), inset 0 0 4px var(--glow-color); }
+    50% { box-shadow: 0 0 18px var(--glow-color), 0 0 30px var(--glow-color), inset 0 0 8px var(--glow-color); }
+}
+
+/* --- Generic spin --- */
+@keyframes mc-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes mcSpinLoader {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes mcPulseText {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ========== Container ========== */
+
+.mc-container {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+}
+
+/* ========== Page Header ========== */
+
+.mc-page-header {
+    text-align: center;
+    padding: 24px 0 8px;
+}
+
+.mc-title {
+    font-family: var(--pixel-font);
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    background: linear-gradient(135deg, var(--chad-color) 0%, #fff 40%, #fff 60%, var(--giga-color) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    line-height: 1.5;
+}
+
+.mc-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-family: var(--pixel-font);
+    line-height: 1.6;
+}
+
+/* ====================================================================
+   LEVEL 1: SPACE / ASTEROID THEME — .mc-arena
+   Deep starfield, twinkling CSS stars, subtle asteroid shapes
+   ==================================================================== */
+
+.mc-arena {
+    position: relative;
+    background:
+        radial-gradient(1px 1px at 12% 15%, rgba(255,255,255,0.7) 0%, transparent 100%),
+        radial-gradient(1px 1px at 28% 68%, rgba(255,255,255,0.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 45% 22%, rgba(255,255,255,0.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 62% 85%, rgba(255,255,255,0.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 78% 38%, rgba(255,255,255,0.7) 0%, transparent 100%),
+        radial-gradient(1px 1px at 88% 72%, rgba(255,255,255,0.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 35% 48%, rgba(37,194,160,0.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 72% 52%, rgba(168,85,247,0.5) 0%, transparent 100%),
+        radial-gradient(2px 2px at 55% 12%, rgba(255,255,255,0.3) 0%, transparent 100%),
+        radial-gradient(2px 2px at 20% 90%, rgba(255,255,255,0.25) 0%, transparent 100%),
+        radial-gradient(1px 1px at 92% 18%, rgba(255,255,255,0.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 5% 55%, rgba(255,255,255,0.5) 0%, transparent 100%),
+        linear-gradient(180deg, #020510 0%, #0a0e1a 40%, #0d1328 100%);
+    border-radius: 4px;
+    padding: 32px 24px 28px;
+    margin-bottom: 24px;
+    border: none;
+    overflow: hidden;
+    /* Pixel border */
+    box-shadow:
+        inset 0 0 0 2px rgba(255,255,255,0.06),
+        0 2px 0 0 var(--pixel-shadow),
+        2px 0 0 0 var(--pixel-shadow),
+        0 -2px 0 0 var(--pixel-border-light),
+        -2px 0 0 0 var(--pixel-border-light);
+}
+
+/* CRT Scanline overlay */
+.mc-arena::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent 0px,
+        transparent 2px,
+        rgba(0, 0, 0, 0.08) 2px,
+        rgba(0, 0, 0, 0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 2;
+    animation: mc-scanline 0.15s steps(1) infinite;
+}
+
+/* Floating pixel asteroid (right side) */
+.mc-arena::after {
+    content: '';
+    position: absolute;
+    top: 20%;
+    right: 8%;
+    width: 12px;
+    height: 10px;
+    background: #4a4a4a;
+    box-shadow:
+        2px 0 0 #4a4a4a,
+        4px 0 0 #5a5a5a,
+        0 2px 0 #5a5a5a,
+        2px 2px 0 #6a6a6a,
+        4px 2px 0 #5a5a5a,
+        6px 2px 0 #4a4a4a,
+        -2px 2px 0 #3a3a3a,
+        0 4px 0 #4a4a4a,
+        2px 4px 0 #5a5a5a,
+        4px 4px 0 #3a3a3a;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.4;
+    animation: mc-float-gem 8s ease-in-out infinite;
+}
+
+/* Round info header */
+.mc-round-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+    position: relative;
+    z-index: 3;
+}
+
+.mc-round-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    border-radius: 2px;
+    padding: 6px 16px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-family: var(--pixel-font);
+    line-height: 1.6;
+    box-shadow:
+        inset -1px -1px 0 rgba(0,0,0,0.5),
+        inset 1px 1px 0 rgba(255,255,255,0.08);
+}
+
+.mc-round-badge .round-num {
+    color: var(--text-primary);
+    font-family: var(--pixel-font);
+}
+
+.mc-timer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(37, 194, 160, 0.1);
+    border: none;
+    border-radius: 2px;
+    padding: 6px 16px;
+    font-family: var(--pixel-font);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--chad-color);
+    line-height: 1.6;
+    box-shadow:
+        inset -1px -1px 0 rgba(0,0,0,0.4),
+        inset 1px 1px 0 rgba(37,194,160,0.15);
+}
+
+.mc-timer-badge.expired {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--mc-gold);
+    box-shadow:
+        inset -1px -1px 0 rgba(0,0,0,0.4),
+        inset 1px 1px 0 rgba(245,158,11,0.15);
+}
+
+.mc-phase-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 2px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: var(--pixel-font);
+    line-height: 1.6;
+}
+
+.mc-phase-pill.active { background: rgba(37,194,160,0.12); color: var(--chad-color); }
+.mc-phase-pill.needs_end_snapshot,
+.mc-phase-pill.needs_snapshots { background: rgba(245,158,11,0.12); color: var(--mc-gold); }
+.mc-phase-pill.ready_for_checkpoint { background: rgba(59,130,246,0.12); color: var(--info); }
+.mc-phase-pill.finalized { background: rgba(100,116,139,0.12); color: var(--text-muted); }
+
+/* ========== Battle Layout (3-column: CHAD | VS | GIGA) ========== */
+
+.mc-battle {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 24px;
+    align-items: center;
+    margin-bottom: 24px;
+    position: relative;
+    z-index: 3;
+}
+
+/* Team card — pixel border */
+.mc-team-card {
+    text-align: center;
+    padding: 24px 16px;
+    border-radius: 2px;
+    border: none;
+    transition: all 0.4s ease;
+    position: relative;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.5),
+        inset 2px 2px 0 rgba(255,255,255,0.06),
+        0 2px 0 0 var(--pixel-shadow),
+        2px 0 0 0 var(--pixel-shadow);
+}
+
+.mc-team-card.chad {
+    background: linear-gradient(180deg, rgba(37,194,160,0.08) 0%, rgba(0,0,0,0.3) 100%);
+}
+
+.mc-team-card.giga {
+    background: linear-gradient(180deg, rgba(168,85,247,0.08) 0%, rgba(0,0,0,0.3) 100%);
+}
+
+.mc-team-card.winner.chad {
+    box-shadow:
+        0 0 20px var(--chad-glow),
+        0 0 40px rgba(37,194,160,0.15),
+        inset -2px -2px 0 rgba(37,194,160,0.3),
+        inset 2px 2px 0 rgba(37,194,160,0.15);
+}
+
+.mc-team-card.winner.giga {
+    box-shadow:
+        0 0 20px var(--giga-glow),
+        0 0 40px rgba(168,85,247,0.15),
+        inset -2px -2px 0 rgba(168,85,247,0.3),
+        inset 2px 2px 0 rgba(168,85,247,0.15);
+}
+
+/* Avatar — Pixel-art circular frame with pulsing glow */
+.mc-team-avatar {
+    width: 100px;
+    height: 100px;
+    border-radius: 4px;
+    margin: 0 auto 14px;
+    overflow: hidden;
+    border: 3px solid transparent;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.mc-team-avatar.chad {
+    --glow-color: var(--chad-glow);
+    border-color: var(--chad-color);
+    box-shadow:
+        0 0 12px var(--chad-glow),
+        inset 0 0 6px var(--chad-glow),
+        0 2px 0 0 rgba(0,0,0,0.5),
+        2px 0 0 0 rgba(0,0,0,0.4);
+    animation: mc-avatar-pulse 3s ease-in-out infinite;
+}
+
+.mc-team-avatar.giga {
+    --glow-color: var(--giga-glow);
+    border-color: var(--giga-color);
+    box-shadow:
+        0 0 12px var(--giga-glow),
+        inset 0 0 6px var(--giga-glow),
+        0 2px 0 0 rgba(0,0,0,0.5),
+        2px 0 0 0 rgba(0,0,0,0.4);
+    animation: mc-avatar-pulse 3s ease-in-out infinite 1.5s;
+}
+
+.mc-team-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 2px;
+    background: var(--mc-bg-dark);
+    image-rendering: pixelated;
+}
+
+/* Team name — pixel font */
+.mc-team-name {
+    font-family: var(--pixel-font);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.mc-team-name.chad {
+    color: var(--chad-color);
+    text-shadow: 0 0 12px var(--chad-glow), 2px 2px 0 rgba(0,0,0,0.5);
+}
+
+.mc-team-name.giga {
+    color: var(--giga-color);
+    text-shadow: 0 0 12px var(--giga-glow), 2px 2px 0 rgba(0,0,0,0.5);
+}
+
+/* Treasury display */
+.mc-team-treasury {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-family: var(--pixel-font);
+    line-height: 1.6;
+}
+
+.mc-team-treasury .value {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-top: 4px;
+}
+
+/* Pool reserve display */
+.mc-team-pool {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 2px solid rgba(255,255,255,0.04);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.mc-team-pool .pool-value {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+/* VS divider — retro blink */
+.mc-vs-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.mc-vs-text {
+    font-family: var(--pixel-font);
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--mc-gold);
+    text-shadow: 0 0 20px var(--mc-gold-glow), 2px 2px 0 rgba(0,0,0,0.8);
+    letter-spacing: 2px;
+    animation: mc-vs-pulse 2s ease-in-out infinite;
+}
+
+.mc-vs-swords {
+    font-size: 20px;
+    opacity: 0.5;
+}
+
+/* ====================================================================
+   HEALTH / POWER BAR — Segmented pixel blocks
+   ==================================================================== */
+
+.mc-power-bar-section {
+    margin-bottom: 24px;
+    position: relative;
+    z-index: 3;
+}
+
+.mc-power-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--pixel-font);
+    line-height: 1.6;
+}
+
+.mc-power-labels .chad-label { color: var(--chad-color); }
+.mc-power-labels .giga-label { color: var(--giga-color); }
+
+.mc-power-bar {
+    height: 28px;
+    background: #0a0a0a;
+    border-radius: 2px;
+    overflow: hidden;
+    display: flex;
+    border: none;
+    position: relative;
+    box-shadow:
+        inset 0 0 0 2px rgba(255,255,255,0.06),
+        inset -2px -2px 0 rgba(0,0,0,0.6),
+        inset 2px 2px 0 rgba(255,255,255,0.04),
+        0 2px 0 0 #000,
+        2px 0 0 0 #000;
+}
+
+.mc-power-fill {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: var(--pixel-font);
+    color: #fff;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 40px;
+    position: relative;
+    line-height: 1.6;
+}
+
+/* Segmented pixel block effect on health bars */
+.mc-power-fill.chad {
+    background:
+        repeating-linear-gradient(
+            90deg,
+            var(--chad-color) 0px,
+            var(--chad-color) 8px,
+            rgba(0,0,0,0.3) 8px,
+            rgba(0,0,0,0.3) 10px
+        );
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3), inset 0 2px 0 rgba(255,255,255,0.15);
+}
+
+.mc-power-fill.giga {
+    background:
+        repeating-linear-gradient(
+            90deg,
+            var(--giga-color) 0px,
+            var(--giga-color) 8px,
+            rgba(0,0,0,0.3) 8px,
+            rgba(0,0,0,0.3) 10px
+        );
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3), inset 0 2px 0 rgba(255,255,255,0.15);
+}
+
+/* ========== Action Buttons Row — Pixel treasure chest style ========== */
+
+.mc-actions-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 3;
+}
+
+.mc-btn {
+    padding: 12px 28px;
+    border-radius: 2px;
+    border: none;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--pixel-font);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+    line-height: 1.6;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.15),
+        0 2px 0 0 #000;
+}
+
+.mc-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.2),
+        0 4px 0 0 #000;
+}
+
+.mc-btn:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow:
+        inset 2px 2px 0 rgba(0,0,0,0.4),
+        inset -2px -2px 0 rgba(255,255,255,0.1),
+        0 0 0 0 #000;
+}
+
+.mc-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.mc-btn-chad {
+    background: var(--chad-color);
+    color: #fff;
+}
+
+.mc-btn-chad:hover:not(:disabled) {
+    box-shadow:
+        0 0 16px var(--chad-glow),
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.2),
+        0 4px 0 0 #000;
+}
+
+.mc-btn-giga {
+    background: var(--giga-color);
+    color: #fff;
+}
+
+.mc-btn-giga:hover:not(:disabled) {
+    box-shadow:
+        0 0 16px var(--giga-glow),
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.2),
+        0 4px 0 0 #000;
+}
+
+.mc-btn-primary {
+    background: var(--chad-color);
+    color: #fff;
+}
+
+.mc-btn-primary:hover:not(:disabled) {
+    box-shadow:
+        0 0 16px var(--chad-glow),
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.2),
+        0 4px 0 0 #000;
+}
+
+.mc-btn-secondary {
+    background: var(--mc-bg-card);
+    color: var(--text-primary);
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.06),
+        0 2px 0 0 #000;
+}
+
+.mc-btn-secondary:hover:not(:disabled) {
+    background: var(--mc-bg-card-hover);
+}
+
+.mc-btn-gold {
+    background: var(--mc-gold);
+    color: #fff;
+}
+
+.mc-btn-gold:hover:not(:disabled) {
+    box-shadow:
+        0 0 16px var(--mc-gold-glow),
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.2),
+        0 4px 0 0 #000;
+}
+
+.mc-btn-sm {
+    padding: 8px 18px;
+    font-size: 9px;
+    border-radius: 2px;
+}
+
+.mc-arena-status {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 8px 0;
+    position: relative;
+    z-index: 3;
+    font-family: var(--pixel-font);
+    line-height: 1.6;
+}
+
+/* ========== Winner announcement ========== */
+
+.mc-winner-announce {
+    text-align: center;
+    padding: 12px 0;
+    position: relative;
+    z-index: 3;
+}
+
+.mc-winner-crown {
+    font-size: 28px;
+    margin-bottom: 4px;
+}
+
+.mc-winner-text {
+    font-family: var(--pixel-font);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    line-height: 1.6;
+}
+
+.mc-winner-text.chad { color: var(--chad-color); text-shadow: 0 0 16px var(--chad-glow), 2px 2px 0 rgba(0,0,0,0.6); }
+.mc-winner-text.giga { color: var(--giga-color); text-shadow: 0 0 16px var(--giga-glow), 2px 2px 0 rgba(0,0,0,0.6); }
+.mc-winner-text.draw { color: var(--text-muted); }
+
+/* ========== Payout Banner ========== */
+
+.mc-payout-banner {
+    background: linear-gradient(135deg, rgba(37,194,160,0.06), rgba(168,85,247,0.06));
+    border: none;
+    border-radius: 2px;
+    padding: 16px 24px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.06),
+        0 2px 0 0 #000;
+}
+
+.mc-payout-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.mc-payout-amount {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--chad-color);
+    margin-top: 2px;
+}
+
+/* ====================================================================
+   LEVEL 2: UNDERWATER THEME — .mc-swap-section
+   Blue-green tones, floating bubbles, pixel fish
+   ==================================================================== */
+
+.mc-swap-section {
+    position: relative;
+    background:
+        radial-gradient(ellipse at 20% 80%, rgba(6, 78, 92, 0.25) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(20, 100, 120, 0.2) 0%, transparent 60%),
+        linear-gradient(180deg, #061218 0%, #0a1a24 40%, #0d1f2b 100%);
+    border-radius: 2px;
+    border: none;
+    padding: 20px 24px 36px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.5),
+        inset 2px 2px 0 rgba(255,255,255,0.04),
+        0 2px 0 0 #000;
+}
+
+/* Bubbles — floating up via pseudo-elements */
+.mc-swap-section::before {
+    content: '';
+    position: absolute;
+    bottom: 30%;
+    left: 15%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(100, 200, 220, 0.2);
+    box-shadow:
+        30px 10px 0 3px rgba(100, 200, 220, 0.12),
+        60px -20px 0 2px rgba(100, 200, 220, 0.15),
+        120px 5px 0 4px rgba(100, 200, 220, 0.1),
+        200px -15px 0 2px rgba(100, 200, 220, 0.18),
+        250px 10px 0 3px rgba(100, 200, 220, 0.08),
+        320px -5px 0 2px rgba(100, 200, 220, 0.14);
+    animation: mc-bubble-rise 6s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Ground terrain — sandy ocean floor with pixel seaweed */
+.mc-swap-section::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 12px;
+    background:
+        linear-gradient(0deg, #1a3040 0%, #12232e 50%, transparent 100%);
+    box-shadow:
+        inset 0 2px 0 rgba(100,200,220,0.05);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.mc-swap-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-swap-header h3 {
+    font-family: var(--pixel-font);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.mc-swap-fee-badge {
+    font-size: 9px;
+    font-weight: 600;
+    font-family: var(--pixel-font);
+    color: var(--mc-gold);
+    background: rgba(245, 158, 11, 0.1);
+    border: none;
+    border-radius: 2px;
+    padding: 4px 8px;
+    line-height: 1.6;
+    box-shadow:
+        inset -1px -1px 0 rgba(0,0,0,0.3),
+        inset 1px 1px 0 rgba(245,158,11,0.1);
+}
+
+.mc-swap-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-swap-input-row .mc-input {
+    flex: 1;
+}
+
+.mc-swap-unit {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--pixel-font);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    line-height: 1.6;
+}
+
+.mc-swap-quote {
+    background: rgba(0, 0, 0, 0.3);
+    border: none;
+    border-radius: 2px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+    z-index: 1;
+    box-shadow:
+        inset -1px -1px 0 rgba(0,0,0,0.4),
+        inset 1px 1px 0 rgba(255,255,255,0.03);
+}
+
+.mc-swap-quote-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.mc-swap-quote-row.main {
+    font-size: 14px;
+    color: var(--text-primary);
+    padding-bottom: 6px;
+    border-bottom: 2px solid rgba(255,255,255,0.04);
+    margin-bottom: 2px;
+}
+
+.mc-swap-quote-row.detail {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.mc-swap-quote-row.detail .chad { color: var(--chad-color); }
+.mc-swap-quote-row.detail .giga { color: var(--giga-color); }
+
+.mc-swap-quote-row.fee {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.mc-swap-quote-value {
+    font-family: var(--font-mono);
+    font-weight: 700;
+}
+
+.mc-swap-quote-value.chad { color: var(--chad-color); }
+.mc-swap-quote-value.giga { color: var(--giga-color); }
+
+.mc-swap-balance {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding: 0 2px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-swap-balance-value {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.mc-swap-pct-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-swap-pct-btn {
+    flex: 1;
+    padding: 6px 0;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--pixel-font);
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.3);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.6;
+    box-shadow:
+        inset -1px -1px 0 rgba(0,0,0,0.4),
+        inset 1px 1px 0 rgba(255,255,255,0.04);
+}
+
+.mc-swap-pct-btn:hover {
+    background: rgba(100, 200, 220, 0.1);
+    color: var(--text-primary);
+}
+
+.mc-swap-pct-btn:active {
+    transform: scale(0.96);
+}
+
+.mc-swap-pct-btn.max {
+    color: var(--mc-gold);
+}
+
+.mc-swap-pct-btn.max:hover {
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.mc-swap-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 14px;
+    font-size: 12px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-loading-spinner.small {
+    width: 18px;
+    height: 18px;
+    border-width: 2px;
+    margin: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* ====================================================================
+   LEVEL 3: STADIUM / ARENA THEME — .mc-howto
+   Brick walls, torch lighting
+   ==================================================================== */
+
+.mc-howto {
+    position: relative;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(120, 70, 30, 0.06) 0px,
+            rgba(120, 70, 30, 0.06) 12px,
+            rgba(80, 40, 15, 0.04) 12px,
+            rgba(80, 40, 15, 0.04) 14px
+        ),
+        repeating-linear-gradient(
+            90deg,
+            transparent 0px,
+            transparent 28px,
+            rgba(80, 40, 15, 0.03) 28px,
+            rgba(80, 40, 15, 0.03) 30px
+        ),
+        linear-gradient(180deg, #100e08 0%, #140f08 50%, #0d0a06 100%);
+    border-radius: 2px;
+    border: none;
+    margin-bottom: 24px;
+    overflow: hidden;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.5),
+        inset 2px 2px 0 rgba(255,255,255,0.04),
+        0 2px 0 0 #000;
+}
+
+/* Torch left */
+.mc-howto::before {
+    content: '🔥';
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    font-size: 16px;
+    animation: mc-torch-flicker 2s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Torch right */
+.mc-howto::after {
+    content: '🔥';
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    font-size: 16px;
+    animation: mc-torch-flicker 2s ease-in-out infinite 0.7s;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.mc-howto-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.mc-howto-toggle:hover {
+    background: rgba(245, 158, 11, 0.03);
+}
+
+.mc-howto-title {
+    font-family: var(--pixel-font);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    line-height: 1.6;
+}
+
+.mc-howto-title .icon {
+    font-size: 20px;
+}
+
+.mc-howto-arrow {
+    color: var(--text-muted);
+    font-size: 14px;
+    transition: transform 0.3s ease;
+}
+
+.mc-howto.open .mc-howto-arrow {
+    transform: rotate(180deg);
+}
+
+.mc-howto-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease;
+}
+
+.mc-howto.open .mc-howto-content {
+    max-height: 600px;
+}
+
+.mc-howto-steps {
+    padding: 0 24px 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.mc-howto-step {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
+    padding: 20px 16px;
+    text-align: center;
+    border: none;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.04);
+}
+
+.mc-step-number {
+    width: 36px;
+    height: 36px;
+    border-radius: 2px;
+    background: var(--mc-gold);
+    color: #000;
+    font-weight: 800;
+    font-size: 14px;
+    font-family: var(--pixel-font);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.3),
+        inset 2px 2px 0 rgba(255,255,255,0.2);
+    line-height: 1;
+}
+
+.mc-step-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.mc-step-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.mc-howto-bonus {
+    padding: 0 24px 12px;
+    text-align: center;
+    font-size: 11px;
+    font-family: var(--pixel-font);
+    color: var(--mc-gold);
+    opacity: 0.85;
+    line-height: 1.8;
+}
+
+.mc-howto-whitepaper {
+    padding: 0 24px 20px;
+    text-align: center;
+}
+
+.mc-whitepaper-link {
+    display: inline-block;
+    font-family: var(--pixel-font);
+    font-size: 11px;
+    color: #00d4ff;
+    text-decoration: none;
+    padding: 8px 18px;
+    border: 2px solid rgba(0, 212, 255, 0.3);
+    border-radius: 4px;
+    transition: all 0.2s;
+    box-shadow:
+        inset 0 0 8px rgba(0, 212, 255, 0.05),
+        0 0 6px rgba(0, 212, 255, 0.1);
+}
+
+.mc-whitepaper-link:hover {
+    color: #fff;
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.1);
+    box-shadow:
+        inset 0 0 12px rgba(0, 212, 255, 0.1),
+        0 0 12px rgba(0, 212, 255, 0.2);
+}
+
+/* ====================================================================
+   LEVEL 4: FOREST / NATURE THEME — .mc-deposit-section
+   Dark forest tones, floating leaves
+   ==================================================================== */
+
+.mc-deposit-section {
+    position: relative;
+    background:
+        radial-gradient(ellipse at 30% 70%, rgba(20, 80, 40, 0.12) 0%, transparent 60%),
+        radial-gradient(ellipse at 70% 30%, rgba(15, 60, 30, 0.1) 0%, transparent 50%),
+        linear-gradient(180deg, #080e08 0%, #0a120a 50%, #060b06 100%);
+    border-radius: 2px;
+    border: none;
+    padding: 20px 24px 32px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.5),
+        inset 2px 2px 0 rgba(255,255,255,0.03),
+        0 2px 0 0 #000;
+}
+
+/* Floating pixel leaves */
+.mc-deposit-section::before {
+    content: '🍃';
+    position: absolute;
+    top: 20%;
+    right: 12%;
+    font-size: 12px;
+    opacity: 0.3;
+    animation: mc-leaf-fall 7s ease-in-out infinite;
+    pointer-events: none;
+}
+
+/* Ground terrain — pixel grass strip */
+.mc-deposit-section::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 10px;
+    background: #0f1f0f;
+    box-shadow:
+        0 -2px 0 #1a3a1a,
+        0 -4px 0 #0a1a0a,
+        20px -6px 0 #1a3a1a,
+        60px -8px 0 #0f2a0f,
+        100px -6px 0 #1a3a1a,
+        150px -4px 0 #0f2a0f,
+        210px -6px 0 #1a3a1a,
+        280px -8px 0 #0f2a0f,
+        340px -6px 0 #1a3a1a,
+        400px -4px 0 #1a3a1a;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.mc-deposit-section h3 {
+    font-family: var(--pixel-font);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: relative;
+    z-index: 1;
+    line-height: 1.6;
+}
+
+.mc-deposit-section .mc-deposit-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+    line-height: 1.6;
+}
+
+.mc-deposit-detail {
+    font-size: 11px;
+    color: var(--chad-color);
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    background: rgba(37, 194, 160, 0.08);
+    border-left: 2px solid var(--chad-color);
+    border-radius: 0 4px 4px 0;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mc-deposit-detail-icon {
+    font-size: 14px;
+}
+
+.mc-team-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-team-toggle button {
+    flex: 1;
+    padding: 10px;
+    border-radius: 2px;
+    border: none;
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-secondary);
+    font-weight: 700;
+    font-size: 11px;
+    font-family: var(--pixel-font);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    line-height: 1.6;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.04);
+}
+
+.mc-team-toggle button.active.chad-toggle {
+    color: var(--chad-color);
+    background: rgba(37, 194, 160, 0.1);
+    box-shadow:
+        0 0 12px var(--chad-glow),
+        inset -2px -2px 0 rgba(0,0,0,0.3),
+        inset 2px 2px 0 rgba(37,194,160,0.15);
+}
+
+.mc-team-toggle button.active.giga-toggle {
+    color: var(--giga-color);
+    background: rgba(168, 85, 247, 0.1);
+    box-shadow:
+        0 0 12px var(--giga-glow),
+        inset -2px -2px 0 rgba(0,0,0,0.3),
+        inset 2px 2px 0 rgba(168,85,247,0.15);
+}
+
+.mc-deposit-balance {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    padding: 0 2px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-deposit-balance-value {
+    font-family: var(--font-mono);
+    font-weight: 700;
+}
+
+.mc-deposit-balance-value.chad {
+    color: var(--chad-color);
+}
+
+.mc-deposit-balance-value.giga {
+    color: var(--giga-color);
+}
+
+.mc-input-row {
+    display: flex;
+    gap: 10px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-deposit-pct-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.mc-deposit-pct-btn {
+    flex: 1;
+    padding: 6px 4px;
+    border: none;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-family: var(--pixel-font);
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.4),
+        inset 2px 2px 0 rgba(255,255,255,0.04);
+}
+
+.mc-deposit-pct-btn:hover {
+    color: var(--text-primary);
+    background: rgba(37, 194, 160, 0.1);
+}
+
+.mc-deposit-pct-btn.active {
+    color: var(--chad-color);
+    background: rgba(37, 194, 160, 0.15);
+    box-shadow:
+        0 0 8px var(--chad-glow),
+        inset -2px -2px 0 rgba(0,0,0,0.3),
+        inset 2px 2px 0 rgba(37,194,160,0.1);
+}
+
+.mc-deposit-pct-btn.max {
+    color: var(--warning-color, #f59e0b);
+}
+
+.mc-deposit-pct-btn.max:hover,
+.mc-deposit-pct-btn.max.active {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning-color, #f59e0b);
+    box-shadow:
+        0 0 8px rgba(245, 158, 11, 0.2),
+        inset -2px -2px 0 rgba(0,0,0,0.3),
+        inset 2px 2px 0 rgba(245,158,11,0.1);
+}
+
+.mc-input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.4);
+    border: none;
+    border-radius: 2px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: var(--font-mono);
+    transition: box-shadow 0.2s;
+    box-shadow:
+        inset 2px 2px 0 rgba(0,0,0,0.5),
+        inset -1px -1px 0 rgba(255,255,255,0.04);
+}
+
+.mc-input:focus {
+    outline: none;
+    box-shadow:
+        inset 2px 2px 0 rgba(0,0,0,0.5),
+        inset -1px -1px 0 rgba(255,255,255,0.04),
+        0 0 10px rgba(37,194,160,0.2);
+}
+
+.mc-input::placeholder {
+    color: var(--text-muted);
+}
+
+/* ====================================================================
+   LIFETIME STATS — Section title (pixel font)
+   ==================================================================== */
+
+.mc-section-title {
+    font-family: var(--pixel-font);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(255,255,255,0.06);
+    line-height: 1.6;
+}
+
+/* ====================================================================
+   LEVEL 5: LAVA / FIRE — .mc-stats-grid
+   Warm tones, animated ember particles
+   ==================================================================== */
+
+.mc-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+    position: relative;
+}
+
+/* Ember particles floating above stats */
+.mc-stats-grid::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 20%;
+    width: 4px;
+    height: 4px;
+    background: #ef4444;
+    border-radius: 50%;
+    box-shadow:
+        40px 5px 0 2px rgba(239,68,68,0.4),
+        100px -3px 0 1px rgba(251,191,36,0.5),
+        180px 8px 0 2px rgba(239,68,68,0.3),
+        250px -5px 0 1px rgba(251,191,36,0.4),
+        320px 3px 0 2px rgba(239,68,68,0.35),
+        420px -2px 0 1px rgba(251,191,36,0.3);
+    animation: mc-ember-rise 4s ease-out infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.mc-stat-card {
+    background:
+        linear-gradient(180deg, rgba(120, 30, 10, 0.08) 0%, rgba(0,0,0,0.3) 100%);
+    border-radius: 2px;
+    padding: 16px;
+    border: none;
+    transition: all 0.2s;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.5),
+        inset 2px 2px 0 rgba(255,255,255,0.04),
+        0 2px 0 0 #000;
+}
+
+.mc-stat-card:hover {
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.5),
+        inset 2px 2px 0 rgba(255,255,255,0.06),
+        0 2px 0 0 #000,
+        0 0 8px rgba(239,68,68,0.1);
+}
+
+.mc-stat-label {
+    font-size: 9px;
+    font-family: var(--pixel-font);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    line-height: 1.6;
+}
+
+.mc-stat-value {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+.mc-stat-value.chad { color: var(--chad-color); }
+.mc-stat-value.giga { color: var(--giga-color); }
+.mc-stat-value.gold { color: var(--mc-gold); }
+
+/* ====================================================================
+   LEVEL 6: CASTLE / DUNGEON — .mc-history-section
+   Stone walls, pixel torches
+   ==================================================================== */
+
+.mc-history-section {
+    position: relative;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(80, 80, 90, 0.04) 0px,
+            rgba(80, 80, 90, 0.04) 16px,
+            rgba(50, 50, 60, 0.03) 16px,
+            rgba(50, 50, 60, 0.03) 18px
+        ),
+        repeating-linear-gradient(
+            90deg,
+            transparent 0px,
+            transparent 32px,
+            rgba(60, 60, 70, 0.025) 32px,
+            rgba(60, 60, 70, 0.025) 34px
+        ),
+        linear-gradient(180deg, #0a0a10 0%, #0e0e16 50%, #080810 100%);
+    border-radius: 2px;
+    border: none;
+    overflow: hidden;
+    margin-bottom: 24px;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.5),
+        inset 2px 2px 0 rgba(255,255,255,0.03),
+        0 2px 0 0 #000;
+}
+
+/* Castle torch left */
+.mc-history-section::before {
+    content: '🕯️';
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    font-size: 14px;
+    animation: mc-torch-flicker 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Castle torch right */
+.mc-history-section::after {
+    content: '🕯️';
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    font-size: 14px;
+    animation: mc-torch-flicker 3s ease-in-out infinite 1s;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.mc-history-section .mc-section-title {
+    padding: 18px 24px 14px;
+    margin-bottom: 0;
+    border-bottom: 2px solid rgba(255,255,255,0.04);
+}
+
+.mc-history-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.mc-history-table {
+    width: 100%;
+    min-width: 640px;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.mc-history-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: var(--pixel-font);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: rgba(0,0,0,0.3);
+    border-bottom: 2px solid rgba(255,255,255,0.04);
+    line-height: 1.6;
+}
+
+.mc-history-table th:last-child,
+.mc-history-table td:last-child {
+    text-align: right;
+    padding-right: 24px;
+}
+
+.mc-history-table th:first-child,
+.mc-history-table td:first-child {
+    padding-left: 24px;
+}
+
+.mc-history-table td {
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+
+.mc-history-table tbody tr {
+    transition: background 0.15s;
+}
+
+.mc-history-table tbody tr:hover td {
+    background: rgba(255,255,255,0.02);
+}
+
+.mc-history-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Winner badges — pixel style */
+.mc-winner-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 2px;
+    font-size: 9px;
+    font-weight: 800;
+    font-family: var(--pixel-font);
+    letter-spacing: 0.5px;
+    line-height: 1.6;
+}
+
+.mc-winner-badge.chad {
+    background: var(--chad-bg);
+    color: var(--chad-color);
+    border: none;
+    box-shadow: inset -1px -1px 0 rgba(0,0,0,0.3), inset 1px 1px 0 rgba(37,194,160,0.1);
+}
+
+.mc-winner-badge.giga {
+    background: var(--giga-bg);
+    color: var(--giga-color);
+    border: none;
+    box-shadow: inset -1px -1px 0 rgba(0,0,0,0.3), inset 1px 1px 0 rgba(168,85,247,0.1);
+}
+
+.mc-winner-badge.draw {
+    background: rgba(100,116,139,0.1);
+    color: var(--text-muted);
+    border: none;
+    box-shadow: inset -1px -1px 0 rgba(0,0,0,0.3), inset 1px 1px 0 rgba(255,255,255,0.04);
+}
+
+.mc-winner-badge.active-round {
+    background: rgba(59,130,246,0.1);
+    color: var(--info);
+    border: none;
+    box-shadow: inset -1px -1px 0 rgba(0,0,0,0.3), inset 1px 1px 0 rgba(59,130,246,0.1);
+}
+
+/* ========== Contract ID (subtle) ========== */
+
+.mc-contract-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 0;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.mc-contract-bar code {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s;
+    opacity: 0.6;
+}
+
+.mc-contract-bar code:hover {
+    color: var(--chad-color);
+    opacity: 1;
+}
+
+/* ========== Loading / Empty ========== */
+
+.mc-loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+}
+
+.mc-loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255,255,255,0.06);
+    border-top-color: var(--chad-color);
+    border-radius: 2px;
+    margin: 0 auto 16px;
+    animation: mc-spin 0.8s steps(8) infinite;
+}
+
+.mc-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.mc-empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+/* ========== Admin Panel ========== */
+
+.mc-admin-section {
+    background:
+        linear-gradient(180deg, rgba(120, 80, 10, 0.04) 0%, rgba(0,0,0,0.2) 100%);
+    border-radius: 2px;
+    border: none;
+    margin-bottom: 24px;
+    overflow: hidden;
+    box-shadow:
+        inset -2px -2px 0 rgba(0,0,0,0.5),
+        inset 2px 2px 0 rgba(245,158,11,0.06),
+        0 2px 0 0 #000;
+}
+
+.mc-admin-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 24px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--pixel-font);
+    color: var(--mc-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1.6;
+}
+
+.mc-admin-toggle:hover {
+    background: rgba(245, 158, 11, 0.04);
+}
+
+.mc-admin-toggle .mc-howto-arrow {
+    margin-left: auto;
+}
+
+.mc-admin-icon {
+    font-size: 18px;
+}
+
+.mc-admin-content {
+    padding: 0 24px 20px;
+}
+
+.mc-admin-group {
+    border: none;
+    border-radius: 2px;
+    padding: 16px;
+    margin-bottom: 14px;
+    background: rgba(0, 0, 0, 0.2);
+    box-shadow:
+        inset -1px -1px 0 rgba(0,0,0,0.4),
+        inset 1px 1px 0 rgba(255,255,255,0.03);
+}
+
+.mc-admin-group:last-child {
+    margin-bottom: 0;
+}
+
+.mc-admin-group-title {
+    font-size: 9px;
+    font-weight: 700;
+    font-family: var(--pixel-font);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid rgba(255,255,255,0.04);
+    line-height: 1.6;
+}
+
+.mc-admin-kv {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 12px;
+}
+
+.mc-admin-kv span:first-child {
+    color: var(--text-muted);
+}
+
+.mc-admin-kv span:last-child,
+.mc-admin-kv code {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.mc-admin-form-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.mc-admin-form-row label {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    min-width: 140px;
+}
+
+.mc-input-sm {
+    max-width: 160px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+/* ========== No Active Round ========== */
+
+.mc-no-round {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.mc-no-round-text {
+    font-size: 13px;
+    font-family: var(--pixel-font);
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    line-height: 1.8;
+}
+
+/* ========== Responsive ========== */
+
+@media (max-width: 768px) {
+    .mc-title { font-size: 14px; }
+
+    .mc-battle {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .mc-vs-divider {
+        flex-direction: row;
+        gap: 12px;
+    }
+
+    .mc-vs-text { font-size: 18px; }
+
+    .mc-team-avatar { width: 80px; height: 80px; }
+
+    .mc-howto-steps {
+        grid-template-columns: 1fr;
+    }
+
+    .mc-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .mc-actions-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mc-actions-row .mc-btn {
+        justify-content: center;
+    }
+
+    .mc-payout-banner {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .mc-history-table {
+        font-size: 12px;
+    }
+
+    .mc-history-table th,
+    .mc-history-table td {
+        padding: 8px 10px;
+    }
+
+    .mc-round-header {
+        flex-wrap: wrap;
+    }
+
+    .mc-admin-form-row {
+        flex-wrap: wrap;
+    }
+
+    .mc-admin-form-row label {
+        min-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .mc-container {
+        padding: 0 12px 30px;
+    }
+
+    .mc-arena {
+        padding: 20px 16px;
+        border-radius: 2px;
+    }
+
+    .mc-title { font-size: 12px; }
+
+    .mc-stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .mc-stat-card {
+        padding: 12px;
+    }
+
+    .mc-stat-value {
+        font-size: 16px;
+    }
+
+    .mc-team-name {
+        font-size: 11px;
+    }
+}
+
+/* ========== Transaction Progress Bar ========== */
+
+.mc-tx-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 9000;
+    background: rgba(10, 10, 16, 0.97);
+    backdrop-filter: blur(12px);
+    border-top: 2px solid rgba(37, 194, 160, 0.15);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.mc-tx-bar.visible {
+    transform: translateY(0);
+}
+
+.mc-tx-bar.hiding {
+    transform: translateY(100%);
+}
+
+.mc-tx-bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--chad-color), var(--giga-color));
+    transition: width 0.4s ease;
+    border-radius: 0 2px 2px 0;
+}
+
+.mc-tx-bar.success .mc-tx-bar-fill {
+    background: var(--success, #10b981);
+    width: 100% !important;
+}
+
+.mc-tx-bar.error .mc-tx-bar-fill {
+    background: var(--error, #ef4444);
+}
+
+.mc-tx-bar-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.mc-tx-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.mc-tx-bar-spinner {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border: 2px solid rgba(37, 194, 160, 0.15);
+    border-top-color: var(--chad-color);
+    border-radius: 2px;
+    animation: mcSpinLoader 0.7s steps(8) infinite;
+}
+
+.mc-tx-bar.success .mc-tx-bar-spinner,
+.mc-tx-bar.error .mc-tx-bar-spinner {
+    border: none;
+    animation: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mc-tx-bar.success .mc-tx-bar-spinner {
+    color: var(--success, #10b981);
+}
+
+.mc-tx-bar.error .mc-tx-bar-spinner {
+    color: var(--error, #ef4444);
+}
+
+.mc-tx-bar-info {
+    min-width: 0;
+}
+
+.mc-tx-bar-title {
+    font-family: var(--pixel-font);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--chad-color);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.6;
+}
+
+.mc-tx-bar.success .mc-tx-bar-title {
+    color: var(--success, #10b981);
+}
+
+.mc-tx-bar.error .mc-tx-bar-title {
+    color: var(--error, #ef4444);
+}
+
+.mc-tx-bar-text {
+    font-size: 11px;
+    color: var(--text-secondary, #94a3b8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+}
+
+.mc-tx-bar-close {
+    background: none;
+    border: none;
+    color: var(--text-muted, #64748b);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.mc-tx-bar-close:hover {
+    color: var(--text-primary, #f8fafc);
+}
+
+/* ===================================================================
+   Transaction History Table — Pixel Card Style
+   =================================================================== */
+
+.mc-tx-section {
+    margin-top: 24px;
+}
+
+.mc-tx-empty {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-muted, #64748b);
+    font-size: 11px;
+    font-family: var(--pixel-font);
+    line-height: 1.6;
+}
+
+/* Row: dot | info | amount */
+.mc-tx-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.mc-tx-row:last-child {
+    border-bottom: none;
+}
+
+/* Left dot — pixel square icon */
+.mc-tx-dot {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--dot-color, #94a3b8);
+    border: 2px solid var(--dot-color, #94a3b8);
+    transition: all 0.2s;
+}
+
+/* Team-colored dots for buy transactions */
+.mc-tx-dot.mc-tx-team-chad {
+    color: var(--chad-color, #25c2a0);
+    border-color: rgba(37, 194, 160, 0.4);
+    background: rgba(37, 194, 160, 0.08);
+}
+
+.mc-tx-dot.mc-tx-team-giga {
+    color: var(--giga-color, #a855f7);
+    border-color: rgba(168, 85, 247, 0.4);
+    background: rgba(168, 85, 247, 0.08);
+}
+
+.mc-tx-row.mc-tx-failed .mc-tx-dot {
+    color: var(--error, #ef4444);
+    border-color: rgba(239, 68, 68, 0.3);
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.mc-tx-row.mc-tx-pending .mc-tx-dot {
+    animation: mcPulseText 2s infinite;
+}
+
+/* Info column — label + meta */
+.mc-tx-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.mc-tx-label {
+    color: var(--text-primary, #f8fafc);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mc-tx-fail-tag {
+    font-size: 8px;
+    font-weight: 700;
+    font-family: var(--pixel-font);
+    color: var(--error, #ef4444);
+    background: rgba(239, 68, 68, 0.12);
+    padding: 1px 5px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1.6;
+}
+
+.mc-tx-meta {
+    color: var(--text-muted, #64748b);
+    font-size: 11px;
+    margin-top: 1px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.mc-tx-id {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    color: var(--text-muted, #475569);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s, color 0.2s;
+}
+
+.mc-tx-row:hover .mc-tx-id {
+    opacity: 1;
+}
+
+.mc-tx-id:hover {
+    color: var(--accent-primary, #25c2a0);
+}
+
+/* Right column — primary amount or status badge */
+.mc-tx-right {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+}
+
+.mc-tx-amount-main {
+    font-family: var(--font-mono, monospace);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+}
+
+.mc-tx-amount-main.in {
+    color: var(--success, #10b981);
+}
+
+.mc-tx-amount-main.out {
+    color: var(--text-secondary, #94a3b8);
+}
+
+.mc-tx-amount-main.failed {
+    color: var(--text-muted, #64748b);
+    text-decoration: line-through;
+    opacity: 0.5;
+}
+
+.mc-tx-amount-sub {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    color: var(--text-muted, #64748b);
+}
+
+/* Status badge */
+.mc-tx-badge {
+    font-family: var(--pixel-font);
+    font-size: 8px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 2px;
+    line-height: 1.6;
+}
+
+.mc-tx-badge.mc-tx-success {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--success, #10b981);
+}
+
+.mc-tx-badge.mc-tx-failed {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--error, #ef4444);
+}
+
+.mc-tx-badge.mc-tx-pending {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--warning, #f59e0b);
+    animation: mcPulseText 2s infinite;
+}
+
+.mc-tx-badge.mc-tx-cancelled {
+    background: rgba(168, 162, 158, 0.1);
+    color: var(--text-muted, #64748b);
+}
+
