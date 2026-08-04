@@ -1104,6 +1104,72 @@ def rescan_wallet(wallet_name, password):
     return result
 
 
+def load_binaries_manifest():
+    """Read config/binaries.json — the one place versions are defined."""
+    for candidate in (BASE_DIR / "config" / "binaries.json",
+                      Path(__file__).parent / "config" / "binaries.json"):
+        try:
+            return json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+    return {}
+
+
+BINARIES_MANIFEST = load_binaries_manifest()
+APP_VERSION = BINARIES_MANIFEST.get("app_version", "0.0.0")
+MIN_CONSENSUS_HEIGHT = BINARIES_MANIFEST.get("min_consensus_height", 0)
+
+
+def platform_binary_info():
+    """Manifest entry for the platform we are running on."""
+    return (BINARIES_MANIFEST.get("platforms") or {}).get(PLATFORM, {})
+
+
+def sha256_file(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def verify_binary(name, path):
+    """Check a downloaded binary against the hash pinned in the manifest.
+
+    The archives ship a *-checksum.txt which the installers already downloaded
+    and then ignored. That only proves the file arrived intact from wherever it
+    came from; pinning the hash in our own repo is what catches a substituted
+    upstream artifact.
+    """
+    entry = (platform_binary_info().get("binaries") or {}).get(name) or {}
+    expected = entry.get("sha256")
+    if not expected:
+        return {"ok": True, "checked": False, "reason": "no pinned hash for this platform"}
+    try:
+        actual = sha256_file(path)
+    except OSError as e:
+        return {"ok": False, "checked": True, "reason": str(e)}
+    if actual != expected:
+        return {"ok": False, "checked": True,
+                "reason": f"{name} sha256 mismatch: expected {expected[:16]}…, got {actual[:16]}…"}
+    return {"ok": True, "checked": True}
+
+
+def consensus_warning():
+    """Tell the caller if this platform's pinned BEAM build is fork-stale."""
+    info = platform_binary_info()
+    if info and info.get("hf6_compatible") is False:
+        return {
+            "out_of_consensus": True,
+            "beam_version": info.get("beam_version"),
+            "required_version": (BINARIES_MANIFEST.get("hardfork") or {}).get("min_beam_version"),
+            "fork_height": MIN_CONSENSUS_HEIGHT,
+            "reason": info.get("unsupported_reason", ""),
+        }
+    return {"out_of_consensus": False}
+
+
 def write_secret_cfg(values, tag="beam"):
     """Write BEAM options to a 0600 temp config file and return its path.
 
@@ -1486,7 +1552,9 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             "node_progress": node_status.get("progress", 0),
             "node_height": node_status.get("height", 0),
             "install_type": install_type,
-            "version": "1.0.2"
+            "version": APP_VERSION,
+            "beam_version": platform_binary_info().get("beam_version"),
+            "consensus": consensus_warning(),
         })
 
     def handle_heartbeat(self):

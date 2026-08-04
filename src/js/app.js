@@ -3699,12 +3699,47 @@ async function checkServerStatus() {
         if (response.ok) {
             const status = await response.json();
             lastServerStatus = status; // Store for sync status display
+            updateConsensusBanner(status.consensus);
             return status;
         }
         return null;
     } catch (e) {
         return null;
     }
+}
+
+/**
+ * The bundled BEAM build can be too old to follow the chain at all — that is
+ * what HF6 did to every macOS install. No amount of waiting fixes it, so this
+ * says so plainly instead of letting the user watch a sync bar forever.
+ */
+function updateConsensusBanner(consensus) {
+    const existing = document.getElementById('consensus-banner');
+    if (!consensus || !consensus.out_of_consensus) {
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'consensus-banner';
+    banner.className = 'sync-banner-error';
+    banner.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <path d="M12 9v4M12 17h.01"/>
+        </svg>
+        <span>
+            <strong>Your BEAM binaries cannot follow the network.</strong>
+            Version ${escapeHtml(consensus.beam_version || '?')} stops at block
+            ${(consensus.fork_height || 0).toLocaleString()} (hard fork
+            ${escapeHtml((consensus.required_version || '') && 'HF6')}); version
+            ${escapeHtml(consensus.required_version || '?')} or newer is required.
+            Balances and history will stay frozen until the binaries are updated.
+        </span>
+    `;
+    const container = document.querySelector('.main-content') || document.body;
+    container.insertBefore(banner, container.firstChild);
 }
 
 // Welcome screen state

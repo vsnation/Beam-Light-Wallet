@@ -1,0 +1,89 @@
+{
+  "_comment": [
+    "The single source of truth for versions. BEAM_VERSION used to be hardcoded in 13 files",
+    "across bash, batch, PowerShell, Inno Pascal, JS and Markdown, and the app version",
+    "disagreed with itself four ways. Every installer and serve.py reads this file instead.",
+    "",
+    "sha256 values are the hash of the EXTRACTED binary, cross-checked against the",
+    "*-checksum.txt that BeamMW ships inside each archive. Pinning them here means a",
+    "substituted upstream artifact fails verification, which a checksum fetched from the",
+    "same place as the binary would not catch.",
+    "",
+    "min_consensus_height is the HF6 activation block. A node that cannot pass it is out of",
+    "consensus no matter what its own logs claim about being synced."
+  ],
+
+  "app_version": "1.1.0",
+  "min_consensus_height": 3928666,
+  "hardfork": {
+    "name": "HF6",
+    "height": 3928666,
+    "activated": "2026-06-30",
+    "min_beam_version": "7.5.14493",
+    "note": "Builds older than min_beam_version stall one block before this height and never recover."
+  },
+
+  "release_base": "https://github.com/BeamMW/beam/releases/download",
+
+  "platforms": {
+    "linux": {
+      "beam_version": "7.5.14493",
+      "hf6_compatible": true,
+      "asset_prefix": "linux",
+      "archive_ext": "zip",
+      "inner_ext": "tar",
+      "binaries": {
+        "wallet-api": {
+          "asset": "linux-wallet-api-7.5.14493.zip",
+          "sha256": "2fad3f6e08f88055a68ec7b0c67f535e1d99b649f0636d5046e2018eddb07bee"
+        },
+        "beam-node": {
+          "asset": "linux-beam-node-7.5.14493.zip",
+          "sha256": "e9bc41a717ef6d90a9f3fcc8f41fff71071afd401c16c6093f3351c814c19fa1"
+        },
+        "beam-wallet": {
+          "asset": "linux-beam-wallet-cli-7.5.14493.zip",
+          "sha256": null
+        }
+      }
+    },
+
+    "windows": {
+      "beam_version": "7.5.14493",
+      "hf6_compatible": true,
+      "_note": "Assets are prefixed 'win-', not 'windows-'. Two installers requested the wrong name and 404'd.",
+      "asset_prefix": "win",
+      "archive_ext": "zip",
+      "binaries": {
+        "wallet-api": {
+          "asset": "win-wallet-api-7.5.14493.zip",
+          "file": "wallet-api.exe",
+          "sha256": "b4472548302419ab38e7169d83fe7bee7ffec2b29095ab4d5b5923d32cfbe1de"
+        },
+        "beam-node": {
+          "asset": "win-beam-node-7.5.14493.zip",
+          "file": "beam-node.exe",
+          "sha256": "17ffa8cf7d2ccf8f7feea2cd9aa42e0babc541ba2086a52ee157575d173caa4e"
+        },
+        "beam-wallet": {
+          "asset": "win-beam-wallet-cli-7.5.14493.zip",
+          "file": "beam-wallet.exe",
+          "sha256": "1ab78fc5e28d7c31a6a48bae0f294ed15073602557650bcc118b9351c80a0064"
+        }
+      }
+    },
+
+    "macos": {
+      "beam_version": "7.5.13882",
+      "hf6_compatible": false,
+      "unsupported_reason": "BeamMW has published no macOS build since 7.5.13882 (2024-05-25), and shipped no mac asset for the 7.5.14493 HF6 hotfix. 7.5.13882 stalls at block 3928665 and cannot follow mainnet.",
+      "asset_prefix": "mac",
+      "archive_ext": "zip",
+      "binaries": {
+        "wallet-api": { "asset": "mac-wallet-api-7.5.13882.zip", "sha256": null },
+        "beam-node": { "asset": "mac-beam-node-7.5.13882.zip", "sha256": null },
+        "beam-wallet": { "asset": "mac-beam-wallet-cli-7.5.13882.zip", "sha256": null }
+      }
+    }
+  }
+}

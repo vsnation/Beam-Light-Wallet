@@ -160,15 +160,15 @@ class LightWalletTests:
         self.screenshot("02_welcome_screen")
 
         # Check for wallet selector
-        assert self.element_exists("#wallet-select") or self.element_exists(".wallet-select"), \
+        assert self.element_exists("#welcome-wallet-select") or self.element_exists(".welcome-select"), \
             "Wallet selector not found"
 
         # Check for password input
-        assert self.element_exists("#unlock-password") or self.element_exists("[type='password']"), \
+        assert self.element_exists("#welcome-password") or self.element_exists("[type='password']"), \
             "Password input not found"
 
         # Check for unlock button
-        assert self.element_exists("#unlock-btn") or self.element_exists(".unlock-btn") or \
+        assert self.element_exists("#welcome-unlock-btn") or self.element_exists(".welcome-btn") or \
                self.element_exists("button"), "Unlock button not found"
 
     def test_03_create_wallet_button(self):
@@ -182,7 +182,7 @@ class LightWalletTests:
             "#create-wallet-btn",
             "[onclick*='showCreateWallet']",
             "a[href*='create']",
-            "button:contains('Create')"
+            "#welcome-create-btn"
         ]
 
         found = False

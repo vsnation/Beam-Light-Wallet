@@ -1,6 +1,22 @@
 /**
  * BEAM Wallet - Configuration Module
  * All constants, asset configs, and global settings
+ *
+ * ---------------------------------------------------------------------------
+ * NOT LOADED AT RUNTIME. src/index.html loads six classic <script> tags
+ * (dex-shader.js, airdrop-shader.js, fuddle-shader.js, pages/fuddle.js,
+ * pages/meme_battle.js, app.js) and no ES modules at all. Nothing imports this
+ * file except its equally unloaded siblings — api.js, state.js, utils.js,
+ * components/*, pages/{dex,send,receive,transactions}.js. Changing a value here
+ * has no effect on the running wallet; the values it actually uses are inside
+ * src/js/app.js.
+ *
+ * VERSIONS DO NOT LIVE HERE. config/binaries.json is the single source of truth
+ * for the app version and for the per-platform BEAM binary version. serve.py
+ * reads it at startup and exposes it over GET /api/status. Do not reintroduce a
+ * version constant in this file — that duplication is what let the app version
+ * disagree with itself four ways.
+ * ---------------------------------------------------------------------------
  */
 
 // Official BEAM logo as data URI (avoids CORS issues)
@@ -13,7 +29,11 @@ export const ASSET_ICONS = {
     7: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/beamx.png',
     9: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/tico.ico',
     47: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/47_nph.svg',
-    174: 'https://73ecj7qctz4nrza4bbbqmgriv4gh5uwwf65izu7wjdvrmozhbvbq.arweave.net/_sgk_gKeeNjkHAhDBhoorwx-0tYvuozT9kjrFjsnDUM'
+    174: 'https://73ecj7qctz4nrza4bbbqmgriv4gh5uwwf65izu7wjdvrmozhbvbq.arweave.net/_sgk_gKeeNjkHAhDBhoorwx-0tYvuozT9kjrFjsnDUM',
+    186: 'https://ipfs.io/ipfs/QmZrekbbMSqYNjbkyKM9Ar3k7f6RUW2zUmNv9cxGz8DZvJ',
+    187: 'https://ipfs.io/ipfs/QmYMksnyN1Cb32jMFkQcjxao3i7XSPL1dWJuHrGXcTr5cx',
+    190: 'https://ipfs.io/ipfs/QmYMksnyN1Cb32jMFkQcjxao3i7XSPL1dWJuHrGXcTr5cx',
+    191: 'https://ipfs.io/ipfs/QmZrekbbMSqYNjbkyKM9Ar3k7f6RUW2zUmNv9cxGz8DZvJ'
 };
 
 // Priority token config with metadata
@@ -24,7 +44,11 @@ export const ASSET_CONFIG = {
     7: { name: 'BeamX', symbol: 'BEAMX', color: '#da70d6', class: 'beamx', icon: ASSET_ICONS[7], decimals: 8 },
     9: { name: 'Tico', symbol: 'TICO', color: '#e91e63', class: 'fomo', icon: ASSET_ICONS[9], decimals: 8 },
     47: { name: 'Nephrit', symbol: 'NPH', color: '#3498db', class: 'fomo', icon: ASSET_ICONS[47], decimals: 8 },
-    174: { name: 'FOMO', symbol: 'FOMO', color: '#60a5fa', class: 'fomo', icon: ASSET_ICONS[174], decimals: 8 }
+    174: { name: 'FOMO', symbol: 'FOMO', color: '#60a5fa', class: 'fomo', icon: ASSET_ICONS[174], decimals: 8 },
+    186: { name: 'GigaChad', symbol: 'GIGA', color: '#a855f7', class: 'fomo', icon: ASSET_ICONS[186], decimals: 8 },
+    187: { name: 'Chad', symbol: 'CHAD', color: '#25c2a0', class: 'beam', icon: ASSET_ICONS[187], decimals: 8 },
+    190: { name: 'Chad', symbol: 'CHAD', color: '#25c2a0', class: 'beam', icon: ASSET_ICONS[190], decimals: 8 },
+    191: { name: 'GigaChad', symbol: 'GIGA', color: '#a855f7', class: 'fomo', icon: ASSET_ICONS[191], decimals: 8 }
 };
 
 // API Configuration
@@ -36,8 +60,8 @@ export const DEFAULT_FEE = 100000;  // 0.001 BEAM
 export const DEX_CID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
 
 // Airdrop Contract ID (Voucher-based token distribution)
-// Set after deployment
-export const AIRDROP_CID = '';
+// Must match AIRDROP_CONTRACT_ID in serve.py and the CID shipped in the Airdrop dApp
+export const AIRDROP_CID = '8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c349b5b18e';
 
 // Pool types (affects fees)
 export const POOL_KINDS = {
@@ -74,9 +98,17 @@ export const TX_TYPES = {
     13: 'Contract'
 };
 
-// Wallet version
-export const VERSION = '1.0.0';
-export const BEAM_VERSION = '7.5.13882';
+// Wallet version / BEAM binary version: intentionally absent.
+//
+// Read them from config/binaries.json, or from GET /api/status which serves the
+// same values:
+//   app_version                          -> wallet version
+//   platforms.<os>.beam_version          -> BEAM binaries pinned for that OS
+//   platforms.<os>.hf6_compatible        -> can that build follow mainnet past HF6
+//
+// A single BEAM_VERSION constant would be wrong by construction now: the
+// platforms are pinned to different BEAM builds, and not all of them can follow
+// mainnet past the fork height (min_consensus_height in the manifest).
 
 // Debug configuration
 export const MAX_DEBUG_LOGS = 100;
