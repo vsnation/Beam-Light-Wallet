@@ -660,7 +660,11 @@
 
                 <!-- P2P Marketplace Page -->
                 <div class="page" id="page-p2p">
-                    <iframe id="p2p-iframe" src="/p2p/p2p.html" style="width: 100%; height: calc(100vh - 80px); border: none; background: transparent;"></iframe>
+                    <!-- src is set on first navigation to the P2P page. Loading it
+                         here cost every launch 635 KB (p2p.js 383K + p2p.css 163K +
+                         p2p.html 89K) plus a CDN script, for an alpha feature most
+                         sessions never open. -->
+                    <iframe id="p2p-iframe" data-src="/p2p/p2p.html" style="width: 100%; height: calc(100vh - 80px); border: none; background: transparent;"></iframe>
                 </div>
 
                 <!-- Airdrop Page -->

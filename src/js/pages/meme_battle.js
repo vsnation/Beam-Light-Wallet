@@ -1718,7 +1718,11 @@ function initMemeClash() {
         // Load transaction history
         mcLoadTxTable();
     });
+    // Clear first: this used to assign over a live handle, so every visit to
+    // the page orphaned an interval that could never be cancelled again.
+    if (mcState.refreshInterval) clearInterval(mcState.refreshInterval);
     mcState.refreshInterval = setInterval(() => {
+        if (document.hidden) return;   // no polling for a window nobody is looking at
         mcLoadAll();
     }, 30000);
 }

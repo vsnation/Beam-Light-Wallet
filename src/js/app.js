@@ -582,16 +582,58 @@ const GROTH = 100000000;
 
 // Centralized interval management
 const activeIntervals = {};
+// Remembered so a timer suspended while the window is hidden can be restarted.
+const intervalMeta = {};
 function startInterval(name, fn, ms) {
     if (activeIntervals[name]) clearInterval(activeIntervals[name]);
+    intervalMeta[name] = { fn, ms, suspended: false };
     activeIntervals[name] = setInterval(fn, ms);
 }
 function stopInterval(name) {
     if (activeIntervals[name]) { clearInterval(activeIntervals[name]); delete activeIntervals[name]; }
+    delete intervalMeta[name];
 }
 function stopAllIntervals() {
     Object.keys(activeIntervals).forEach(stopInterval);
 }
+
+/**
+ * Tear down the timers each page module owns. Those modules keep their own
+ * handles rather than using the registry above, so leaving a page has to ask
+ * them to clean up — otherwise their pollers outlive the page forever.
+ */
+function stopPageTimers() {
+    try { if (typeof cleanupMemeClash === 'function') cleanupMemeClash(); } catch (e) {}
+    try { if (typeof cleanupFuddle === 'function') cleanupFuddle(); } catch (e) {}
+    if (window._airdropTxInterval) {
+        clearInterval(window._airdropTxInterval);
+        window._airdropTxInterval = null;
+    }
+}
+
+/**
+ * Nothing needs to poll while the window is hidden. Suspending on blur is the
+ * single cheapest win available: a backgrounded wallet drops to zero requests
+ * instead of continuing to hammer the API for as long as it stays open.
+ */
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        Object.keys(activeIntervals).forEach(name => {
+            const meta = intervalMeta[name];
+            if (meta) meta.suspended = true;
+            clearInterval(activeIntervals[name]);
+        });
+    } else {
+        Object.keys(intervalMeta).forEach(name => {
+            const meta = intervalMeta[name];
+            if (meta && meta.suspended) {
+                meta.suspended = false;
+                activeIntervals[name] = setInterval(meta.fn, meta.ms);
+                try { meta.fn(); } catch (e) {}   // catch up immediately
+            }
+        });
+    }
+});
 
 // Sanitize numeric input - convert commas to decimal points
 function sanitizeNumericInput(input) {
@@ -1067,9 +1109,13 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
 });
 
 function showPage(pageId, updateUrl = true) {
-    // Stop page-specific intervals when leaving a page
+    // Every page-scoped poller stops here. This used to stop exactly two of
+    // them, so fuddle, MemeClash and airdrop kept polling forever after you
+    // navigated away — and MemeClash started a fresh uncancellable interval on
+    // each visit, so an idle dashboard drifted towards ~100 API calls/minute.
     stopInterval('dexActivity');
     stopInterval('explorerRefresh');
+    stopPageTimers();
 
     // Update nav
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -1156,6 +1202,12 @@ function showPage(pageId, updateUrl = true) {
         if (typeof initMemeClash === 'function') initMemeClash();
     } else if (pageId === 'settings') {
         loadSettings();
+    } else if (pageId === 'p2p') {
+        // Load the P2P bundle the first time it is actually opened.
+        const frame = document.getElementById('p2p-iframe');
+        if (frame && !frame.src && frame.dataset.src) {
+            frame.src = frame.dataset.src;
+        }
     }
 }
 
