@@ -9314,6 +9314,13 @@ async function openTokenSelector(mode) {
             console.log(`Loaded ${allAssetsCache.length} assets from blockchain`);
         } catch (e) {
             console.error('Failed to load assets:', e);
+            // Falling through to renderTokenList() here would show "No tokens
+            // found", which reads as "this wallet has no assets" when in fact
+            // the request failed. Say what actually happened and offer a retry.
+            document.getElementById('token-select-list').innerHTML =
+                errorState('Could not load the asset list', `openTokenSelector('${tokenSelectMode}')`,
+                           { detail: e.message });
+            return;
         }
     }
 
