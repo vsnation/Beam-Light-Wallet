@@ -9,8 +9,33 @@ BUILD_DIR="$SCRIPT_DIR"
 PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 APP_NAME="BEAM Light Wallet"
 DMG_NAME="Beam-Light-Wallet"
-VERSION="1.0.5"
-BEAM_VERSION="7.5.13882"
+
+# Versions come from config/binaries.json, the single source of truth.
+MANIFEST="$PROJECT_DIR/config/binaries.json"
+if [ ! -f "$MANIFEST" ]; then
+    echo "ERROR: version manifest not found: $MANIFEST"
+    exit 1
+fi
+
+# manifest <key> [<key> ...] -> value ("" for null, true/false for booleans)
+manifest() {
+    python3 - "$MANIFEST" "$@" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k in sys.argv[2:]:
+    d = d[k]
+print(json.dumps(d) if isinstance(d, bool) else ('' if d is None else d))
+PYEOF
+}
+
+VERSION="$(manifest app_version)" || true
+BEAM_VERSION="$(manifest platforms macos beam_version)" || true
+HF6_COMPATIBLE="$(manifest platforms macos hf6_compatible)" || true
+
+if [ -z "$VERSION" ] || [ -z "$BEAM_VERSION" ]; then
+    echo "ERROR: could not read app_version / macOS beam_version from $MANIFEST"
+    exit 1
+fi
 
 echo "=== BEAM Light Wallet DMG Builder ==="
 echo "Project: $PROJECT_DIR"
@@ -18,10 +43,31 @@ echo "Version: $VERSION"
 echo "BEAM Version: $BEAM_VERSION"
 echo ""
 
+if [ "$HF6_COMPATIBLE" != "true" ]; then
+    HF_NAME="$(manifest hardfork name)"
+    HF_HEIGHT="$(manifest hardfork height)"
+    echo "########################################################################"
+    echo "#  WARNING: THIS DMG SHIPS BINARIES THAT CANNOT FOLLOW MAINNET.        #"
+    echo "########################################################################"
+    echo "#"
+    echo "#  macOS BEAM version:  $BEAM_VERSION"
+    echo "#  $HF_NAME activates at block:  $HF_HEIGHT"
+    echo "#"
+    echo "#  These binaries stall one block before the fork and never recover,"
+    echo "#  so balances and transaction history will be STALE and transactions"
+    echo "#  may be rejected by the network."
+    echo "#"
+    echo "#  $(manifest platforms macos unsupported_reason)"
+    echo "#"
+    echo "#  The app warns the user about this at launch as well."
+    echo "########################################################################"
+    echo ""
+fi
+
 # Create icon if not exists
 if [ ! -f "$BUILD_DIR/AppIcon.icns" ]; then
     echo "Creating app icon..."
-    "$BUILD_DIR/create-icon.sh"
+    "$BUILD_DIR/make-icon.sh"
 fi
 
 # Create app bundle structure
@@ -78,7 +124,9 @@ RESOURCES_DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
 
 # All private data stored in ~/.beam-light-wallet
 DATA_DIR="$HOME/.beam-light-wallet"
-BEAM_VERSION="7.5.13882"
+# BEAM_VERSION and the download asset names are NOT hardcoded: they are read
+# from Resources/config/binaries.json further down, after the auto-update step
+# has had a chance to refresh that manifest.
 REPO_URL="https://github.com/vsnation/Beam-Light-Wallet"
 BINARIES_DIR="$DATA_DIR/binaries/macos"
 WALLETS_DIR="$DATA_DIR/wallets"
@@ -173,11 +221,76 @@ else
 fi
 
 # ==========================================
+# Version manifest (single source of truth)
+# ==========================================
+MANIFEST="$RESOURCES_DIR/config/binaries.json"
+
+# manifest <key> [<key> ...] -> value ("" for null/missing, true/false for bools)
+manifest() {
+    python3 - "$MANIFEST" "$@" <<'PYEOF' 2>/dev/null
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k in sys.argv[2:]:
+    d = d[k]
+print(json.dumps(d) if isinstance(d, bool) else ('' if d is None else d))
+PYEOF
+}
+
+BEAM_VERSION="$(manifest platforms macos beam_version)" || true
+RELEASE_BASE="$(manifest release_base)" || true
+
+if [ -z "$BEAM_VERSION" ] || [ -z "$RELEASE_BASE" ]; then
+    osascript -e 'display dialog "BEAM Light Wallet could not read its version manifest (config/binaries.json).\n\nThe installation looks incomplete. Please reinstall the app." buttons {"OK"} default button 1 with icon stop with title "BEAM Light Wallet"'
+    exit 1
+fi
+
+GITHUB_BASE="$RELEASE_BASE/beam-$BEAM_VERSION"
+HF6_COMPATIBLE="$(manifest platforms macos hf6_compatible)" || true
+
+ASSET_WALLET_API="$(manifest platforms macos binaries wallet-api asset)" || true
+ASSET_BEAM_WALLET="$(manifest platforms macos binaries beam-wallet asset)" || true
+ASSET_BEAM_NODE="$(manifest platforms macos binaries beam-node asset)" || true
+
+SHA_WALLET_API="$(manifest platforms macos binaries wallet-api sha256)" || true
+SHA_BEAM_WALLET="$(manifest platforms macos binaries beam-wallet sha256)" || true
+SHA_BEAM_NODE="$(manifest platforms macos binaries beam-node sha256)" || true
+
+# ==========================================
+# Hard fork compatibility warning
+# ==========================================
+HF6_WARNING=""
+if [ "$HF6_COMPATIBLE" != "true" ]; then
+    HF_NAME="$(manifest hardfork name)" || true
+    HF_HEIGHT="$(manifest hardfork height)" || true
+
+    # Single line with \n escapes: AppleScript string literals cannot span lines.
+    HF6_WARNING="WARNING: this macOS build cannot follow mainnet.\n\nBEAM binaries $BEAM_VERSION predate the $HF_NAME hard fork at block $HF_HEIGHT. They stall one block before the fork and never recover, so the balances and transaction history shown here will be STALE, and transactions you create may be rejected.\n\n$(manifest platforms macos unsupported_reason)"
+
+    echo ""
+    echo "########################################################################"
+    echo "#  WARNING: BEAM $BEAM_VERSION CANNOT FOLLOW MAINNET PAST $HF_NAME (block $HF_HEIGHT)."
+    echo "#  Balances and history will be STALE. See the dialog for details."
+    echo "########################################################################"
+    echo ""
+
+    # Show the dialog once per BEAM version rather than on every launch.
+    HF_ACK_FILE="$DATA_DIR/.hf_warning_ack_$BEAM_VERSION"
+    if [ ! -f "$HF_ACK_FILE" ]; then
+        osascript -e "display dialog \"$HF6_WARNING\" buttons {\"I understand\"} default button 1 with icon caution with title \"BEAM Light Wallet - Stale Balances\"" >/dev/null 2>&1 || true
+        touch "$HF_ACK_FILE" 2>/dev/null || true
+    fi
+fi
+
+# ==========================================
 # Download BEAM binaries if needed
 # ==========================================
 if [ ! -f "$BINARIES_DIR/wallet-api" ] || [ ! -f "$BINARIES_DIR/beam-wallet" ]; then
     # Show download dialog
-    RESPONSE=$(osascript -e 'display dialog "BEAM Light Wallet needs to download required components (~80MB).\n\nThis is a one-time setup." buttons {"Cancel", "Download"} default button 2 with title "BEAM Light Wallet - First Run Setup"' 2>/dev/null || echo "button returned:Cancel")
+    SETUP_MSG="BEAM Light Wallet needs to download required components (~80MB).\n\nThis is a one-time setup."
+    if [ -n "$HF6_WARNING" ]; then
+        SETUP_MSG="$SETUP_MSG\n\nNote: these are BEAM $BEAM_VERSION binaries, which cannot follow mainnet past the $HF_NAME fork. Balances shown will be stale."
+    fi
+    RESPONSE=$(osascript -e "display dialog \"$SETUP_MSG\" buttons {\"Cancel\", \"Download\"} default button 2 with title \"BEAM Light Wallet - First Run Setup\"" 2>/dev/null || echo "button returned:Cancel")
 
     if [[ "$RESPONSE" == *"Cancel"* ]]; then
         exit 0
@@ -187,27 +300,53 @@ if [ ! -f "$BINARIES_DIR/wallet-api" ] || [ ! -f "$BINARIES_DIR/beam-wallet" ]; 
     osascript << EOF
 tell application "Terminal"
     activate
-    do script "cd '$RESOURCES_DIR' && echo '=== BEAM Light Wallet Setup ===' && echo '' && BEAM_VERSION='$BEAM_VERSION' BINARIES_DIR='$BINARIES_DIR' bash -c '
-        GITHUB_BASE=\"https://github.com/BeamMW/beam/releases/download/beam-\${BEAM_VERSION}\"
+    do script "cd '$RESOURCES_DIR' && echo '=== BEAM Light Wallet Setup ===' && echo '' && BEAM_VERSION='$BEAM_VERSION' BINARIES_DIR='$BINARIES_DIR' GITHUB_BASE='$GITHUB_BASE' ASSET_WALLET_API='$ASSET_WALLET_API' ASSET_BEAM_WALLET='$ASSET_BEAM_WALLET' ASSET_BEAM_NODE='$ASSET_BEAM_NODE' SHA_WALLET_API='$SHA_WALLET_API' SHA_BEAM_WALLET='$SHA_BEAM_WALLET' SHA_BEAM_NODE='$SHA_BEAM_NODE' bash -c '
         cd \"\$BINARIES_DIR\"
 
+        # Compare an extracted binary against the sha256 pinned in config/binaries.json.
+        verify_sha256() {
+            if [ -z \"\$2\" ]; then
+                echo \"  no pinned sha256 for \$1 in binaries.json - skipping verification\"
+                return 0
+            fi
+            ACTUAL=\$(shasum -a 256 \"\$1\" | cut -d\" \" -f1)
+            if [ \"\$ACTUAL\" != \"\$2\" ]; then
+                echo \"\"
+                echo \"  SHA256 MISMATCH for \$1\"
+                echo \"    expected: \$2\"
+                echo \"    actual:   \$ACTUAL\"
+                echo \"\"
+                echo \"  This does not match config/binaries.json, so the download cannot\"
+                echo \"  be trusted. Deleting it and aborting setup.\"
+                rm -f \"\$1\"
+                exit 1
+            fi
+            echo \"  sha256 verified: \$1\"
+        }
+
         echo \"Downloading wallet-api...\"
-        curl -L -# \"\${GITHUB_BASE}/mac-wallet-api-\${BEAM_VERSION}.zip\" -o wallet-api.zip
+        curl -fL -# \"\${GITHUB_BASE}/\${ASSET_WALLET_API}\" -o wallet-api.zip || exit 1
         unzip -o wallet-api.zip && tar -xf wallet-api.tar && rm -f wallet-api.zip wallet-api.tar && chmod +x wallet-api
+        verify_sha256 wallet-api \"\$SHA_WALLET_API\" || exit 1
         echo \"wallet-api downloaded!\"
 
         echo \"\"
         echo \"Downloading beam-wallet...\"
-        curl -L -# \"\${GITHUB_BASE}/mac-beam-wallet-cli-\${BEAM_VERSION}.zip\" -o beam-wallet.zip
+        curl -fL -# \"\${GITHUB_BASE}/\${ASSET_BEAM_WALLET}\" -o beam-wallet.zip || exit 1
         unzip -o beam-wallet.zip && tar -xf beam-wallet.tar && rm -f beam-wallet.zip beam-wallet.tar && chmod +x beam-wallet
+        verify_sha256 beam-wallet \"\$SHA_BEAM_WALLET\" || exit 1
         echo \"beam-wallet downloaded!\"
 
         echo \"\"
         echo \"Downloading beam-node...\"
-        curl -L -# \"\${GITHUB_BASE}/mac-beam-node-\${BEAM_VERSION}.zip\" -o beam-node.zip
+        curl -fL -# \"\${GITHUB_BASE}/\${ASSET_BEAM_NODE}\" -o beam-node.zip
         unzip -o beam-node.zip 2>/dev/null && tar -xf beam-node.tar 2>/dev/null || true
         rm -f beam-node.zip beam-node.tar
-        [ -f beam-node ] && chmod +x beam-node && echo \"beam-node downloaded!\"
+        if [ -f beam-node ]; then
+            chmod +x beam-node
+            verify_sha256 beam-node \"\$SHA_BEAM_NODE\" || exit 1
+            echo \"beam-node downloaded!\"
+        fi
 
         echo \"\"
         echo \"Removing quarantine flags...\"

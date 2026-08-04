@@ -1,0 +1,11 @@
+<!--
+  BEAM Light Wallet — small tier (32, 16)
+  Silhouette only. Two flat colours, a thicker hollow, no gradients: at 16px a
+  gradient is a single muddy average, and thin geometry vanishes entirely.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect x="60" y="60" width="904" height="904" rx="200" ry="200" fill="#0b1524"/>
+  <polygon points="512,232 782,724 242,724" fill="#3ee0c4"/>
+  <polygon points="512,232 782,724 512,724" fill="#2a76c8"/>
+  <polygon points="512,430 646,676 378,676" fill="#0b1524"/>
+</svg>

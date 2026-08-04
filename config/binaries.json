@@ -43,7 +43,7 @@
         },
         "beam-wallet": {
           "asset": "linux-beam-wallet-cli-7.5.14493.zip",
-          "sha256": null
+          "sha256": "e4256c330939045ab90d78265987cb2e86057b201e7e8306d41e6d7dab4906fb"
         }
       }
     },
