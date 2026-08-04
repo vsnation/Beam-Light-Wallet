@@ -1,3 +1,0 @@
-wallet-api https://github.com/BeamMW/beam/releases/download/beam-7.5.14493/linux-wallet-api-7.5.14493.zip 2fad3f6e08f88055a68ec7b0c67f535e1d99b649f0636d5046e2018eddb07bee wallet-api
-beam-node https://github.com/BeamMW/beam/releases/download/beam-7.5.14493/linux-beam-node-7.5.14493.zip e9bc41a717ef6d90a9f3fcc8f41fff71071afd401c16c6093f3351c814c19fa1 beam-node
-beam-wallet https://github.com/BeamMW/beam/releases/download/beam-7.5.14493/linux-beam-wallet-cli-7.5.14493.zip e4256c330939045ab90d78265987cb2e86057b201e7e8306d41e6d7dab4906fb beam-wallet
