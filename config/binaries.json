@@ -74,15 +74,34 @@
     },
 
     "macos": {
-      "beam_version": "7.5.13882",
-      "hf6_compatible": false,
-      "unsupported_reason": "BeamMW has published no macOS build since 7.5.13882 (2024-05-25), and shipped no mac asset for the 7.5.14493 HF6 hotfix. 7.5.13882 stalls at block 3928665 and cannot follow mainnet.",
-      "asset_prefix": "mac",
+      "beam_version": "7.5.14493",
+      "hf6_compatible": true,
+      "_note": [
+        "BeamMW ships no macOS build of the HF6 hotfix — their last mac release is",
+        "7.5.13882 (2024-05-25), which stalls forever at block 3928665. These are",
+        "built from the beam-7.5.14493 tag ourselves; see docs/BUILDING_BEAM_MACOS.md.",
+        "Verified on 2026-08-04: Rules signature carries 3928666-96df3f33ee02ad9e and",
+        "the binary syncs to the live tip against a public node.",
+        "arm64 only. Rebuild from the tag when upstream bumps."
+      ],
+      "arch": "arm64",
+      "self_built": true,
+      "release_base_override": "https://github.com/vsnation/Beam-Light-Wallet/releases/download",
+      "asset_prefix": "mac-arm64",
       "archive_ext": "zip",
       "binaries": {
-        "wallet-api": { "asset": "mac-wallet-api-7.5.13882.zip", "sha256": null },
-        "beam-node": { "asset": "mac-beam-node-7.5.13882.zip", "sha256": null },
-        "beam-wallet": { "asset": "mac-beam-wallet-cli-7.5.13882.zip", "sha256": null }
+        "wallet-api": {
+          "asset": "mac-arm64-wallet-api-7.5.14493.zip",
+          "sha256": "102f28256c01cfa37243c1b79564283e3f0ab8ead3d153c67f8ca5dd6117b624"
+        },
+        "beam-node": {
+          "asset": "mac-arm64-beam-node-7.5.14493.zip",
+          "sha256": "d5aadc3f3758f1ff9bd433915c08d0e81c9388b11b84ec94d0f7eade2adb5a57"
+        },
+        "beam-wallet": {
+          "asset": "mac-arm64-beam-wallet-cli-7.5.14493.zip",
+          "sha256": "c694187b4b5e00afb30d2106a2bfd4303462af37f8764afee7c28abfdc1adebb"
+        }
       }
     }
   }
