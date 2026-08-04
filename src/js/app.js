@@ -8767,6 +8767,31 @@ function executeSwap() {
     }
     if (!dexQuote) return;
 
+    // Same omission as send had: the quote proves the pool can fill the trade,
+    // not that this wallet can pay for it. A swap is a contract call, so it
+    // costs BEAM even when BEAM is not one of the two assets - swapping FOMO
+    // for BEAMX from a wallet holding no BEAM fails at the node after the user
+    // has already confirmed.
+    const swapFromAvail = (walletData.assets.find(a => a.id === dexFromAsset.aid) || {}).balance || 0;
+    const swapBeamAvail = (walletData.assets.find(a => a.id === 0) || {}).balance || 0;
+    const swapSpend = dexQuote.amountSmall || 0;
+    const beamNeededForSwap = (dexFromAsset.aid === 0 ? swapSpend : 0) + CONTRACT_CALL_FEE_GROTH;
+
+    if (dexFromAsset.aid !== 0 && swapSpend > swapFromAvail) {
+        showToast(`Not enough ${dexFromAsset.symbol}. ${formatAmount(swapSpend)} requested, `
+            + `${formatAmount(swapFromAvail)} available.`, 'error');
+        return;
+    }
+    if (swapBeamAvail < beamNeededForSwap) {
+        showToast(dexFromAsset.aid === 0
+            ? `Not enough BEAM. Swapping ${formatAmount(swapSpend)} plus about `
+              + `${formatAmount(CONTRACT_CALL_FEE_GROTH)} in network fees needs `
+              + `${formatAmount(beamNeededForSwap)}, and ${formatAmount(swapBeamAvail)} is available.`
+            : `A swap is a contract call and costs about ${formatAmount(CONTRACT_CALL_FEE_GROTH)} BEAM `
+              + `in network fees. This wallet has ${formatAmount(swapBeamAvail)} BEAM.`, 'error');
+        return;
+    }
+
     const fromAmount = document.getElementById('dex-from-amount').value;
     const toAmount = document.getElementById('dex-to-amount').value;
     const rate = dexQuote.buyAmount > 0
