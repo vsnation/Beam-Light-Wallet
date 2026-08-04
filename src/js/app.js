@@ -5,7 +5,10 @@
 // ============================================
 // Version and Auto-Update
 // ============================================
-const APP_VERSION = '1.0.5';
+// Placeholder only. The real value comes from config/binaries.json via
+// GET /api/status and is written into the DOM by applyServerVersion().
+// Do not hardcode a version here — that is how four of them disagreed.
+let APP_VERSION = '—';
 const GITHUB_REPO = 'vsnation/Beam-Light-Wallet';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -1126,6 +1129,19 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
         showPage(page);
     });
 });
+
+/**
+ * Take the app version from the server, which reads it from
+ * config/binaries.json. The welcome screen renders before this arrives, so any
+ * already-painted version label is patched in place.
+ */
+function applyServerVersion(status) {
+    if (!status || !status.version) return;
+    APP_VERSION = status.version;
+    document.querySelectorAll('.welcome-version, [data-app-version]').forEach(el => {
+        el.textContent = 'v' + APP_VERSION;
+    });
+}
 
 /** Hide anything whose feature flag is off. */
 function applyFeatureFlags() {
@@ -3885,6 +3901,7 @@ async function checkServerStatus() {
             const status = await response.json();
             lastServerStatus = status; // Store for sync status display
             updateConsensusBanner(status.consensus);
+            applyServerVersion(status);
             return status;
         }
         return null;
@@ -4092,15 +4109,15 @@ function showLockedOverlay(message) {
                     -webkit-text-fill-color: transparent;
                 }
                 .welcome-subtitle {
-                    font-size: 11px;
-                    color: #da70d6;
+                    font-size: 12px;
+                    color: var(--text-secondary, #94a3b8);
                     letter-spacing: 3px;
                     text-transform: uppercase;
                     margin-bottom: 6px;
                 }
                 .welcome-tagline {
                     font-size: 13px;
-                    color: #64748b;
+                    color: var(--text-muted, #8b98ab);
                 }
                 /* Card container */
                 .welcome-card {
@@ -4385,21 +4402,29 @@ function showLockedOverlay(message) {
                     <div class="welcome-brand">
                         <div class="welcome-logo-container">
                             <div class="welcome-logo-glow"></div>
-                            <svg class="welcome-logo" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <!-- Same geometry as the sidebar mark and the app icon:
+                                 one mark, not three variations on a theme. The
+                                 pink overlay and the third inner triangle are gone
+                                 — they muddied the silhouette at small sizes. -->
+                            <svg class="welcome-logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BEAM">
                                 <defs>
-                                    <linearGradient id="beamCyan" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#00e6d0"/>
-                                        <stop offset="100%" stop-color="#00bfff"/>
+                                    <linearGradient id="wlFaceL" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stop-color="#4ff5d0"/>
+                                        <stop offset="100%" stop-color="#1aa8cf"/>
                                     </linearGradient>
-                                    <linearGradient id="beamPink" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#da70d6"/>
-                                        <stop offset="100%" stop-color="#9370db"/>
+                                    <linearGradient id="wlFaceR" x1="1" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#2f7fd4"/>
+                                        <stop offset="100%" stop-color="#1c3f7a"/>
+                                    </linearGradient>
+                                    <linearGradient id="wlBeam" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#7dfbe4" stop-opacity="0.9"/>
+                                        <stop offset="100%" stop-color="#7dfbe4" stop-opacity="0"/>
                                     </linearGradient>
                                 </defs>
-                                <polygon points="100,25 170,135 30,135" fill="url(#beamCyan)"/>
-                                <polygon points="100,55 145,135 55,135" fill="#0a1628"/>
-                                <polygon points="100,85 125,130 75,130" fill="url(#beamCyan)" opacity="0.6"/>
-                                <polygon points="30,135 55,135 100,55 100,25" fill="url(#beamPink)" opacity="0.3"/>
+                                <polygon points="24,6 44,42 4,42"  fill="url(#wlFaceL)"/>
+                                <polygon points="24,6 44,42 24,42" fill="url(#wlFaceR)"/>
+                                <polygon points="24,17.9 35.8,39.4 12.2,39.4" fill="#0a1420"/>
+                                <polygon points="24,6 27,13 21,13" fill="url(#wlBeam)"/>
                             </svg>
                         </div>
                         <div class="welcome-title">BEAM</div>
@@ -5528,10 +5553,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 30000);
     }
 
-    // Show guide for first-time users
-    if (!localStorage.getItem('guideShown')) {
-        setTimeout(showGuide, 1000);
-    }
+    // The guide no longer ambushes people one second after they unlock. It was
+    // a full-screen modal explaining what a privacy coin is, shown over the
+    // balance they had just come to look at, and it had to be dismissed before
+    // anything could be clicked. It is still one click away from the sidebar's
+    // "Help & Guide" button, which is where someone who wants it will look.
 });
 
 // Current asset for send modal

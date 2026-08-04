@@ -1358,7 +1358,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.handle_p2p_get_reputation()
         elif self.path.startswith("/api/p2p/feedbacks"):
             self.handle_p2p_get_feedbacks()
-        elif self.path in ('/favicon.png', '/manifest.json', '/icon-192.png', '/icon-512.png'):
+        elif self.path in ('/favicon.png', '/favicon.svg', '/favicon.ico', '/manifest.json', '/icon-192.png', '/icon-512.png'):
             # Serve PWA assets from src/ directory
             self.path = "/src" + self.path
             super().do_GET()

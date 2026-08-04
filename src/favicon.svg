@@ -1,0 +1,8 @@
+<!-- Browser tab mark. Same prism as the sidebar, unlock screen and app icon.
+     Silhouette-tier geometry: at 16px anything finer is a smudge. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <rect width="48" height="48" rx="10" fill="#0b1524"/>
+  <polygon points="24,8 42,40 6,40"  fill="#3ee0c4"/>
+  <polygon points="24,8 42,40 24,40" fill="#2a76c8"/>
+  <polygon points="24,20 34,37 14,37" fill="#0b1524"/>
+</svg>

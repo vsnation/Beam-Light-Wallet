@@ -119,14 +119,11 @@
             height: 100%;
         }
 
-        .sidebar-logo::after {
-            content: '';
-            position: absolute;
-            inset: -4px;
-            border-radius: 50%;
-            background: var(--beam-cyan);
-            opacity: 0.2;
-            filter: blur(8px);
+        /* The glow used to be a circle behind a circular checkmark logo. The
+           mark is a prism now, so a round halo sits visibly wrong around it —
+           a drop-shadow follows the actual silhouette instead. */
+        .sidebar-logo svg {
+            filter: drop-shadow(0 0 10px rgba(37, 194, 160, 0.35));
         }
 
         .sidebar-nav {
