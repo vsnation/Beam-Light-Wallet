@@ -409,7 +409,10 @@
                                     <path d="M12 2v20M17 7l-5-5-5 5M7 17l5 5 5-5"/>
                                 </svg>
                                 <h3>No transactions yet</h3>
-                                <p>Your transaction history will appear here</p>
+                                <p>Share your address to get your first payment.</p>
+                                <div class="empty-state-actions">
+                                    <button class="quick-btn quick-btn-primary" onclick="openReceiveModal()">Receive BEAM</button>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -1535,7 +1538,7 @@
                             </div>
 
                             <!-- Node Type Selector -->
-                            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                            <div style="display: flex; gap: var(--space-3); margin-bottom: var(--space-4);">
                                 <button class="node-type-btn active" id="node-public-btn" onclick="chooseNodeMode('public')">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                                         <circle cx="12" cy="12" r="10"/>
@@ -1618,14 +1621,14 @@
                                 <!-- Filled in when the node cannot reach the tip at all (fork-stale build) -->
                                 <div class="node-stall" id="node-stall" hidden></div>
                                 <p class="node-facts-cost" style="margin-top: var(--space-3);">
-                                    The wallet keeps working on a public node while this syncs. Sync progress is measured against the
-                                    network tip reported by a public explorer, not by the node itself.
+                                    Progress is measured against the network tip reported by a public explorer, not against the node's
+                                    own opinion of itself. The wallet stays on a public node until this one reaches the tip.
                                 </p>
                             </div>
 
                             <!-- Node Selection Dropdown -->
-                            <div style="margin-top: 16px;">
-                                <label style="display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Select Node</label>
+                            <div style="margin-top: var(--space-4);">
+                                <label style="display: block; margin-bottom: var(--space-2); color: var(--text-muted); font-size: var(--text-sm);">Select Node</label>
                                 <select id="node-selector" class="search-input" style="width: 100%; cursor: pointer;" onchange="changeNode()">
                                     <option value="eu-node01.mainnet.beam.mw:8100">EU Node 1 (Primary)</option>
                                     <option value="eu-node02.mainnet.beam.mw:8100">EU Node 2</option>

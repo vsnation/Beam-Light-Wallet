@@ -6554,6 +6554,11 @@
 @keyframes skeleton-shimmer {
     to { transform: translateX(100%); }
 }
+/* Nothing under the locked overlay is visible, so nothing under it should
+   animate. Set by showLockedOverlay()/hideLockedOverlay(). */
+body.wallet-locked .skeleton::after {
+    animation: none;
+}
 
 .skeleton-text {
     height: var(--text-xs, 12px);

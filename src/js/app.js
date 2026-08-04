@@ -10372,7 +10372,8 @@ function renderNodeSync(nodeStatus) {
 
     if (pct === null) {
         setNodeSyncField('sync-percentage', '—', 'var(--text-muted)');
-        setNodeSyncField('sync-status-text', 'Syncing', 'var(--text-secondary)');
+        setNodeSyncField('sync-status-text', stalled ? 'Not advancing' : 'Syncing',
+                         stalled ? 'var(--warning)' : 'var(--text-secondary)');
         setNodeSyncField('sync-blocks', height ? `${height.toLocaleString()} blocks` : 'Starting up');
         setNodeSyncField('sync-remaining', 'Network height unavailable');
     } else {
