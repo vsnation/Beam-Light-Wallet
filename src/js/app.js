@@ -3241,8 +3241,9 @@ function errorToMessage(e) {
     if (code === -32603 || has('internal json-rpc error', 'internal jsonrpc error', 'internal error')) {
         return {
             title: 'The wallet could not complete that request',
-            message: 'The wallet service failed internally, which usually means the node it is connected to cannot run this call.',
-            hint: 'Contract features (DEX, Minter, games) need a Local Node. Switch under Settings, wait for it to sync, then retry.'
+            message: 'The wallet service failed internally while running a contract call.',
+            hint: 'This is not a public-node limitation - contract calls work over public nodes. '
+                + 'Usual causes: the wallet is still syncing, or the node is busy. Retry in a moment.'
         };
     }
 
