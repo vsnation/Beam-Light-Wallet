@@ -37,6 +37,7 @@ namespace Airdrop
         static const uint8_t Voucher = 2;
         static const uint8_t Counter = 3;
         static const uint8_t FeePool = 4;      // Per-asset fee accumulator
+        static const uint8_t GasPool = 5;      // Sponsored BEAM for gasless claims
     };
 
     // =========================================
@@ -56,6 +57,28 @@ namespace Airdrop
         Amount m_TotalValueLocked;      // Total voucher value locked
         Amount m_TotalFeesCollected;    // Lifetime fees collected
         Amount m_TotalFeesWithdrawn;    // Lifetime fees withdrawn by owner
+    };
+
+    // Sponsored BEAM that lets someone with no BEAM at all claim a voucher.
+    //
+    // A BEAM transaction must pay a kernel fee, so a brand-new user holding
+    // zero BEAM cannot construct one — they have no inputs. But the wallet
+    // computes its balance as (contract spend + fee), and a contract that
+    // UNLOCKS BEAM contributes negatively to that sum. If the contract releases
+    // at least the fee alongside the voucher asset, the transaction funds
+    // itself and no coin selection happens at all.
+    //
+    // Anyone may top this pool up; it is not owner-only. Griefing is bounded:
+    // a voucher can only be redeemed once, and the attacker pays a kernel fee
+    // per claim plus a fee to create the batch in the first place, so draining
+    // the pool costs more than it yields as long as m_PerClaim stays close to
+    // one fee.
+    struct GasPool {
+        Amount m_Balance;          // BEAM currently available to sponsor claims
+        Amount m_PerClaim;         // released per gasless claim (0 disables)
+        Amount m_TotalSponsored;   // lifetime deposits
+        Amount m_TotalSpent;       // lifetime released to claimers
+        uint64_t m_ClaimsFunded;   // how many claims this pool has paid for
     };
 
     // Per-asset fee accumulator
@@ -121,6 +144,10 @@ namespace Airdrop
         struct FeePool {
             uint8_t m_Tag = KeyTag::FeePool;
             AssetID m_AssetId;
+        };
+
+        struct GasPool {
+            uint8_t m_Tag = KeyTag::GasPool;
         };
     };
 
@@ -188,6 +215,31 @@ namespace Airdrop
             PubKey m_Owner;            // Must match stored owner
             AssetID m_AssetId;         // Which asset to withdraw
             Amount m_Amount;           // Amount to withdraw (must be <= available)
+        };
+
+        // Method 7: SponsorGas - anyone tops up the gasless-claim pool.
+        // Deliberately not owner-gated and deliberately not signed: it only
+        // ever adds BEAM to the contract, and the transaction itself proves the
+        // sponsor paid. m_Sponsor is recorded for attribution only.
+        struct SponsorGas {
+            static const uint32_t s_iMethod = 7;
+            PubKey m_Sponsor;
+            Amount m_Amount;
+        };
+
+        // Method 8: SetGasPerClaim - owner tunes the per-claim subsidy.
+        // Keep it close to one kernel fee; see the note on GasPool.
+        struct SetGasPerClaim {
+            static const uint32_t s_iMethod = 8;
+            PubKey m_Owner;
+            Amount m_PerClaim;         // 0 disables sponsorship entirely
+        };
+
+        // Method 9: WithdrawGas - owner reclaims unspent sponsorship.
+        struct WithdrawGas {
+            static const uint32_t s_iMethod = 9;
+            PubKey m_Owner;
+            Amount m_Amount;
         };
     }
 

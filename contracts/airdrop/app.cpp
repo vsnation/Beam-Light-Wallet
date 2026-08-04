@@ -83,6 +83,14 @@ void DeriveOwnerPk(PubKey& pk)
 #define Airdrop_manager_view_fees(macro) \
     macro(ContractID, cid)
 
+#define Airdrop_manager_set_gas_per_claim(macro) \
+    macro(ContractID, cid) \
+    macro(Amount, per_claim)
+
+#define Airdrop_manager_withdraw_gas(macro) \
+    macro(ContractID, cid) \
+    macro(Amount, amount)
+
 #define AirdropRole_manager(macro) \
     macro(manager, create) \
     macro(manager, destroy) \
@@ -91,7 +99,9 @@ void DeriveOwnerPk(PubKey& pk)
     macro(manager, pause) \
     macro(manager, unpause) \
     macro(manager, withdraw_fees) \
-    macro(manager, view_fees)
+    macro(manager, view_fees) \
+    macro(manager, set_gas_per_claim) \
+    macro(manager, withdraw_gas)
 
 // User actions - pk is auto-derived
 #define Airdrop_user_create_batch(macro) \
@@ -122,6 +132,14 @@ void DeriveOwnerPk(PubKey& pk)
 #define Airdrop_user_get_my_key(macro) \
     macro(ContractID, cid)
 
+// Anyone can sponsor gas, so this lives under the user role, not manager.
+#define Airdrop_user_sponsor_gas(macro) \
+    macro(ContractID, cid) \
+    macro(Amount, amount)
+
+#define Airdrop_user_view_gas(macro) \
+    macro(ContractID, cid)
+
 #define AirdropRole_user(macro) \
     macro(user, create_batch) \
     macro(user, redeem) \
@@ -129,7 +147,9 @@ void DeriveOwnerPk(PubKey& pk)
     macro(user, check_voucher) \
     macro(user, view_my_batches) \
     macro(user, view_batch_vouchers) \
-    macro(user, get_my_key)
+    macro(user, get_my_key) \
+    macro(user, sponsor_gas) \
+    macro(user, view_gas)
 
 #define AirdropRoles_All(macro) \
     macro(manager) \
@@ -762,6 +782,99 @@ ON_METHOD(user, view_batch_vouchers)
             }
         }
     }
+}
+
+ON_METHOD(manager, set_gas_per_claim)
+{
+    PubKey ownerPk;
+    DeriveOwnerPk(ownerPk);
+
+    Method::SetGasPerClaim arg;
+    arg.m_Owner = ownerPk;
+    arg.m_PerClaim = per_claim;
+
+    OwnerAccountID oid;
+    Env::KeyID kid(oid);
+
+    Env::GenerateKernel(&cid, arg.s_iMethod, &arg, sizeof(arg), nullptr, 0, &kid, 1,
+        "Set airdrop gas per claim", 1200000);
+}
+
+ON_METHOD(manager, withdraw_gas)
+{
+    PubKey ownerPk;
+    DeriveOwnerPk(ownerPk);
+
+    Method::WithdrawGas arg;
+    arg.m_Owner = ownerPk;
+    arg.m_Amount = amount;
+
+    FundsChange fc;
+    fc.m_Aid = 0;
+    fc.m_Amount = amount;
+    fc.m_Consume = 0;  // receiving
+
+    OwnerAccountID oid;
+    Env::KeyID kid(oid);
+
+    Env::GenerateKernel(&cid, arg.s_iMethod, &arg, sizeof(arg), &fc, 1, &kid, 1,
+        "Withdraw airdrop gas", 1200000);
+}
+
+// Anyone may sponsor. No signature is required by the contract — the funds come
+// from this transaction, which is proof enough that the sponsor paid.
+ON_METHOD(user, sponsor_gas)
+{
+    if (!amount) {
+        Env::DocAddText("error", "Amount must be positive");
+        return;
+    }
+
+    Method::SponsorGas arg;
+    DeriveMyPk(arg.m_Sponsor, cid);
+    arg.m_Amount = amount;
+
+    FundsChange fc;
+    fc.m_Aid = 0;
+    fc.m_Amount = amount;
+    fc.m_Consume = 1;  // spending
+
+    MyAccountID myid;
+    _POD_(myid.m_Cid) = cid;
+    Env::KeyID kid(myid);
+
+    Env::GenerateKernel(&cid, arg.s_iMethod, &arg, sizeof(arg), &fc, 1, &kid, 1,
+        "Sponsor airdrop gas", 1200000);
+}
+
+ON_METHOD(user, view_gas)
+{
+    Env::Key_T<Key::GasPool> key;
+    _POD_(key.m_Prefix.m_Cid) = cid;
+    _POD_(key.m_KeyInContract).SetZero();
+    key.m_KeyInContract.m_Tag = Airdrop::KeyTag::GasPool;
+
+    GasPool gp;
+    if (!Env::VarReader::Read_T(key, gp)) {
+        // No pool yet is a normal state, not an error: report zeroes so the UI
+        // can show "not funded" instead of an error box.
+        Env::DocGroup root("gas");
+        Env::DocAddNum("balance", (Amount) 0);
+        Env::DocAddNum("per_claim", (Amount) 0);
+        Env::DocAddNum("total_sponsored", (Amount) 0);
+        Env::DocAddNum("total_spent", (Amount) 0);
+        Env::DocAddNum("claims_funded", (Amount) 0);
+        Env::DocAddNum("claims_remaining", (Amount) 0);
+        return;
+    }
+
+    Env::DocGroup root("gas");
+    Env::DocAddNum("balance", gp.m_Balance);
+    Env::DocAddNum("per_claim", gp.m_PerClaim);
+    Env::DocAddNum("total_sponsored", gp.m_TotalSponsored);
+    Env::DocAddNum("total_spent", gp.m_TotalSpent);
+    Env::DocAddNum("claims_funded", gp.m_ClaimsFunded);
+    Env::DocAddNum("claims_remaining", gp.m_PerClaim ? (gp.m_Balance / gp.m_PerClaim) : (Amount) 0);
 }
 
 ON_METHOD(user, get_my_key)

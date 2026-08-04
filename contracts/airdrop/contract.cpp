@@ -107,6 +107,22 @@ namespace {
         Env::SaveVar_T(key, fp);
     }
 
+    // --- Gas pool ---
+
+    bool LoadGasPool(GasPool& gp) {
+        Key::GasPool key;
+        _POD_(key).SetZero();
+        key.m_Tag = Airdrop::KeyTag::GasPool;
+        return Env::LoadVar_T(key, gp);
+    }
+
+    void SaveGasPool(const GasPool& gp) {
+        Key::GasPool key;
+        _POD_(key).SetZero();
+        key.m_Tag = Airdrop::KeyTag::GasPool;
+        Env::SaveVar_T(key, gp);
+    }
+
     // --- Counters ---
 
     uint64_t GetNextBatchId() {
@@ -309,10 +325,100 @@ BEAM_EXPORT void Method_3(const Method::RedeemVoucher& arg)
     s.m_TotalValueLocked -= v.m_Value;
     SaveSettings(s);
 
+    // Gasless claim.
+    //
+    // A user holding zero BEAM cannot pay a kernel fee, so without this they
+    // cannot claim a FOMO/BEAMX voucher at all — they would have to acquire
+    // BEAM first, which is the exact barrier an airdrop is meant to remove.
+    // Releasing BEAM from the sponsorship pool in the same transaction makes it
+    // self-funding: the wallet adds the fee to its BEAM balance and the unlock
+    // cancels it out, so no inputs are required.
+    //
+    // Skipped when the voucher already pays out enough BEAM to cover its own
+    // fee, and when the pool is empty or disabled — a claim must still succeed
+    // for a user who does have BEAM.
+    Amount gas = 0;
+    {
+        GasPool gp;
+        if (LoadGasPool(gp) && gp.m_PerClaim && (gp.m_Balance >= gp.m_PerClaim))
+        {
+            bool bSelfFunding = (v.m_AssetId == 0) && (v.m_Value >= gp.m_PerClaim);
+            if (!bSelfFunding)
+            {
+                gas = gp.m_PerClaim;
+                gp.m_Balance -= gas;
+                gp.m_TotalSpent += gas;
+                gp.m_ClaimsFunded++;
+                SaveGasPool(gp);
+            }
+        }
+    }
+
     // SECURITY: Require redeemer's cryptographic signature
     // Combined with FundsUnlock, this ensures only the signer receives funds
     Env::AddSig(arg.m_Redeemer);
     Env::FundsUnlock(v.m_AssetId, v.m_Value);
+    if (gas)
+        Env::FundsUnlock(0, gas);
+}
+
+// Method 7: SponsorGas - anyone adds BEAM to the gasless-claim pool.
+// Not owner-gated: it only ever increases the contract's BEAM balance, and the
+// transaction itself proves the sponsor paid for it.
+BEAM_EXPORT void Method_7(const Method::SponsorGas& arg)
+{
+    Settings s;
+    Env::Halt_if(!LoadSettings(s));
+    Env::Halt_if(arg.m_Amount == 0);
+
+    GasPool gp;
+    if (!LoadGasPool(gp))
+        _POD_(gp).SetZero();
+
+    Amount prev = gp.m_Balance;
+    gp.m_Balance += arg.m_Amount;
+    Env::Halt_if(gp.m_Balance < prev);       // overflow
+
+    gp.m_TotalSponsored += arg.m_Amount;
+    SaveGasPool(gp);
+
+    Env::FundsLock(0, arg.m_Amount);
+}
+
+// Method 8: SetGasPerClaim - owner tunes the subsidy.
+BEAM_EXPORT void Method_8(const Method::SetGasPerClaim& arg)
+{
+    Settings s;
+    Env::Halt_if(!LoadSettings(s));
+    Env::Halt_if(_POD_(s.m_Owner) != arg.m_Owner);
+
+    GasPool gp;
+    if (!LoadGasPool(gp))
+        _POD_(gp).SetZero();
+
+    gp.m_PerClaim = arg.m_PerClaim;
+    SaveGasPool(gp);
+
+    Env::AddSig(arg.m_Owner);
+}
+
+// Method 9: WithdrawGas - owner reclaims unspent sponsorship.
+BEAM_EXPORT void Method_9(const Method::WithdrawGas& arg)
+{
+    Settings s;
+    Env::Halt_if(!LoadSettings(s));
+    Env::Halt_if(_POD_(s.m_Owner) != arg.m_Owner);
+    Env::Halt_if(arg.m_Amount == 0);
+
+    GasPool gp;
+    Env::Halt_if(!LoadGasPool(gp));
+    Env::Halt_if(arg.m_Amount > gp.m_Balance);
+
+    gp.m_Balance -= arg.m_Amount;
+    SaveGasPool(gp);
+
+    Env::AddSig(arg.m_Owner);
+    Env::FundsUnlock(0, arg.m_Amount);
 }
 
 // Method 4: CancelBatch - creator reclaims unclaimed vouchers

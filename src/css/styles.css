@@ -767,6 +767,238 @@
         .pool-stat-label { color: var(--text-muted); }
         .pool-stat-value { font-weight: 500; margin-top: 2px; }
 
+        /* DEX panel layout. These replace the inline style="" attributes the
+           swap/pools/liquidity markup used to carry; sizes come from the token
+           scale in variables.css rather than being invented per element. */
+        .dex-tabs {
+            display: flex;
+            gap: var(--space-2);
+        }
+        .liq-mode-tabs {
+            display: flex;
+            justify-content: center;
+            gap: var(--space-2);
+            margin-bottom: var(--space-5);
+        }
+
+        /* Compound selector so the width beats .balances-card's max-width:100%,
+           which is declared later in this file. */
+        .balances-card.dex-card {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: var(--space-6);
+        }
+        .dex-card-title {
+            margin-bottom: var(--space-5);
+            text-align: center;
+        }
+        /* When a subtitle follows, it carries the space under the heading. */
+        .dex-card-title:has(+ .dex-card-sub) { margin-bottom: var(--space-2); }
+        .dex-card-sub {
+            margin-bottom: var(--space-5);
+            text-align: center;
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+
+        .swap-input-group { margin-bottom: var(--space-4); }
+        .swap-input-group.swap-input-group-tight { margin-bottom: var(--space-2); }
+        .swap-input-group.swap-input-group-snug { margin-bottom: var(--space-3); }
+
+        .swap-label {
+            display: block;
+            margin-bottom: var(--space-1);
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+        .swap-field-row {
+            display: flex;
+            padding: var(--space-3);
+            background: var(--void);
+            border-radius: var(--radius-md);
+        }
+        .swap-field-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: var(--space-2);
+        }
+        .swap-balance {
+            margin-top: var(--space-1);
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+        /* Already spaced by the row it sits in. */
+        .swap-field-meta .swap-balance { margin-top: 0; }
+        .quick-amount-btns {
+            display: flex;
+            gap: var(--space-1);
+        }
+
+        .swap-direction-row {
+            margin: var(--space-3) 0;
+            text-align: center;
+        }
+        .swap-direction-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--void-lighter);
+            border: 2px solid var(--glass-border);
+            border-radius: var(--radius-full);
+            cursor: pointer;
+        }
+
+        /* Key/value quote panel, shared by the swap and both liquidity forms. */
+        .dex-summary {
+            padding: var(--space-3);
+            margin-bottom: var(--space-4);
+            background: var(--void);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            font-size: var(--text-sm);
+        }
+        .dex-summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: var(--space-2);
+        }
+        .dex-summary-row:last-child { margin-bottom: 0; }
+        .dex-summary-label { color: var(--text-muted); }
+        .dex-summary-value { font-family: var(--font-mono, 'JetBrains Mono', monospace); }
+        .dex-summary-value-out { color: var(--error); }
+        .dex-summary-value-in { color: var(--success); }
+
+        /* Initial state only: the JS owning these panels sets display inline,
+           which beats this rule. */
+        .dex-hidden { display: none; }
+
+        .dex-action-btn {
+            width: 100%;
+            padding: var(--space-4);
+            font-size: var(--text-md);
+        }
+
+        .dex-empty {
+            padding: var(--space-6);
+            text-align: center;
+            font-size: var(--text-sm);
+            color: var(--text-muted);
+        }
+
+        .dex-activity { margin-top: var(--space-6); }
+        .dex-activity-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-3);
+        }
+        .dex-activity-title {
+            font-size: var(--text-sm);
+            font-weight: var(--weight-medium);
+            color: var(--text-muted);
+        }
+        .dex-activity-status {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+        .dex-activity-list {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .pools-filters {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-4);
+            margin-bottom: var(--space-4);
+            padding: var(--space-3);
+            background: var(--void);
+            border-radius: var(--radius-md);
+        }
+        .pools-filter-field {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+        .pools-filter-label {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        /* The inline version read var(--border) and var(--text), neither of
+           which is defined, so the border shorthand was dropped outright. */
+        .pools-filter-input {
+            width: 100px;
+            padding: var(--space-2) var(--space-3);
+            background: var(--void-lighter);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: var(--text-sm);
+        }
+        .pools-filter-check {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        .pools-filter-checkbox {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .pools-filter-spacer { flex: 1; }
+        .pools-filter-btn {
+            padding: var(--space-2) var(--space-3);
+            font-size: var(--text-xs);
+        }
+        .pools-count {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+
+        .liq-separator {
+            margin: var(--space-2) 0;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .liq-pool-options { margin-bottom: var(--space-4); }
+        .liq-pool-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+        }
+        .liq-pool-empty {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+
+        .lp-positions { margin-bottom: var(--space-5); }
+        .withdraw-percent-btns {
+            display: flex;
+            gap: var(--space-2);
+            margin-top: var(--space-2);
+        }
+        .withdraw-slider {
+            width: 100%;
+            margin-top: var(--space-3);
+        }
+        .withdraw-percent-readout {
+            margin-top: var(--space-2);
+            text-align: center;
+            font-size: var(--text-xl);
+            font-weight: var(--weight-semibold);
+        }
+        .withdraw-amounts { font-weight: var(--weight-medium); }
+
+        /* Placeholder colours before updateSwapUI()/updateLiqTokenUI() set the
+           real asset colour inline. */
+        .token-icon-cyan { background: var(--beam-cyan); }
+        .token-icon-pink { background: var(--beam-pink); }
+
         /* Transaction Card Styles */
         .tx-card {
             background: var(--void-lighter);
@@ -2317,6 +2549,95 @@
         @keyframes syncShine {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
+        }
+
+        /* A bar that is not moving must not look like one that is. */
+        .sync-progress-fill.stalled {
+            background: var(--warning);
+        }
+
+        .sync-progress-fill.stalled::after {
+            animation: none;
+        }
+
+        /* What a node mode does and does not give you */
+        .node-facts {
+            margin-bottom: var(--space-4);
+        }
+
+        .node-facts[hidden] {
+            display: none;
+        }
+
+        .node-facts-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2);
+        }
+
+        .node-facts-list li {
+            position: relative;
+            padding-left: var(--space-6);
+            font-size: var(--text-sm);
+            line-height: var(--leading-normal);
+            color: var(--text-secondary);
+        }
+
+        .node-facts-list li::before {
+            position: absolute;
+            left: 0;
+            top: 0;
+            font-weight: var(--weight-bold);
+        }
+
+        .node-facts-list li.yes::before {
+            content: '✓';
+            color: var(--beam-cyan);
+        }
+
+        .node-facts-list li.no::before {
+            content: '✕';
+            color: var(--text-muted);
+        }
+
+        .node-facts-list li.no {
+            color: var(--text-muted);
+        }
+
+        .node-facts-cost {
+            margin: var(--space-3) 0 0 0;
+            font-size: var(--text-xs);
+            line-height: var(--leading-normal);
+            color: var(--text-muted);
+        }
+
+        .node-facts-cost strong {
+            color: var(--text-secondary);
+        }
+
+        /* Shown when the node cannot finish syncing, in place of a bar that never fills */
+        .node-stall {
+            margin-top: var(--space-3);
+            padding: var(--space-3) var(--space-4);
+            background: var(--warning-dim);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            border-radius: 10px;
+            font-size: var(--text-sm);
+            line-height: var(--leading-normal);
+            color: var(--text-secondary);
+        }
+
+        .node-stall[hidden] {
+            display: none;
+        }
+
+        .node-stall strong {
+            display: block;
+            margin-bottom: var(--space-1);
+            color: var(--warning);
         }
 
         /* Rescan Button */
@@ -6181,6 +6502,11 @@
         transition-duration: 0.001ms !important;
         scroll-behavior: auto !important;
     }
+    /* The rule above would freeze the shimmer mid-sweep, leaving a stray bright
+       band. Drop the sweep entirely and let the flat block do the work. */
+    .skeleton::after {
+        display: none;
+    }
 }
 .sr-only {
     position: absolute;
@@ -6189,4 +6515,271 @@
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
     white-space: nowrap; border: 0;
+}
+
+/* ---- Loading skeletons --------------------------------------------------
+   A spinner says "busy"; a skeleton says "something of this shape is landing
+   here". It reserves the real geometry, so nothing reflows when the data
+   arrives. The shapes below deliberately reuse the live components' own box
+   classes (.asset-icon, .asset-cell-icon, .tx-icon) rather than re-declaring
+   their sizes, which is what keeps the placeholder and the real thing the same
+   size a month from now. */
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--glass-hover);
+    border-radius: var(--radius-sm, 8px);
+}
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+    to { transform: translateX(100%); }
+}
+
+.skeleton-text {
+    height: var(--text-xs, 12px);
+    border-radius: 4px;
+}
+.skeleton-text + .skeleton-text {
+    margin-top: var(--space-2, 8px);
+}
+
+/* Traces .asset-card: 240px wide, 20px padding, 16px radius. */
+.skeleton-card {
+    flex: 0 0 240px;
+    padding: var(--space-5, 20px);
+    border-radius: var(--radius-lg, 16px);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+}
+
+/* Traces .tx-card. Also used as a <tr> in .balances-table, where the cells
+   already carry the padding and the row must stay a table-row. */
+.skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 12px);
+    padding: var(--space-4, 16px);
+    background: var(--void-lighter);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md, 12px);
+    margin-bottom: var(--space-2, 8px);
+}
+.skeleton-row > .skeleton {
+    flex-shrink: 0;
+}
+tr.skeleton-row {
+    display: table-row;
+    background: none;
+    border: 0;
+    margin: 0;
+}
+
+/* ---- Empty states that offer a way out ----------------------------------
+   "Nothing here" is only half an answer; every dead end below now carries the
+   one action that ends it. */
+.empty-state p {
+    font-size: var(--text-sm, 13px);
+    line-height: var(--leading-normal, 1.5);
+    max-width: 36ch;
+    margin: 0 auto;
+}
+.empty-state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+    justify-content: center;
+    margin-top: var(--space-5, 20px);
+}
+
+/* ---- Toasts -------------------------------------------------------------
+   Errors used to disappear after 3s with no way to bring them back, so a
+   failure you blinked at was a failure you could not act on. Errors now stay
+   until dismissed; everything else auto-dismisses but pauses on hover/focus. */
+.toast-container {
+    max-width: min(400px, calc(100vw - var(--space-12)));
+    align-items: stretch;
+    gap: var(--space-2);
+}
+
+.toast {
+    position: relative;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    padding-right: var(--space-8);
+    line-height: var(--leading-normal);
+    /* The stale :root at the top of this file still sets --text-muted to the
+       pre-audit #64748b (4.18:1) and, loading after variables.css, wins. Pin
+       the intended value here so hint text clears AA without touching the ~300
+       other uses. Delete this line once that duplicate :root block goes. */
+    --text-muted: #8b98ab;
+}
+
+.toast-warning {
+    border-left: 3px solid var(--warning);
+}
+
+.toast-icon {
+    margin-top: 1px;
+}
+
+.toast-icon.warning {
+    background: var(--warning-dim);
+    color: var(--warning);
+}
+
+.toast-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    /* Chain errors are long and unbroken; let them wrap rather than overflow. */
+    overflow-wrap: anywhere;
+}
+
+.toast-title {
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+    color: var(--text-primary);
+    line-height: var(--leading-tight);
+}
+
+.toast-subtitle {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    line-height: var(--leading-normal);
+}
+
+.toast-hint {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    line-height: var(--leading-normal);
+}
+
+.toast-close {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.toast-close:hover {
+    opacity: 1;
+    background: var(--glass-hover);
+    color: var(--text-primary);
+}
+
+.toast-leaving {
+    animation: toastOut 0.2s ease forwards;
+    pointer-events: none;
+}
+
+@keyframes toastOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(16px); opacity: 0; }
+}
+
+/* ---- Airdrop gas sponsorship -------------------------------------------
+   A user with zero BEAM cannot pay a kernel fee, so the pool that covers it
+   is a first-class part of the page, not a footnote. */
+.gas-pool {
+    margin: var(--space-4, 16px) 0;
+    padding: var(--space-4, 16px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md, 12px);
+    background: var(--glass);
+}
+.gas-pool-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+    color: var(--beam-cyan);
+    margin-bottom: var(--space-3, 12px);
+}
+.gas-pool-title {
+    font-size: var(--text-sm, 13px);
+    font-weight: var(--weight-semibold, 600);
+    color: var(--text-primary);
+}
+.gas-pool-state {
+    margin-left: auto;
+    font-size: var(--text-xs, 12px);
+    font-weight: var(--weight-medium, 500);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: var(--radius-full, 9999px);
+}
+.gas-pool-state.on  { background: var(--success-dim); color: var(--success); }
+.gas-pool-state.off { background: var(--warning-dim); color: var(--warning); }
+
+.gas-pool-body {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-4, 16px);
+}
+.gas-pool-balance {
+    font-size: var(--text-2xl, 28px);
+    font-weight: var(--weight-semibold, 600);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.gas-pool-unit {
+    font-size: var(--text-xs, 12px);
+    color: var(--text-muted);
+    margin-left: var(--space-2, 8px);
+}
+.gas-pool-meta {
+    display: flex;
+    gap: var(--space-4, 16px);
+    flex-wrap: wrap;
+    font-size: var(--text-xs, 12px);
+    color: var(--text-secondary);
+}
+.gas-pool-meta strong { color: var(--text-primary); }
+
+.gas-pool-explainer {
+    margin: var(--space-3, 12px) 0 var(--space-3, 12px);
+    font-size: var(--text-xs, 12px);
+    line-height: var(--leading-normal, 1.5);
+    color: var(--text-muted);
+}
+.gas-pool-actions {
+    display: flex;
+    gap: var(--space-2, 8px);
+    align-items: center;
+}
+.gas-pool-input {
+    flex: 0 1 140px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm, 8px);
+    border: 1px solid var(--glass-border);
+    background: var(--void-light);
+    color: var(--text-primary);
+    font-size: var(--text-base, 14px);
+    font-family: inherit;
+}
+.gas-pool-input:focus-visible {
+    outline: 2px solid var(--beam-cyan);
+    outline-offset: 1px;
 }
