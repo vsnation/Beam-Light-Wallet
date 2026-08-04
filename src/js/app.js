@@ -14167,6 +14167,13 @@ function renderAssetIcon(assetId, size = 32) {
 // the claim transaction funds its own kernel fee. Without it, a user with zero
 // BEAM cannot claim a FOMO or BEAMX voucher at all.
 
+// A BVM contract call costs far more than a plain transfer. Measured against
+// BEAM's live Faucet from a zero-balance wallet: unlocking 0.01 still left it
+// "Missing 0.001", unlocking 0.03 completed and left 0.019 - so 0.011 BEAM.
+// Treat this as a floor, not an exact quote: a call carrying more data costs
+// more, and the wallet computes the real fee when it builds the transaction.
+const CONTRACT_CALL_FEE_GROTH = 1100000;
+
 let airdropGas = null;
 
 // The live contract (8737e0d3…) predates the gas pool — it has no Method_7, so
@@ -14811,9 +14818,25 @@ async function createAirdropBatch() {
         if (status && status.totals) {
             const assetTotal = status.totals.find(t => t.asset_id === assetId);
             const available = assetTotal ? (assetTotal.available || 0) : 0;
-            if (available < totalWithFeeGroth) {
-                const info = getAirdropAssetInfo(assetId);
+            const info = getAirdropAssetInfo(assetId);
+
+            // A contract call also costs BEAM on top of whatever asset is being
+            // given away. Checking only the asset let someone with plenty of
+            // FOMO and no BEAM sail past this and hit "Not enough inputs" from
+            // the node - the UI said yes and the transaction said no.
+            const beamTotal = status.totals.find(t => t.asset_id === 0);
+            const beamAvailable = beamTotal ? (beamTotal.available || 0) : 0;
+            const beamNeeded = (assetId === 0 ? totalWithFeeGroth : 0) + CONTRACT_CALL_FEE_GROTH;
+
+            if (assetId !== 0 && available < totalWithFeeGroth) {
                 showToast(`Insufficient balance. Need ${formatAmount(totalWithFeeGroth)} ${info.symbol} (incl. 1% fee), have ${formatAmount(available)} ${info.symbol}`, 'error');
+                return;
+            }
+            if (beamAvailable < beamNeeded) {
+                showToast(assetId === 0
+                    ? `Insufficient BEAM. Need ${formatAmount(beamNeeded)} (${formatAmount(totalWithFeeGroth)} incl. 1% fee, plus about ${formatAmount(CONTRACT_CALL_FEE_GROTH)} network fee), have ${formatAmount(beamAvailable)}`
+                    : `You have enough ${info.symbol}, but a contract call also costs BEAM. Need about ${formatAmount(CONTRACT_CALL_FEE_GROTH)} BEAM for the network fee, have ${formatAmount(beamAvailable)}`,
+                    'error');
                 return;
             }
         }
