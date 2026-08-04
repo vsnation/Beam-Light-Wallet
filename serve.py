@@ -42,7 +42,12 @@ BASE_DIR = Path(__file__).parent.absolute()
 
 # All private data (binaries, wallets, logs, node_data) stored in ~/.beam-light-wallet
 # This keeps user data in a consistent location regardless of how the app was installed
-DATA_DIR = Path.home() / ".beam-light-wallet"
+# Everything writable lives outside the application. A signed .app bundle is
+# sealed and cannot be written to, so the launcher used to symlink these
+# directories into Contents/Resources — which breaks the seal on first run and
+# makes macOS refuse to launch the app at all. BEAM_DATA_DIR lets a packaged
+# build point somewhere else without any of that.
+DATA_DIR = Path(os.environ.get("BEAM_DATA_DIR") or (Path.home() / ".beam-light-wallet"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Migrate from old locations if they exist
@@ -1807,15 +1812,62 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(e)}, 500)
 
     def handle_update(self):
-        """Perform automatic update via git pull and restart server"""
+        """Update from git — developer checkouts only, never automatic.
+
+        THREAT MODEL. An updater that fetches and runs remote code without the
+        user saying yes is a supply-chain backdoor into every wallet that has it:
+        whoever controls the source — including anyone who compromises the GitHub
+        account or the repo — executes arbitrary code next to the user's keys. So:
+
+          1. Never automatic. The user must approve each update explicitly.
+          2. Never branch HEAD. A tagged, signed artifact only.
+          3. Verify the signature before anything is written to disk, and refuse
+             on mismatch instead of falling back.
+
+        This endpoint satisfies none of (2) or (3) — it pulls whatever is on
+        main — so it is restricted to git checkouts, requires an explicit opt-in,
+        and requires the caller to pass confirm=true, which only a human clicking
+        through a confirmation dialog can supply. Real updates go through the
+        signed channel described in docs/PACKAGING.md.
+
+        It is also behind the origin + session-token guard now; before that, any
+        web page could have triggered a code update on the user's machine.
+        """
         try:
+            body = self.get_json_body() or {}
+
             # Check if this is a git installation
             git_dir = BASE_DIR / ".git"
             if not git_dir.exists():
-                self.send_json({"error": "Not a git installation. Please download update manually."}, 400)
+                self.send_json({
+                    "error": "This install does not update itself. Download the "
+                             "latest signed release instead.",
+                }, 400)
                 return
 
-            print("\n[UPDATE] Starting automatic update...")
+            if os.environ.get("BEAM_ALLOW_GIT_UPDATE") != "1":
+                self.send_json({
+                    "error": "Self-update from branch HEAD is disabled. It would "
+                             "run unreviewed, unsigned code next to your keys — if "
+                             "the repository were ever compromised, that is a "
+                             "direct path to your funds. Run `git pull` yourself "
+                             "after reviewing the diff, or set "
+                             "BEAM_ALLOW_GIT_UPDATE=1 on a development checkout.",
+                }, 403)
+                return
+
+            # An explicit, per-update acknowledgement. Not a stored preference:
+            # "I approved an update once" must never mean "apply all future ones".
+            if body.get("confirm") is not True:
+                self.send_json({
+                    "error": "Update requires explicit confirmation.",
+                    "requires_confirmation": True,
+                    "warning": "This pulls and runs code from GitHub. Only proceed "
+                               "if you have reviewed the changes.",
+                }, 428)
+                return
+
+            print("\n[UPDATE] User-approved update starting...")
 
             # Run git pull
             import subprocess

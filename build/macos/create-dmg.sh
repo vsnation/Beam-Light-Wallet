@@ -125,8 +125,7 @@ RESOURCES_DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
 # All private data stored in ~/.beam-light-wallet
 DATA_DIR="$HOME/.beam-light-wallet"
 # BEAM_VERSION and the download asset names are NOT hardcoded: they are read
-# from Resources/config/binaries.json further down, after the auto-update step
-# has had a chance to refresh that manifest.
+# from Resources/config/binaries.json further down.
 REPO_URL="https://github.com/vsnation/Beam-Light-Wallet"
 BINARIES_DIR="$DATA_DIR/binaries/macos"
 WALLETS_DIR="$DATA_DIR/wallets"
@@ -155,11 +154,11 @@ if [ -d "$OLD_DATA" ] && [ "$OLD_DATA" != "$DATA_DIR" ]; then
 fi
 
 # Symlink data directories into Resources for serve.py compatibility
-cd "$RESOURCES_DIR"
-[ ! -L "binaries" ] && [ ! -d "binaries" ] && ln -sf "$DATA_DIR/binaries" "binaries"
-[ ! -L "wallets" ] && [ ! -d "wallets" ] && ln -sf "$WALLETS_DIR" "wallets"
-[ ! -L "logs" ] && [ ! -d "logs" ] && ln -sf "$LOGS_DIR" "logs"
-[ ! -L "node_data" ] && [ ! -d "node_data" ] && ln -sf "$NODE_DATA_DIR" "node_data"
+# No symlinks into the bundle. serve.py resolves every writable path from
+# BEAM_DATA_DIR (or ~/.beam-light-wallet), so Contents/ stays exactly as it was
+# signed. Writing into a signed bundle breaks its seal and macOS then refuses to
+# launch it with "the application is damaged".
+export BEAM_DATA_DIR="$DATA_DIR"
 
 # Function to show dialog
 show_dialog() {
@@ -177,48 +176,18 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # ==========================================
-# Auto-update: pull latest app code
+# Updates
 # ==========================================
-UPDATE_SHA_FILE="$DATA_DIR/.last_update_sha"
-
-update_app_code() {
-    local TEMP_DIR=$(mktemp -d)
-    if curl -sL --connect-timeout 5 "$REPO_URL/archive/main.tar.gz" -o "$TEMP_DIR/latest.tar.gz" 2>/dev/null; then
-        mkdir -p "$TEMP_DIR/extracted"
-        tar -xzf "$TEMP_DIR/latest.tar.gz" --strip-components=1 -C "$TEMP_DIR/extracted" 2>/dev/null
-        if [ -f "$TEMP_DIR/extracted/serve.py" ]; then
-            # Update app files in Resources (symlinks to user data are preserved)
-            cp "$TEMP_DIR/extracted/serve.py" "$RESOURCES_DIR/" 2>/dev/null || true
-            rm -rf "$RESOURCES_DIR/src" && cp -r "$TEMP_DIR/extracted/src" "$RESOURCES_DIR/" 2>/dev/null || true
-            rm -rf "$RESOURCES_DIR/config" && cp -r "$TEMP_DIR/extracted/config" "$RESOURCES_DIR/" 2>/dev/null || true
-            [ -d "$TEMP_DIR/extracted/shaders" ] && rm -rf "$RESOURCES_DIR/shaders" && cp -r "$TEMP_DIR/extracted/shaders" "$RESOURCES_DIR/" 2>/dev/null || true
-            echo "App code updated!"
-        fi
-    fi
-    rm -rf "$TEMP_DIR" 2>/dev/null
-}
-
-echo "Checking for updates..."
-REMOTE_SHA=$(curl -s --connect-timeout 5 "https://api.github.com/repos/vsnation/Beam-Light-Wallet/commits/main" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha',''))" 2>/dev/null || echo "")
-LOCAL_SHA=""
-[ -f "$UPDATE_SHA_FILE" ] && LOCAL_SHA=$(cat "$UPDATE_SHA_FILE" 2>/dev/null)
-
-if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$LOCAL_SHA" ]; then
-    # Ask user before downloading
-    RESPONSE=$(osascript -e 'display dialog "A new update is available for BEAM Light Wallet.\n\nWould you like to download it?" buttons {"Skip", "Download Update"} default button 2 with title "BEAM Light Wallet - Update Available"' 2>/dev/null || echo "button returned:Skip")
-    if echo "$RESPONSE" | grep -q "Download Update"; then
-        echo "Update approved by user, downloading..."
-        show_progress "Updating BEAM Light Wallet..."
-        update_app_code
-        echo "$REMOTE_SHA" > "$UPDATE_SHA_FILE"
-    else
-        echo "Update skipped by user. Will ask again next launch."
-    fi
-elif [ -z "$REMOTE_SHA" ]; then
-    echo "Update check skipped (no internet)"
-else
-    echo "Up to date."
-fi
+# Deliberately no self-update here. This launcher used to curl main.tar.gz and
+# overwrite serve.py, src/, config/ and shaders/ INSIDE the app bundle, with no
+# signature and no checksum, from whatever happened to be on the branch at that
+# moment. Two problems: it shipped unreviewed HEAD to wallets holding real
+# funds, and writing into Contents/ breaks a Developer ID seal so a signed build
+# would refuse to launch.
+#
+# Updates belong to one signed channel with a verified artifact — see
+# docs/PACKAGING.md. Until that ships, the app checks for a new release and
+# points the user at it rather than rewriting itself.
 
 # ==========================================
 # Version manifest (single source of truth)
@@ -305,6 +274,13 @@ tell application "Terminal"
 
         # Compare an extracted binary against the sha256 pinned in config/binaries.json.
         verify_sha256() {
+            if [ ! -f \"\$1\" ]; then
+                echo \"\"
+                echo \"  ERROR: \$1 is missing after download and extraction.\"
+                echo \"  The archive did not contain the expected binary, so setup cannot\"
+                echo \"  continue. Aborting.\"
+                exit 1
+            fi
             if [ -z \"\$2\" ]; then
                 echo \"  no pinned sha256 for \$1 in binaries.json - skipping verification\"
                 return 0

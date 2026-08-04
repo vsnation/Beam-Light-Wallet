@@ -175,7 +175,10 @@ async function bannerAutoUpdate(version) {
         const response = await fetch('/api/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ version })
+            // confirm:true is only ever set from a user gesture that has
+            // shown the warning. An update must never be applied because the
+            // app decided to — a compromised repo would then own every wallet.
+            body: JSON.stringify({ version, confirm: true })
         });
 
         const result = await response.json();
@@ -238,7 +241,10 @@ async function performAutoUpdate(version) {
         const response = await fetch('/api/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ version })
+            // confirm:true is only ever set from a user gesture that has
+            // shown the warning. An update must never be applied because the
+            // app decided to — a compromised repo would then own every wallet.
+            body: JSON.stringify({ version, confirm: true })
         });
 
         const result = await response.json();
