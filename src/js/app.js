@@ -6133,10 +6133,18 @@ function openSendModal(assetId = 0) {
 // Set max amount for send
 function setMaxAmount() {
     const asset = walletData.assets.find(a => a.id === currentSendAsset);
-    if (asset) {
-        // Subtract fee (100000 groth = 0.001 BEAM) for BEAM transactions
-        const maxAmount = currentSendAsset === 0 ? Math.max(0, asset.balance - 100000) : asset.balance;
-        document.getElementById('send-amount').value = formatAmount(maxAmount);
+    if (!asset) return;
+    // Subtract fee (100000 groth = 0.001 BEAM) for BEAM transactions
+    const maxAmount = currentSendAsset === 0 ? Math.max(0, asset.balance - 100000) : asset.balance;
+    document.getElementById('send-amount').value = formatAmount(maxAmount);
+
+    // MAX on a confidential asset is still unsendable without BEAM for the fee.
+    // Say so now rather than after the confirmation dialog.
+    if (currentSendAsset !== 0) {
+        const beamAsset = walletData.assets.find(a => a.id === 0);
+        if (!beamAsset || (beamAsset.balance || 0) < 100000) {
+            showToast('This wallet has no BEAM for the 0.001 fee, which every send needs.', 'warning');
+        }
     }
 }
 
@@ -6167,6 +6175,38 @@ function confirmSend() {
     // Get asset info
     const assetInfo = getAssetInfo(currentSendAsset);
     const fee = 0.001; // 0.001 BEAM fee
+    const feeGroth = Math.round(fee * GROTH);
+    const amountGrothVal = Math.round(parseFloat(amount) * GROTH);
+
+    // Nothing here checked a balance, so overspending - and sending a
+    // confidential asset with no BEAM to pay the fee - both walked through the
+    // confirmation dialog and failed afterwards at the node. Failing after the
+    // user has confirmed reads as a broken wallet rather than a full one.
+    const sendAsset = walletData.assets.find(a => a.id === currentSendAsset);
+    const beamAsset = walletData.assets.find(a => a.id === 0);
+    const assetAvail = sendAsset ? (sendAsset.balance || 0) : 0;
+    const beamAvail = beamAsset ? (beamAsset.balance || 0) : 0;
+
+    if (currentSendAsset === 0) {
+        if (amountGrothVal + feeGroth > beamAvail) {
+            showToast(`Not enough BEAM. Sending ${formatAmount(amountGrothVal)} plus a `
+                + `${formatAmount(feeGroth)} fee needs ${formatAmount(amountGrothVal + feeGroth)}, `
+                + `and ${formatAmount(beamAvail)} is available.`, 'error');
+            return;
+        }
+    } else {
+        if (amountGrothVal > assetAvail) {
+            showToast(`Not enough ${assetInfo.symbol}. ${formatAmount(amountGrothVal)} requested, `
+                + `${formatAmount(assetAvail)} available.`, 'error');
+            return;
+        }
+        // The fee is always paid in BEAM, whatever asset is being sent.
+        if (beamAvail < feeGroth) {
+            showToast(`Sending ${assetInfo.symbol} still costs a ${formatAmount(feeGroth)} BEAM fee, `
+                + `and this wallet has ${formatAmount(beamAvail)} BEAM.`, 'error');
+            return;
+        }
+    }
 
     // Store pending transaction
     pendingSendTx = {
