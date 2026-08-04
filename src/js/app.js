@@ -445,7 +445,11 @@ const ASSET_ICONS = {
     7: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/beamx.png',
     9: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/tico.ico',
     47: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/47_nph.svg',
-    174: 'https://73ecj7qctz4nrza4bbbqmgriv4gh5uwwf65izu7wjdvrmozhbvbq.arweave.net/_sgk_gKeeNjkHAhDBhoorwx-0tYvuozT9kjrFjsnDUM'
+    174: 'https://73ecj7qctz4nrza4bbbqmgriv4gh5uwwf65izu7wjdvrmozhbvbq.arweave.net/_sgk_gKeeNjkHAhDBhoorwx-0tYvuozT9kjrFjsnDUM',
+    186: 'https://ipfs.io/ipfs/QmZrekbbMSqYNjbkyKM9Ar3k7f6RUW2zUmNv9cxGz8DZvJ',
+    187: 'https://ipfs.io/ipfs/QmYMksnyN1Cb32jMFkQcjxao3i7XSPL1dWJuHrGXcTr5cx',
+    190: 'https://ipfs.io/ipfs/QmYMksnyN1Cb32jMFkQcjxao3i7XSPL1dWJuHrGXcTr5cx',
+    191: 'https://ipfs.io/ipfs/QmZrekbbMSqYNjbkyKM9Ar3k7f6RUW2zUmNv9cxGz8DZvJ'
 };
 
 // Priority token config with metadata
@@ -456,7 +460,11 @@ const ASSET_CONFIG = {
     7: { name: 'BeamX', symbol: 'BEAMX', color: '#da70d6', class: 'beamx', icon: ASSET_ICONS[7], decimals: 8 },
     9: { name: 'Tico', symbol: 'TICO', color: '#e91e63', class: 'fomo', icon: ASSET_ICONS[9], decimals: 8 },
     47: { name: 'Nephrit', symbol: 'NPH', color: '#3498db', class: 'fomo', icon: ASSET_ICONS[47], decimals: 8 },
-    174: { name: 'FOMO', symbol: 'FOMO', color: '#60a5fa', class: 'fomo', icon: ASSET_ICONS[174], decimals: 8 }
+    174: { name: 'FOMO', symbol: 'FOMO', color: '#60a5fa', class: 'fomo', icon: ASSET_ICONS[174], decimals: 8 },
+    186: { name: 'GigaChad', symbol: 'GIGA', color: '#a855f7', class: 'fomo', icon: ASSET_ICONS[186], decimals: 8 },
+    187: { name: 'Chad', symbol: 'CHAD', color: '#25c2a0', class: 'beam', icon: ASSET_ICONS[187], decimals: 8 },
+    190: { name: 'Chad', symbol: 'CHAD', color: '#25c2a0', class: 'beam', icon: ASSET_ICONS[190], decimals: 8 },
+    191: { name: 'GigaChad', symbol: 'GIGA', color: '#a855f7', class: 'fomo', icon: ASSET_ICONS[191], decimals: 8 }
 };
 
 // DEX Contract ID
@@ -788,7 +796,12 @@ async function loadWalletData() {
             });
         }
 
-        // Update sync status
+        // Refresh the independent tip occasionally, then judge our own sync
+        // against it. Cheap: one small request every few minutes.
+        if (!networkTipHeight || Date.now() - (window._lastTipCheck || 0) > 180000) {
+            window._lastTipCheck = Date.now();
+            refreshNetworkTip().then(() => updateSyncStatus(status)).catch(() => {});
+        }
         updateSyncStatus(status);
 
         // Try to get UTXOs
@@ -838,25 +851,169 @@ async function loadWalletData() {
 // Update sync status display
 let lastServerStatus = null;
 
+// How far behind the chain tip we tolerate before calling the wallet stale.
+// A BEAM block is ~1 minute, so 60 blocks is roughly an hour.
+const SYNC_BLOCK_TOLERANCE = 60;
+const SYNC_AGE_TOLERANCE_MS = 30 * 60 * 1000;
+
+// Last height we saw from a public explorer, used as an independent second
+// opinion. Without it a wallet stuck on a dead fork looks perfectly healthy.
+let networkTipHeight = 0;
+let walletSyncState = { state: 'unknown', height: 0, behind: 0, reason: '' };
+
+function isWalletOutOfSync() {
+    return walletSyncState.state === 'stale';
+}
+
+/**
+ * Decide whether the wallet is actually following the chain.
+ *
+ * wallet-api reports the truth in `is_in_sync` and `current_state_timestamp`;
+ * the old check was `current_state_hash && height > 0`, which is true for a
+ * wallet frozen on a dead fork. That is how HF6 went unnoticed for 34 days:
+ * the node stopped at 3,928,665 and the header kept saying "Mainnet".
+ */
+function computeSyncState(status) {
+    const height = status.current_height || 0;
+    if (!status.current_state_hash || height <= 0) {
+        return { state: 'syncing', height, behind: 0, reason: 'No chain state yet' };
+    }
+
+    // The node told us outright that it is not in sync.
+    if (status.is_in_sync === false) {
+        const behind = networkTipHeight > height ? networkTipHeight - height : 0;
+        return { state: 'stale', height, behind, reason: 'Node reports out of sync' };
+    }
+
+    // The tip we have is old in wall-clock terms.
+    if (status.current_state_timestamp) {
+        const ageMs = Date.now() - (status.current_state_timestamp * 1000);
+        if (ageMs > SYNC_AGE_TOLERANCE_MS) {
+            const mins = Math.round(ageMs / 60000);
+            const behind = networkTipHeight > height ? networkTipHeight - height : 0;
+            return { state: 'stale', height, behind, reason: `Last block is ${mins} min old` };
+        }
+    }
+
+    // An independent explorer says the chain is well ahead of us.
+    if (networkTipHeight && (networkTipHeight - height) > SYNC_BLOCK_TOLERANCE) {
+        return {
+            state: 'stale', height, behind: networkTipHeight - height,
+            reason: 'Behind the network tip'
+        };
+    }
+
+    return { state: 'synced', height, behind: 0, reason: '' };
+}
+
 function updateSyncStatus(status) {
+    walletSyncState = computeSyncState(status);
+
+    const badge = document.querySelector('.network-badge');
     const networkBadge = document.querySelector('.network-badge span');
     if (networkBadge) {
-        const height = status.current_height || 0;
-        const synced = status.current_state_hash && height > 0;
+        const height = walletSyncState.height;
 
-        // Check if local node is syncing
+        // Local node still doing its initial sync is a known, benign state.
         if (lastServerStatus?.node_mode === 'local' && lastServerStatus?.node_running && !lastServerStatus?.node_synced) {
             const progress = lastServerStatus.node_progress || 0;
             networkBadge.textContent = `Syncing ${progress}%`;
             networkBadge.style.color = 'var(--warning)';
-        } else {
-            networkBadge.textContent = synced ? `Mainnet (${height.toLocaleString()})` : 'Syncing...';
+            if (badge) badge.dataset.sync = 'syncing';
+        } else if (walletSyncState.state === 'stale') {
+            const behind = walletSyncState.behind;
+            networkBadge.textContent = behind
+                ? `Out of sync — ${behind.toLocaleString()} blocks behind`
+                : `Out of sync — ${walletSyncState.reason}`;
+            networkBadge.style.color = 'var(--error)';
+            if (badge) {
+                badge.dataset.sync = 'stale';
+                badge.title = `${walletSyncState.reason}. Balances and history are not current, and sending is disabled.`;
+            }
+        } else if (walletSyncState.state === 'synced') {
+            networkBadge.textContent = `Mainnet (${height.toLocaleString()})`;
             networkBadge.style.color = '';
+            if (badge) { badge.dataset.sync = 'synced'; badge.title = ''; }
+        } else {
+            networkBadge.textContent = 'Syncing...';
+            networkBadge.style.color = '';
+            if (badge) badge.dataset.sync = 'syncing';
         }
     }
 
-    // Show/hide balance warning
+    updateOutOfSyncBanner();
+    applySyncGating();
     updateBalanceWarning();
+}
+
+/**
+ * A stale wallet signs against a stale tip, so anything it broadcasts is very
+ * unlikely to confirm. Better to refuse than to take the user's money.
+ */
+function applySyncGating() {
+    const stale = isWalletOutOfSync();
+    document.querySelectorAll('[data-requires-sync]').forEach(el => {
+        el.disabled = stale;
+        el.classList.toggle('disabled-out-of-sync', stale);
+        if (stale) {
+            el.title = 'Unavailable while the wallet is out of sync with the network';
+        } else if (el.title === 'Unavailable while the wallet is out of sync with the network') {
+            el.title = '';
+        }
+    });
+}
+
+function updateOutOfSyncBanner() {
+    const existing = document.getElementById('out-of-sync-banner');
+    if (!isWalletOutOfSync()) {
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing) {
+        const detail = existing.querySelector('[data-detail]');
+        if (detail) detail.textContent = outOfSyncDetail();
+        return;
+    }
+
+    const banner = document.createElement('div');
+    banner.id = 'out-of-sync-banner';
+    banner.className = 'sync-banner-error';
+    banner.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/>
+        </svg>
+        <span><strong>This wallet is not following the network.</strong>
+        <span data-detail>${escapeHtml(outOfSyncDetail())}</span></span>
+    `;
+    const container = document.querySelector('.main-content') || document.body;
+    container.insertBefore(banner, container.firstChild);
+}
+
+function outOfSyncDetail() {
+    const behind = walletSyncState.behind;
+    const behindTxt = behind ? ` It is ${behind.toLocaleString()} blocks behind.` : '';
+    return `Balances and transaction history are out of date and sending is disabled.${behindTxt}`
+         + ' Check Settings → Node, or update your BEAM binaries.';
+}
+
+/** Independent height from a public explorer — never from our own node. */
+async function refreshNetworkTip() {
+    const endpoints = [
+        'https://explorer.0xmx.net/api/status',
+        'https://explorer-api.beamprivacy.com/status'
+    ];
+    for (const url of endpoints) {
+        try {
+            const r = await fetch(url, { cache: 'no-store' });
+            if (!r.ok) continue;
+            const j = await r.json();
+            if (j && j.height > 0) {
+                networkTipHeight = j.height;
+                return networkTipHeight;
+            }
+        } catch (e) { /* try the next one */ }
+    }
+    return networkTipHeight;
 }
 
 // Update balance outdated warning
@@ -941,6 +1098,7 @@ function showPage(pageId, updateUrl = true) {
         explorer: 'Explorer',
         appstore: 'App Store',
         fuddle: 'Fuddle',
+        memeclash: 'Meme Clash',
         donate: 'Support Development',
         settings: 'Settings'
     };
@@ -959,6 +1117,7 @@ function showPage(pageId, updateUrl = true) {
             explorer: '/explorer',
             appstore: '/appstore',
             fuddle: '/fuddle',
+            memeclash: '/memeclash',
             donate: '/donate',
             settings: '/settings'
         };
@@ -993,6 +1152,8 @@ function showPage(pageId, updateUrl = true) {
         renderAppStore();
     } else if (pageId === 'fuddle') {
         if (typeof initFuddle === 'function') initFuddle();
+    } else if (pageId === 'memeclash') {
+        if (typeof initMemeClash === 'function') initMemeClash();
     } else if (pageId === 'settings') {
         loadSettings();
     }
@@ -1027,6 +1188,8 @@ function parseUrlToPage(path) {
     if (path.startsWith('/dex')) return 'dex';
     if (path.startsWith('/p2p')) return 'p2p';
     if (path.startsWith('/airdrop')) return 'airdrop';
+    if (path.startsWith('/memeclash')) return 'memeclash';
+    if (path.startsWith('/fuddle')) return 'fuddle';
     if (path.startsWith('/settings')) return 'settings';
     if (path.startsWith('/donate')) return 'donate';
     return 'dashboard';
@@ -5002,6 +5165,18 @@ function renderAppStore() {
                 </div>
             </div>
 
+            <div class="appstore-card" onclick="showPage('memeclash')">
+                <div class="appstore-card-icon" style="background: linear-gradient(135deg, #e11d48, #f59e0b);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                <div class="appstore-card-info">
+                    <h3>Meme Clash</h3>
+                    <p>$CHAD vs $GIGA — battle for supremacy</p>
+                </div>
+            </div>
+
             <div class="appstore-card" onclick="showPage('explorer')">
                 <div class="appstore-card-icon" style="background: linear-gradient(135deg, #3b82f6, #06b6d4);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
@@ -5173,6 +5348,12 @@ let pendingSendTx = null;
 
 // Send confirmation - shows confirmation modal first
 function confirmSend() {
+    // A stale wallet signs against a stale tip; the transaction is very
+    // unlikely to confirm and the user's coins sit locked meanwhile.
+    if (isWalletOutOfSync()) {
+        showToast('Wallet is out of sync with the network — sending is disabled until it catches up', 'error');
+        return;
+    }
     const address = document.getElementById('send-address').value.trim();
     const amount = document.getElementById('send-amount').value;
     const comment = document.getElementById('send-comment').value;
@@ -7690,6 +7871,10 @@ function updateSwapButton() {
 
 // Show swap confirmation modal
 function executeSwap() {
+    if (isWalletOutOfSync()) {
+        showToast('Wallet is out of sync with the network — swapping is disabled until it catches up', 'error');
+        return;
+    }
     if (!dexQuote) return;
 
     const fromAmount = document.getElementById('dex-from-amount').value;
@@ -9352,15 +9537,31 @@ function sortBalances(column) {
 let debugPanelOpen = false;
 
 function toggleDebugPanel() {
-    debugPanelOpen = !debugPanelOpen;
     const panel = document.getElementById('debug-panel');
-    if (debugPanelOpen) {
+    if (!panel) return;
+    if (!panel.classList.contains('visible')) {
+        // First toggle: show the panel bar
+        panel.classList.add('visible');
+        debugPanelOpen = false;
+    } else if (!debugPanelOpen) {
+        // Second toggle: expand the panel
+        debugPanelOpen = true;
         panel.classList.add('open');
         renderDebugLogs();
     } else {
-        panel.classList.remove('open');
+        // Third toggle: hide everything
+        debugPanelOpen = false;
+        panel.classList.remove('open', 'visible');
     }
 }
+
+// Keyboard shortcut: Ctrl+` to toggle debug panel
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        toggleDebugPanel();
+    }
+});
 
 // Create debug panel on load
 document.addEventListener('DOMContentLoaded', () => {
@@ -9378,8 +9579,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 border-top: 1px solid var(--glass-border);
                 z-index: 4000;
                 transition: height 0.3s ease;
-                display: flex;
+                display: none;
                 flex-direction: column;
+            }
+            #debug-panel.visible {
+                display: flex;
             }
             #debug-panel.open {
                 height: 350px;
@@ -13414,8 +13618,14 @@ async function claimVoucher() {
     }
 }
 
+// Guards the paths that spend money. The button is only disabled after an
+// await, so without this a second click buys a second batch.
+let _airdropTxInFlight = false;
+
 // Create airdrop batch
 async function createAirdropBatch() {
+    if (_airdropTxInFlight) return;
+
     const assetId = parseInt(document.getElementById('airdrop-asset-select').value);
     const valueStr = document.getElementById('airdrop-value').value;
     const count = parseInt(document.getElementById('airdrop-count').value);
@@ -13460,6 +13670,7 @@ async function createAirdropBatch() {
     const progressText = document.getElementById('progress-text');
 
     btn.disabled = true;
+    _airdropTxInFlight = true;
     progressEl.style.display = 'block';
     progressText.textContent = 'Generating codes...';
     progressFill.style.width = '10%';
@@ -13602,6 +13813,7 @@ async function createAirdropBatch() {
         progressText.textContent = 'Failed';
     } finally {
         btn.disabled = false;
+        _airdropTxInFlight = false;
         setTimeout(() => { progressEl.style.display = 'none'; }, 5000);
     }
 }
@@ -13817,7 +14029,6 @@ async function loadSavedCodes(checkOnChain = false) {
 
     // If checking on-chain, update all statuses first
     if (checkOnChain && AIRDROP_CID) {
-        const keysToRemove = [];
         for (const key of batchKeys) {
             const batch = stored[key];
             if (!batch.codes) continue;
@@ -13865,24 +14076,17 @@ async function loadSavedCodes(checkOnChain = false) {
                     // Otherwise stay 'pending' — tx is still processing
                 }
             }
-            // Remove batches where ALL codes are NOT FOUND (stale from old contract)
-            // Only remove if batch is NOT pending and was created more than 10 minutes ago
+            // Flag batches where ALL codes are NOT FOUND (e.g. left over from an
+            // earlier contract deployment). They are never auto-deleted: a node that
+            // is behind or briefly unreachable can also report "not found", and
+            // throwing away codes throws away the only key to the locked funds.
+            // createdAt is an ISO string, so it has to be parsed before comparing.
             const allNotFound2 = batch.codes.every(c => c.status === 'not found');
-            const batchAge = Date.now() - (batch.createdAt || 0);
-            const isOldEnough = batchAge > 10 * 60 * 1000; // 10 minutes
-            if (allNotFound2 && batch.txStatus !== 'pending' && isOldEnough) {
-                keysToRemove.push(key);
-            }
-        }
-        // Delete stale batches
-        if (keysToRemove.length > 0) {
-            keysToRemove.forEach(k => delete stored[k]);
-            console.log(`Removed ${keysToRemove.length} stale batch(es) with all NOT FOUND codes`);
+            const createdMs = batch.createdAt ? new Date(batch.createdAt).getTime() : 0;
+            const isOldEnough = createdMs > 0 && (Date.now() - createdMs) > 10 * 60 * 1000;
+            batch.stale = !!(allNotFound2 && batch.txStatus !== 'pending' && isOldEnough);
         }
         saveAirdropCodes(stored);
-        // Update batchKeys after removal
-        batchKeys.length = 0;
-        batchKeys.push(...Object.keys(stored).sort().reverse());
     }
 
     listEl.innerHTML = '';
@@ -13941,6 +14145,25 @@ async function loadSavedCodes(checkOnChain = false) {
                 Transaction failed. These codes were NOT deployed to the blockchain and cannot be redeemed.
             `;
             batchDiv.appendChild(warn);
+        } else if (batch.stale) {
+            const warn = document.createElement('div');
+            warn.className = 'batch-failed-warning';
+            warn.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" width="16" height="16">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/>
+                </svg>
+                None of these codes exist on the current contract. They may belong to an older
+                deployment &mdash; or your node may be out of sync. Refresh again before removing them.
+            `;
+            batchDiv.appendChild(warn);
+        }
+
+        // Removing a batch discards the codes for good, so it is always explicit.
+        if (txStatus === 'failed' || batch.stale) {
+            const rm = document.createElement('div');
+            rm.className = 'saved-batch-actions';
+            rm.innerHTML = `<button class="btn-action-codes" onclick="removeSavedBatch('${key}')">Remove from list</button>`;
+            batchDiv.appendChild(rm);
         }
 
         // Action buttons (only for confirmed or unknown batches)
@@ -14010,6 +14233,23 @@ async function loadSavedCodes(checkOnChain = false) {
 
         listEl.appendChild(batchDiv);
     }
+}
+
+// Drop a saved batch from local storage (codes cannot be recovered afterwards)
+function removeSavedBatch(key) {
+    const stored = getAirdropCodes();
+    const batch = stored[key];
+    if (!batch) return;
+    const unclaimed = (batch.codes || []).filter(c => c.status !== 'claimed').length;
+    let msg = 'Remove this batch from your saved codes?';
+    if (unclaimed > 0) {
+        msg += `\n\n${unclaimed} code(s) are not claimed. Once removed the codes are gone `
+             + 'for good — cancel the batch on-chain first if you want the funds back.';
+    }
+    if (!confirm(msg)) return;
+    delete stored[key];
+    saveAirdropCodes(stored);
+    loadSavedCodes(false);
 }
 
 // Render status badge for a code
@@ -14158,8 +14398,10 @@ async function loadAirdropTransactions() {
 
 // Cancel batch and reclaim unclaimed vouchers
 async function cancelAirdropBatch(batchId) {
+    if (_airdropTxInFlight) return;
     if (!confirm('Cancel this batch? All unclaimed vouchers will be reclaimed to your wallet.')) return;
 
+    _airdropTxInFlight = true;
     try {
         const result = await apiCall('invoke_contract', {
             args: `role=user,action=cancel_batch,cid=${AIRDROP_CID},batch_id=${batchId}`,
@@ -14175,5 +14417,7 @@ async function cancelAirdropBatch(batchId) {
         setTimeout(() => { loadAirdropTransactions(); loadAirdropStats(); }, 1000);
     } catch (e) {
         showToast(e.message || 'Failed to cancel batch', 'error');
+    } finally {
+        _airdropTxInFlight = false;
     }
 }

@@ -466,15 +466,16 @@ def get_node_sync_status():
                     synced = True
                 break
 
-            # Look for "My Tip" which shows current synced height
+            # "My Tip" is the node's own height. It says nothing about whether
+            # that height is the network's height — a node wedged on a dead
+            # fork keeps logging a perfectly plausible tip forever. This used
+            # to declare synced=True for any height above a hardcoded 3,000,000,
+            # which is how a node stuck at the HF6 boundary reported 100%.
+            # Report the height; let the frontend judge it against a real tip.
             if "My Tip:" in line:
                 match = re.search(r'My Tip:\s*(\d+)', line)
                 if match:
                     current_height = int(match.group(1))
-                    # If we see My Tip, node is synced to at least this height
-                    if current_height > 3000000:  # Reasonable mainnet height
-                        synced = True
-                        progress = 100
 
             # Look for "Initial Tip" which shows starting state
             if current_height == 0 and "Initial Tip:" in line:

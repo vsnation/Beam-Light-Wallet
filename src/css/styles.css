@@ -260,6 +260,48 @@
             50% { opacity: 0.4; }
         }
 
+        /* The badge is a three-state control, not decoration. The dot colour
+           follows the state instead of being hard-coded cyan, and the red
+           state does not pulse — a pulsing red dot reads as "working on it",
+           which is the opposite of what it means. */
+        .network-badge[data-sync="stale"] {
+            background: var(--error-dim, rgba(239, 68, 68, 0.15));
+            color: var(--error, #ef4444);
+        }
+        .network-badge[data-sync="stale"]::before {
+            background: var(--error, #ef4444);
+            animation: none;
+        }
+        .network-badge[data-sync="syncing"] {
+            background: var(--warning-dim, rgba(245, 158, 11, 0.15));
+            color: var(--warning, #f59e0b);
+        }
+        .network-badge[data-sync="syncing"]::before {
+            background: var(--warning, #f59e0b);
+        }
+
+        .sync-banner-error {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 16px 0;
+            padding: 12px 16px;
+            border-radius: 10px;
+            background: var(--error-dim, rgba(239, 68, 68, 0.12));
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            color: var(--error, #ef4444);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .sync-banner-error strong { display: block; }
+        .sync-banner-error svg { flex-shrink: 0; }
+
+        .disabled-out-of-sync,
+        button.disabled-out-of-sync {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
         .header-right {
             display: flex;
             align-items: center;
