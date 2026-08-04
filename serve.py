@@ -20,10 +20,22 @@ import re
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import urllib.request
 import urllib.error
+import urllib.parse
+import tempfile
+import threading
 from pathlib import Path
+
+# The one definition of a legal wallet name. Anything that reaches the
+# filesystem must be matched against this first.
+WALLET_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 # Configuration
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
+
+# Minted fresh every run and injected into index.html. A cross-origin page can
+# reach this server but cannot read the page, so it can never learn this value.
+import secrets as _secrets
+SESSION_TOKEN = _secrets.token_urlsafe(32)
 WALLET_API_URL = "http://127.0.0.1:10000/api/wallet"
 WALLET_API_PORT = 10000
 BASE_DIR = Path(__file__).parent.absolute()
@@ -145,7 +157,7 @@ AIRDROP_CONTRACT_ID = "8737e0d39575d7015fdea259fa091e41fc293e6c3d54e80d529033c34
 
 # Fuddle Contract - On-chain Wordle game
 # Set after deployment (placeholder until deployed)
-FUDDLE_CONTRACT_ID = "54b22372836b853cf61f87e657fbdd60455f2eee6b91c73f4dbf0a2df887a9d7"
+FUDDLE_CONTRACT_ID = "d08237dd9491a42383f7d01e07bf2f61be9e3e0a8a9cfc7c98a50914343644c0"
 
 # Load DEX shader bytes for contract calls
 DEX_SHADER = None
@@ -201,6 +213,21 @@ try:
         print(f"Loaded Airdrop shader: {len(AIRDROP_SHADER)} bytes")
 except Exception as e:
     print(f"Warning: Could not load Airdrop shader: {e}")
+
+# MemeClash Contract - Meme battle game ($CHAD vs $GIGA)
+# Set after deployment (placeholder until deployed)
+MEMECLASH_CONTRACT_ID = "d753ecb032b59f95d83bda64d5ed67baecc78068428be0cfae44c4dc2e4b6282"
+
+# Load MemeClash shader bytes for meme battle game
+MEMECLASH_SHADER = None
+try:
+    shader_path = BASE_DIR / "shaders" / "memeclash_app.wasm"
+    if shader_path.exists():
+        with open(shader_path, "rb") as f:
+            MEMECLASH_SHADER = list(f.read())
+        print(f"Loaded MemeClash shader: {len(MEMECLASH_SHADER)} bytes")
+except Exception as e:
+    print(f"Warning: Could not load MemeClash shader: {e}")
 
 # Load Fuddle shader bytes for on-chain Wordle game
 FUDDLE_SHADER = None
@@ -536,19 +563,20 @@ def start_beam_node(owner_key=None, password=None):
         "--peer=ap-node01.mainnet.beam.mw:8100"
     ]
 
-    # Add owner key if provided (required for wallet to see balances)
+    # The owner viewer key derives every address this wallet will ever use, so
+    # it is at least as sensitive as the password. Neither goes on argv.
+    cfg = None
     if owner_key:
-        cmd.append(f"--owner_key={owner_key}")
-        # Password is required when using owner key
-        if password:
-            cmd.append(f"--pass={password}")
+        cfg = write_secret_cfg({"owner_key": owner_key, "pass": password}, tag="node")
+        cmd.append(f"--config_file={cfg}")
+        drop_secret_cfg(cfg, delay=20)
 
     try:
         # Check binary is executable (skip on Windows where os.X_OK is meaningless)
         if PLATFORM != "windows" and not os.access(str(BEAM_NODE_BINARY), os.X_OK):
             return {"error": f"beam-node binary is not executable: {BEAM_NODE_BINARY}. Try: chmod +x {BEAM_NODE_BINARY}"}
 
-        print(f"[start_beam_node] cmd: {' '.join(cmd)}")
+        print(f"[start_beam_node] cmd: {redact(' '.join(cmd), password, owner_key)}")
         print(f"[start_beam_node] cwd: {NODE_DATA_DIR}")
 
         with open(log_file, "w") as lf:
@@ -733,16 +761,21 @@ def start_wallet_api(wallet_name, password, node_addr=None):
     log_file = LOGS_DIR / f"{wallet_name}_api.log"
     node = node_addr or DEFAULT_NODE
 
+    # wallet-api is long-lived, so its argv is visible in `ps` for the whole
+    # session. The password goes in a 0600 config that is deleted once the
+    # process has read it.
+    cfg = write_secret_cfg({"pass": password}, tag="api")
     cmd = [
         str(WALLET_API_BINARY),
         f"--wallet_path={wallet_path}",
-        f"--pass={password}",
+        f"--config_file={cfg}",
         f"--node_addr={node}",
         f"--port={WALLET_API_PORT}",
         "--use_http=1",
         "--enable_assets",
         "--enable_lelantus"
     ]
+    drop_secret_cfg(cfg, delay=20)
 
     try:
         with open(log_file, "w") as lf:
@@ -786,11 +819,12 @@ def create_wallet(wallet_name, password):
     wallet_dir.mkdir(parents=True, exist_ok=True)
     wallet_path = wallet_dir / "wallet.db"
 
+    cfg = write_secret_cfg({"pass": password}, tag="init")
     cmd = [
         str(WALLET_CLI_BINARY),
         "init",
         f"--wallet_path={wallet_path}",
-        f"--pass={password}"
+        f"--config_file={cfg}",
     ]
 
     try:
@@ -801,7 +835,7 @@ def create_wallet(wallet_name, password):
             timeout=30
         )
 
-        output = result.stdout + result.stderr
+        output = redact(result.stdout + result.stderr, password)
 
         # Extract seed phrase from output
         # The output contains: "Generated seed phrase: word1 word2 word3..."
@@ -832,7 +866,9 @@ def create_wallet(wallet_name, password):
     except subprocess.TimeoutExpired:
         return {"error": "Wallet creation timed out"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": redact(str(e), password)}
+    finally:
+        drop_secret_cfg(cfg)
 
 
 def restore_wallet(wallet_name, password, seed_phrase):
@@ -851,12 +887,14 @@ def restore_wallet(wallet_name, password, seed_phrase):
     words = seed_phrase.strip().split()
     formatted_seed = ';'.join(words) + ';'
 
+    # Both the password and the seed phrase would otherwise sit in `ps` output
+    # for the duration of the restore.
+    cfg = write_secret_cfg({"pass": password, "seed_phrase": formatted_seed}, tag="restore")
     cmd = [
         str(WALLET_CLI_BINARY),
         "restore",
         f"--wallet_path={wallet_path}",
-        f"--pass={password}",
-        f"--seed_phrase={formatted_seed}"
+        f"--config_file={cfg}",
     ]
 
     try:
@@ -871,7 +909,7 @@ def restore_wallet(wallet_name, password, seed_phrase):
             if wallet_dir.exists():
                 import shutil
                 shutil.rmtree(wallet_dir)
-            output = result.stdout + result.stderr
+            output = redact(result.stdout + result.stderr, password, formatted_seed, seed_phrase)
             return {"error": f"Wallet restore failed: {output[:200]}"}
 
         return {
@@ -883,7 +921,9 @@ def restore_wallet(wallet_name, password, seed_phrase):
     except subprocess.TimeoutExpired:
         return {"error": "Wallet restore timed out"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": redact(str(e), password, formatted_seed, seed_phrase)}
+    finally:
+        drop_secret_cfg(cfg)
 
 
 def export_owner_key(wallet_name, password):
@@ -904,11 +944,12 @@ def export_owner_key(wallet_name, password):
         # Windows needs more time to release SQLite file locks
         time.sleep(3 if PLATFORM == "windows" else 1)
 
+    cfg = write_secret_cfg({"pass": password}, tag="ownerkey")
     cmd = [
         str(WALLET_CLI_BINARY),
         "export_owner_key",
         f"--wallet_path={wallet_path}",
-        f"--pass={password}"
+        f"--config_file={cfg}",
     ]
 
     try:
@@ -919,7 +960,7 @@ def export_owner_key(wallet_name, password):
             timeout=30
         )
 
-        output = result.stdout + result.stderr
+        output = redact(result.stdout + result.stderr, password)
 
         # Extract owner key from output
         key_match = re.search(r'Owner Viewer key[:\s]+(\S+)', output, re.IGNORECASE)
@@ -945,12 +986,25 @@ def export_owner_key(wallet_name, password):
         # Try to restart wallet-api even on error
         if was_running:
             start_wallet_api(wallet_name, password)
-        return {"error": str(e)}
+        return {"error": redact(str(e), password)}
+    finally:
+        drop_secret_cfg(cfg)
 
 
 def delete_wallet(wallet_name):
     """Delete a wallet directory"""
+    # Defence in depth: the caller validates the name, but this function
+    # rmtree's whatever it is handed, so it re-checks containment itself.
+    if not WALLET_NAME_RE.match(wallet_name or ""):
+        return {"error": "Invalid wallet name"}
+
     wallet_dir = WALLETS_DIR / wallet_name
+    try:
+        if wallet_dir.resolve().parent != WALLETS_DIR.resolve():
+            return {"error": "Invalid wallet name"}
+    except OSError:
+        return {"error": "Invalid wallet name"}
+
     if not wallet_dir.exists():
         return {"error": f"Wallet '{wallet_name}' not found"}
 
@@ -1000,6 +1054,7 @@ def rescan_wallet(wallet_name, password):
         return start_wallet_api(wallet_name, password, LOCAL_NODE_ADDR)
 
     node_log = LOGS_DIR / "node_rescan.log"
+    rescan_cfg = write_secret_cfg({"owner_key": owner_key, "pass": password}, tag="rescan")
     node_cmd = [
         str(node_binary),
         "--port=10005",
@@ -1007,8 +1062,9 @@ def rescan_wallet(wallet_name, password):
         "--fast_sync=1",
         "--peer=eu-node01.mainnet.beam.mw:8100",
         "--peer=us-node01.mainnet.beam.mw:8100",
-        f"--owner_key={owner_key}"
+        f"--config_file={rescan_cfg}",
     ]
+    drop_secret_cfg(rescan_cfg, delay=20)
 
     try:
         NODE_DATA_DIR.mkdir(exist_ok=True)
@@ -1047,20 +1103,169 @@ def rescan_wallet(wallet_name, password):
     return result
 
 
+def write_secret_cfg(values, tag="beam"):
+    """Write BEAM options to a 0600 temp config file and return its path.
+
+    Anything passed on argv is world-readable through `ps`, which for this app
+    meant the wallet password, the 12-word seed phrase and the owner viewer key.
+    All three BEAM binaries accept --config_file, so secrets go in a file that
+    only this user can read and that is deleted as soon as the child has it.
+    """
+    fd, path = tempfile.mkstemp(prefix=f".{tag}-", suffix=".cfg", dir=str(STATE_DIR))
+    os.close(fd)
+    os.chmod(path, 0o600)
+    with open(path, "w", encoding="utf-8") as f:
+        for key, value in values.items():
+            if value is not None:
+                f.write(f"{key}={value}\n")
+    return path
+
+
+def drop_secret_cfg(path, delay=0.0):
+    """Delete a temp config, optionally after giving the child time to read it."""
+    def _rm():
+        if delay:
+            time.sleep(delay)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    if delay:
+        threading.Thread(target=_rm, daemon=True).start()
+    else:
+        _rm()
+
+
+def redact(text, *secrets):
+    """Strip secrets out of anything heading for a log or an API response."""
+    if not text:
+        return text
+    for s in secrets:
+        if s:
+            text = text.replace(str(s), "***")
+    return text
+
+
+def build_injection_script(app_route=None):
+    """The script every served HTML page gets, before any other script.
+
+    Carries the session token and wraps fetch() so the token is attached once,
+    centrally, instead of at each of the ~68 call sites — a call site that
+    forgets it would simply stop working, and a future one cannot forget.
+    """
+    route_line = ""
+    if app_route is not None:
+        route_line = f"window.APP_ROUTE = {json.dumps(app_route)};\n"
+    return f"""<script>
+{route_line}window.BEAM_SESSION_TOKEN = {json.dumps(SESSION_TOKEN)};
+(function () {{
+    var _fetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {{
+        var url = (typeof input === 'string') ? input : (input && input.url) || '';
+        // Never leak the token to explorer APIs, price feeds or any other host.
+        var sameOrigin = url.indexOf('://') === -1 || url.indexOf(window.location.origin) === 0;
+        if (sameOrigin) {{
+            init = init || {{}};
+            var h = new Headers(init.headers || (typeof input === 'object' && input.headers) || {{}});
+            h.set('X-Beam-Token', window.BEAM_SESSION_TOKEN);
+            init = Object.assign({{}}, init, {{ headers: h }});
+        }}
+        return _fetch(input, init);
+    }};
+}})();
+</script>
+"""
+
+
 class WalletProxyHandler(SimpleHTTPRequestHandler):
     """HTTP handler for static files, API proxy, and wallet management"""
 
-    def do_OPTIONS(self):
+    def serve_html_with_token(self, file_path):
+        """Serve an HTML file with the token/fetch shim injected."""
+        try:
+            html = Path(file_path).read_text(encoding="utf-8")
+        except OSError:
+            self.send_error(404, "Not Found")
+            return
+        html = html.replace("</head>", build_injection_script() + "</head>", 1)
+        encoded = html.encode("utf-8")
         self.send_response(200)
-        self.send_cors_headers()
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", len(encoded))
         self.end_headers()
+        self.wfile.write(encoded)
+
+    def do_OPTIONS(self):
+        # Nothing legitimate is cross-origin: the UI is served by this same
+        # server. Answering a preflight at all would only help an attacker.
+        self.send_error(405, "Method Not Allowed")
 
     def send_cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        """Kept as a no-op so existing call sites stay valid.
+
+        This used to send Access-Control-Allow-Origin: *, which let any page in
+        the browser POST tx_send to the wallet proxy and read addr_list back.
+        """
+        return
+
+    # ---- request origin enforcement -------------------------------------
+    # The wallet API is unauthenticated by design (it trusts localhost), so the
+    # only thing standing between a random web page and the user's funds is
+    # whether we accept the request at all.
+
+    def _allowed_hosts(self):
+        return {f"127.0.0.1:{PORT}", f"localhost:{PORT}", f"[::1]:{PORT}"}
+
+    def _check_request_origin(self):
+        """Reject cross-origin and DNS-rebinding requests. True == allowed."""
+        # Host header pins us to loopback names; blocks DNS rebinding, where a
+        # hostname the attacker controls resolves to 127.0.0.1.
+        host = (self.headers.get("Host") or "").strip().lower()
+        if host and host not in self._allowed_hosts():
+            self.send_json({"error": "Invalid Host header"}, 403)
+            return False
+
+        # A browser sets Origin on every cross-origin request, and on all
+        # same-origin non-GET fetches. Absent means a top-level navigation.
+        origin = (self.headers.get("Origin") or "").strip()
+        if origin and origin.lower() not in {f"http://{h}" for h in self._allowed_hosts()}:
+            print(f"[security] rejected cross-origin request from {origin} to {self.path}")
+            self.send_json({"error": "Cross-origin requests are not allowed"}, 403)
+            return False
+
+        # Modern browsers label the initiator. cross-site can never be legitimate.
+        if (self.headers.get("Sec-Fetch-Site") or "").lower() in ("cross-site", "same-site"):
+            print(f"[security] rejected {self.headers.get('Sec-Fetch-Site')} request to {self.path}")
+            self.send_json({"error": "Cross-site requests are not allowed"}, 403)
+            return False
+
+        return True
+
+    def _check_session_token(self):
+        """Require the token we injected into index.html on mutating calls.
+
+        A cross-origin page cannot read the served HTML, so it cannot learn the
+        token. This closes the class of attack rather than one instance of it.
+        """
+        if self.headers.get("X-Beam-Token") == SESSION_TOKEN:
+            return True
+        print(f"[security] missing/invalid session token for {self.path}")
+        self.send_json({"error": "Missing or invalid session token"}, 403)
+        return False
+
+    def _guard(self, mutating=True):
+        if not self._check_request_origin():
+            return False
+        if mutating and not self._check_session_token():
+            return False
+        return True
 
     def do_GET(self):
+        # GETs are reads, so no token is required (the page itself is a GET and
+        # has none yet) — but cross-origin reads still leak addresses and
+        # transaction history, so the origin check applies.
+        if self.path.startswith("/api/") and not self._guard(mutating=False):
+            return
         if self.path == "/api/status":
             self.handle_status()
         elif self.path == "/api/wallets":
@@ -1085,8 +1290,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             # Serve PWA assets from src/ directory
             self.path = "/src" + self.path
             super().do_GET()
-        elif self.path.startswith("/css/") or self.path.startswith("/js/"):
-            # Redirect CSS/JS requests to src/ directory
+        elif self.path.startswith("/css/") or self.path.startswith("/js/") or self.path.startswith("/images/") or self.path.startswith("/docs/") or self.path.startswith("/fonts/"):
+            # Redirect CSS/JS/images/docs/fonts requests to src/ directory
             self.path = "/src" + self.path
             super().do_GET()
         elif self.path.startswith("/src/"):
@@ -1096,10 +1301,14 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             # Serve config files
             super().do_GET()
         elif self.path.startswith("/p2p/"):
-            # Serve P2P module files
-            self.path = "/src" + self.path
-            super().do_GET()
-        elif self.path.startswith("/explorer") or self.path in ["/", "/dashboard", "/assets", "/transactions", "/addresses", "/dex", "/p2p", "/airdrop", "/appstore", "/fuddle", "/settings", "/donate"]:
+            # The P2P iframe calls /api/* too, so it needs the same token.
+            if self.path.split("?")[0].endswith(".html"):
+                self.serve_html_with_token(
+                    BASE_DIR / "src" / "p2p" / Path(self.path.split("?")[0]).name)
+            else:
+                self.path = "/src" + self.path
+                super().do_GET()
+        elif self.path.startswith("/explorer") or self.path in ["/", "/dashboard", "/assets", "/transactions", "/addresses", "/dex", "/p2p", "/airdrop", "/appstore", "/memeclash", "/fuddle", "/settings", "/donate"]:
             # Handle all frontend routes - serve index.html with route info
             self.serve_with_route()
         elif self.path == "/index.html":
@@ -1142,6 +1351,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 "airdrop": "airdrop",
                 "explorer": "explorer",
                 "appstore": "appstore",
+                "memeclash": "memeclash",
                 "fuddle": "fuddle",
                 "settings": "settings",
                 "donate": "donate"
@@ -1163,11 +1373,9 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         with open(index_path, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        # Inject the route info as a JavaScript variable
-        route_script = f"""<script>
-window.APP_ROUTE = {json.dumps(app_route)};
-</script>
-"""
+        # Inject the route info and the session token. The token travels only
+        # inside this HTML, which a cross-origin page cannot read.
+        route_script = build_injection_script(app_route)
         # Insert before </head>
         html_content = html_content.replace("</head>", route_script + "</head>")
 
@@ -1181,6 +1389,8 @@ window.APP_ROUTE = {json.dumps(app_route)};
         self.wfile.write(encoded_content)
 
     def do_POST(self):
+        if not self._guard(mutating=True):
+            return
         if self.path == "/api/wallet/unlock":
             self.handle_unlock()
         elif self.path == "/api/wallet/lock":
@@ -1223,8 +1433,14 @@ window.APP_ROUTE = {json.dumps(app_route)};
             self.send_error(404, "Not Found")
 
     def do_DELETE(self):
+        if not self._guard(mutating=True):
+            return
         if self.path.startswith("/api/wallet/"):
-            wallet_name = self.path.split("/")[-1]
+            # URL-decode before validating, or %2e%2e slips a traversal through.
+            wallet_name = urllib.parse.unquote(self.path.split("/")[-1])
+            if not WALLET_NAME_RE.match(wallet_name):
+                self.send_json({"error": "Invalid wallet name"}, 400)
+                return
             result = delete_wallet(wallet_name)
             self.send_json(result, 200 if "success" in result else 400)
         else:
@@ -1637,6 +1853,10 @@ window.APP_ROUTE = {json.dumps(app_route)};
                         # Inject Fuddle shader for on-chain Wordle game
                         elif FUDDLE_SHADER and FUDDLE_CONTRACT_ID and FUDDLE_CONTRACT_ID in args:
                             data["params"]["contract"] = FUDDLE_SHADER
+                            body = json.dumps(data).encode()
+                        # Inject MemeClash shader for meme battle game
+                        elif MEMECLASH_SHADER and MEMECLASH_CONTRACT_ID and MEMECLASH_CONTRACT_ID in args:
+                            data["params"]["contract"] = MEMECLASH_SHADER
                             body = json.dumps(data).encode()
                 except json.JSONDecodeError:
                     pass
