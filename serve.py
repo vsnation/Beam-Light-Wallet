@@ -12,6 +12,7 @@ Usage:
 
 import sys
 import os
+import atexit
 import json
 import signal
 import subprocess
@@ -64,6 +65,12 @@ BASE_DIR = Path(__file__).parent.absolute()
 # build point somewhere else without any of that.
 DATA_DIR = Path(os.environ.get("BEAM_DATA_DIR") or (Path.home() / ".beam-light-wallet"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+# The wallet database, the logs and the transient secret configs all live here.
+# Default mkdir gives 0755, so every local account could read them.
+try:
+    os.chmod(DATA_DIR, 0o700)
+except OSError:
+    pass
 
 # Migrate from old locations if they exist
 _old_app_support = Path.home() / "Library" / "Application Support" / "BEAM Light Wallet"
@@ -579,6 +586,7 @@ def start_beam_node(owner_key=None, password=None):
     time.sleep(1)  # Give port time to be released
 
     LOGS_DIR.mkdir(exist_ok=True)
+    _harden_dir(LOGS_DIR)
     NODE_DATA_DIR.mkdir(exist_ok=True)
 
     log_file = LOGS_DIR / "beam-node.log"
@@ -790,6 +798,7 @@ def start_wallet_api(wallet_name, password, node_addr=None):
     time.sleep(1)  # Give port time to be released
 
     LOGS_DIR.mkdir(exist_ok=True)
+    _harden_dir(LOGS_DIR)
 
     log_file = LOGS_DIR / f"{wallet_name}_api.log"
     node = node_addr or DEFAULT_NODE
@@ -1270,7 +1279,72 @@ def write_secret_cfg(values, tag="beam"):
         for key, value in values.items():
             if value is not None:
                 f.write(f"{key}={value}\n")
+    _SECRET_FILES.add(path)
     return path
+
+
+def _harden_dir(path):
+    """0700 a directory we own. Logs and wallet data must not be world-readable."""
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+
+
+def sweep_leaked_secrets():
+    """Redact secrets that earlier builds wrote into logs, and drop stale configs.
+
+    Before secrets moved to --config_file they were passed on argv, and argv is
+    echoed into serve.log. On this machine that left a real wallet password
+    sitting in a 0644 file next to wallet.db - one Time Machine snapshot or one
+    cloud-synced home directory carries both. Fixing the leak going forward does
+    nothing about the copy already on disk, so sweep it on every start.
+    """
+    patterns = [
+        re.compile(r"(--pass=)[^\s'\"]+"),
+        re.compile(r"(--owner_key=)[^\s'\"]+"),
+        re.compile(r"(seed_phrase[=:]\s*)[^\n]+"),
+        re.compile(r"(\"password\"\s*:\s*\")[^\"]*"),
+    ]
+    cleaned = 0
+    try:
+        for log in LOGS_DIR.glob("*.log"):
+            try:
+                _harden_file(log)
+                text = log.read_text(encoding="utf-8", errors="replace")
+                new_text = text
+                for pat in patterns:
+                    new_text = pat.sub(r"\1<redacted>", new_text)
+                if new_text != text:
+                    log.write_text(new_text, encoding="utf-8")
+                    cleaned += 1
+            except OSError:
+                continue
+    except OSError:
+        pass
+
+    # Secret configs are meant to be deleted once the child has read them, but a
+    # crash or a kill leaves them behind - they contain the password verbatim.
+    stale = 0
+    for leftover in list(STATE_DIR.glob(".*.cfg")) + list(STATE_DIR.glob(".*.acl")):
+        try:
+            leftover.unlink()
+            stale += 1
+        except OSError:
+            pass
+    if cleaned or stale:
+        print(f"[security] redacted secrets in {cleaned} log file(s), removed {stale} stale secret file(s)")
+
+
+def _harden_file(path):
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _harden_dir_noop():
+    pass
 
 
 def write_acl_file(key):
@@ -1283,7 +1357,27 @@ def write_acl_file(key):
     os.chmod(path, 0o600)
     with open(path, "w", encoding="utf-8") as f:
         f.write(f"{key}:write\n")
+    _SECRET_FILES.add(path)
     return path
+
+
+# Every transient secret file, so shutdown can guarantee removal. The 20-second
+# daemon thread below is a convenience, not a guarantee: daemon threads are
+# killed without running at interpreter exit, so Ctrl-C or a crash used to leave
+# the password on disk indefinitely.
+_SECRET_FILES = set()
+
+
+def _purge_secret_files():
+    for p in list(_SECRET_FILES):
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+        _SECRET_FILES.discard(p)
+
+
+atexit.register(_purge_secret_files)
 
 
 def drop_secret_cfg(path, delay=0.0):
@@ -2869,6 +2963,13 @@ def main():
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     NODE_DATA_DIR.mkdir(parents=True, exist_ok=True)
     (BINARIES_DIR / PLATFORM).mkdir(parents=True, exist_ok=True)
+
+    # Nothing here should be readable by other local accounts, and earlier
+    # builds left plaintext passwords in the logs. Both are dealt with before
+    # the server accepts a single request.
+    for _d in (DATA_DIR, WALLETS_DIR, LOGS_DIR, STATE_DIR):
+        _harden_dir(_d)
+    sweep_leaked_secrets()
 
     running = is_wallet_api_running()
     state_file = STATE_DIR / ".active_wallet"
