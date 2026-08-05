@@ -778,6 +778,13 @@ def start_wallet_api(wallet_name, password, node_addr=None):
         f"--node_addr={node}",
         f"--port={WALLET_API_PORT}",
         "--use_http=1",
+        # wallet-api binds 0.0.0.0 and offers no bind-address flag, so without
+        # this it answers ANY host on the LAN - unauthenticated. Every CSRF and
+        # session-token defence on serve.py's port is bypassed by simply talking
+        # to port 10000 directly: read balances, addresses and history, and call
+        # tx_send. Verified from another address on the same network before this
+        # was added. The whitelist is the only mechanism the binary provides.
+        "--ip_whitelist=127.0.0.1",
         "--enable_assets",
         "--enable_lelantus"
     ]
