@@ -51,7 +51,7 @@ SESSION_TOKEN = _secrets.token_urlsafe(32)
 # --ip_whitelist does not help there: the malicious page runs on this machine, so
 # the request genuinely arrives from 127.0.0.1. wallet-api's ACL does help - it
 # requires a "key" field in the JSON-RPC body, and only this process knows it.
-WALLET_API_ACL_KEY = _secrets.token_urlsafe(32)
+
 WALLET_API_URL = "http://127.0.0.1:10000/api/wallet"
 WALLET_API_PORT = 10000
 BASE_DIR = Path(__file__).parent.absolute()
@@ -279,6 +279,32 @@ active_owner_key = None
 # State files directory (writable data dir)
 STATE_DIR = DATA_DIR
 
+# Persisted for the lifetime of the wallet-api process, NOT per serve.py run.
+#
+# Generating it per run looked tidier, but wallet-api outlives serve.py: restart
+# the server (crash, manual restart, the updater's os.execl) while the wallet is
+# unlocked and every call fails with "Unknown API key" until the user works out
+# they must lock and unlock. Measured that exact failure.
+#
+# The file is 0600 inside a 0700 directory, and it only authorises calls that
+# already had to come from loopback. A key on disk is a smaller problem than a
+# wallet that silently stops working.
+WALLET_API_KEY_FILE = STATE_DIR / ".wallet_api_acl.key"
+
+
+def _load_or_make_acl_key():
+    try:
+        if WALLET_API_KEY_FILE.exists():
+            existing = WALLET_API_KEY_FILE.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+    except OSError:
+        pass
+    return _secrets.token_urlsafe(32)
+
+
+WALLET_API_ACL_KEY = _load_or_make_acl_key()
+
 # Load saved node_mode or default to "public"
 node_mode_file = STATE_DIR / ".node_mode"
 if node_mode_file.exists():
@@ -437,6 +463,13 @@ def stop_wallet_api():
 
     # Also kill any process using the wallet API port
     kill_process_on_port(WALLET_API_PORT)
+
+    # The ACL key is only meaningful while that process lives. Leaving it behind
+    # would keep a credential on disk for a wallet that is locked.
+    try:
+        WALLET_API_KEY_FILE.unlink()
+    except OSError:
+        pass
 
     state_file = STATE_DIR / ".active_wallet"
     if state_file.exists():
@@ -808,6 +841,12 @@ def start_wallet_api(wallet_name, password, node_addr=None):
     # process has read it.
     cfg = write_secret_cfg({"pass": password}, tag="api")
     acl_path = write_acl_file(WALLET_API_ACL_KEY)
+    # Survives a serve.py restart so the running wallet-api stays reachable.
+    try:
+        WALLET_API_KEY_FILE.write_text(WALLET_API_ACL_KEY, encoding="utf-8")
+        os.chmod(WALLET_API_KEY_FILE, 0o600)
+    except OSError:
+        pass
     cmd = [
         str(WALLET_API_BINARY),
         f"--wallet_path={wallet_path}",

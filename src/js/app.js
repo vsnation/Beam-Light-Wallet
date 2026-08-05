@@ -749,7 +749,29 @@ function clearDebugLogs() {
 }
 
 // API call helper
+// Methods that create or confirm a transaction. Signing against a stale tip
+// produces something very unlikely to confirm, while the inputs it selected sit
+// locked in the meantime.
+const SPENDING_METHODS = new Set(['tx_send', 'process_invoke_data']);
+
+function isSpendingCall(method, params) {
+    if (SPENDING_METHODS.has(method)) return true;
+    // invoke_contract is a read unless it is asked to build a transaction.
+    if (method === 'invoke_contract') return !!(params && (params.create_tx || params.createTx));
+    return false;
+}
+
 async function apiCall(method, params = {}) {
+    // Gate spending here rather than at each call site. Only send and swap
+    // checked, out of ~45 places that build a transaction - so the airdrop,
+    // Fuddle, MemeClash and minter flows all signed happily against a stale
+    // chain while the banner told the user sending was disabled. One chokepoint
+    // cannot be forgotten by the next flow someone adds.
+    if (isSpendingCall(method, params) && typeof isWalletOutOfSync === 'function' && isWalletOutOfSync()) {
+        const msg = 'Wallet is out of sync with the network — transactions are disabled until it catches up';
+        showToast(msg, 'error');
+        throw new Error(msg);
+    }
     try {
         // Automatically add DEX shader for invoke_contract calls with DEX contract
         if (method === 'invoke_contract' && params.args && params.args.includes(DEX_CID)) {
