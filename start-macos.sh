@@ -374,7 +374,13 @@ else
                 mkdir -p "$TEMP_DIR/extracted"
                 tar -xzf "$TEMP_DIR/latest.tar.gz" --strip-components=1 -C "$TEMP_DIR/extracted" 2>/dev/null
                 if [ -f "$TEMP_DIR/extracted/serve.py" ]; then
-                    for item in serve.py start.sh src config shaders README.md build; do
+                    # config/ is deliberately NOT in this list. It holds binaries.json, which
+                    # carries the pinned SHA-256 of every BEAM binary. Replacing it from the
+                    # same tarball that supplies the binary URL lets one compromised source
+                    # control both the download and the hash it is checked against - the
+                    # verification would then print "sha256 verified" over an attacker's
+                    # binary. Config changes have to be applied by reinstalling deliberately.
+                    for item in serve.py start.sh src shaders README.md build; do
                         if [ -e "$TEMP_DIR/extracted/$item" ]; then
                             rm -rf "$INSTALL_DIR/$item"
                             cp -r "$TEMP_DIR/extracted/$item" "$INSTALL_DIR/$item"
