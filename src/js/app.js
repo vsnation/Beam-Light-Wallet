@@ -15024,6 +15024,14 @@ async function createAirdropBatch() {
     const totalCostGroth = valueGroth * count;
     const feeGroth = Math.max(Math.floor(totalCostGroth / 100), 1); // 1% fee, min 1 groth
     const totalWithFeeGroth = totalCostGroth + feeGroth;
+
+    // Claim the flag BEFORE the first await. It used to be set further down,
+    // after this balance check, so a second click landing during the await saw
+    // the flag still false, sailed past the guard at the top, and created a
+    // second batch - locking the funds twice. Everything above this point is
+    // synchronous, so those early returns cannot race.
+    _airdropTxInFlight = true;
+
     try {
         const status = await apiCall('wallet_status', {});
         if (status && status.totals) {
@@ -15041,6 +15049,7 @@ async function createAirdropBatch() {
 
             if (assetId !== 0 && available < totalWithFeeGroth) {
                 showToast(`Insufficient balance. Need ${formatAmount(totalWithFeeGroth)} ${info.symbol} (incl. 1% fee), have ${formatAmount(available)} ${info.symbol}`, 'error');
+                _airdropTxInFlight = false;
                 return;
             }
             if (beamAvailable < beamNeeded) {
@@ -15048,6 +15057,7 @@ async function createAirdropBatch() {
                     ? `Insufficient BEAM. Need ${formatAmount(beamNeeded)} (${formatAmount(totalWithFeeGroth)} incl. 1% fee, plus about ${formatAmount(CONTRACT_CALL_FEE_GROTH)} network fee), have ${formatAmount(beamAvailable)}`
                     : `You have enough ${info.symbol}, but a contract call also costs BEAM. Need about ${formatAmount(CONTRACT_CALL_FEE_GROTH)} BEAM for the network fee, have ${formatAmount(beamAvailable)}`,
                     'error');
+                _airdropTxInFlight = false;
                 return;
             }
         }
@@ -15061,7 +15071,6 @@ async function createAirdropBatch() {
     const progressText = document.getElementById('progress-text');
 
     btn.disabled = true;
-    _airdropTxInFlight = true;
     progressEl.style.display = 'block';
     progressText.textContent = 'Generating codes...';
     progressFill.style.width = '10%';
