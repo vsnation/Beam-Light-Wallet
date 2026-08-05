@@ -1520,6 +1520,23 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         return True
 
     def do_GET(self):
+        # The Host check applies to EVERY route, not just /api/.
+        #
+        # It used to guard only /api/, so a DNS-rebinding attacker - a hostname
+        # they control, re-resolved to 127.0.0.1 - could fetch "/" and read the
+        # served HTML, which carries the per-run session token. Verified: a
+        # request with Host: evil.attacker.com:9080 returned 200 and the token.
+        #
+        # The API's own Host check meant the stolen token could not then be
+        # used, so this was defence in depth holding rather than a break. But
+        # handing an attacker the token and betting on the next guard is not a
+        # position worth keeping, and there is no reason to serve the app to a
+        # hostname that is not ours.
+        host = (self.headers.get("Host") or "").strip().lower()
+        if host and host not in self._allowed_hosts():
+            self.send_json({"error": "Invalid Host header"}, 403)
+            return
+
         # GETs are reads, so no token is required (the page itself is a GET and
         # has none yet) — but cross-origin reads still leak addresses and
         # transaction history, so the origin check applies.
