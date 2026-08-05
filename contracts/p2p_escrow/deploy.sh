@@ -33,7 +33,9 @@ OUTPUT_DIR="${LIGHTWALLET_DIR}/shaders"
 
 # Default values
 WALLET_NAME="${1:-test_wallet}"
-PASSWORD="${2:-REDACTED_PASSWORD}"
+# No default: a hardcoded password ends up in the repo, and a script that
+# silently falls back to one is how it stays there.
+PASSWORD="${2:?usage: deploy.sh <wallet> <password> [node_addr]}"
 NODE_ADDR="${3:-127.0.0.1:10005}"  # Local node for contract deployment
 MIN_ESCROW_STAKE=100000000  # 1 FOMO in groth
 

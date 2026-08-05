@@ -58,7 +58,7 @@ Export owner key from wallet:
 ```bash
 ./binaries/macos/beam-wallet shader \
     --wallet_path=wallets/test_wallet/wallet.db \
-    --pass=REDACTED_PASSWORD \
+    --pass="$WALLET_PASSWORD" \
     --node_addr=127.0.0.1:10005 \
     --shader_app_file=shaders/p2p_escrow_app.wasm \
     --shader_args="role=manager,action=create" \
@@ -69,7 +69,7 @@ Export owner key from wallet:
 ```bash
 echo "y" | ./binaries/macos/beam-wallet shader \
     --wallet_path=wallets/test_wallet/wallet.db \
-    --pass=REDACTED_PASSWORD \
+    --pass="$WALLET_PASSWORD" \
     --node_addr=127.0.0.1:10005 \
     --shader_app_file=shaders/p2p_escrow_app.wasm \
     --shader_args="role=manager,action=create" \
@@ -93,7 +93,7 @@ Proceed? (y/n)
 ```bash
 ./binaries/macos/wallet-api \
     --wallet_path=wallets/test_wallet/wallet.db \
-    --pass=REDACTED_PASSWORD \
+    --pass="$WALLET_PASSWORD" \
     --node_addr=127.0.0.1:10005 \
     --port=10000 \
     --use_http=1 \
@@ -229,7 +229,7 @@ curl -s http://127.0.0.1:10000/api/wallet \
 ```bash
 ./binaries/macos/beam-wallet shader \
     --wallet_path=wallets/test_wallet/wallet.db \
-    --pass=REDACTED_PASSWORD \
+    --pass="$WALLET_PASSWORD" \
     --node_addr=127.0.0.1:10005 \
     --shader_app_file=shaders/p2p_escrow_app.wasm \
     --shader_args="role=user,action=view,cid=95d077dcd070c3fe5021b4cd385684372ca0148e8cc90e16338dd00dec31b0bf"

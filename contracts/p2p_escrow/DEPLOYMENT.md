@@ -17,7 +17,7 @@ cd /Users/anastasiasmirnova/Desktop/Beam/LightWallet/contracts/p2p_escrow
 ./deploy.sh [wallet_name] [password] [node_address]
 
 # Example with defaults:
-./deploy.sh test_wallet REDACTED_PASSWORD 127.0.0.1:10005
+./deploy.sh test_wallet '<your-wallet-password>' 127.0.0.1:10005
 ```
 
 The script will:
@@ -117,7 +117,7 @@ pkill -f wallet-api
 echo "y" | /Users/anastasiasmirnova/Desktop/Beam/LightWallet/binaries/macos/beam-wallet \
     --command=shader \
     --wallet_path=/Users/anastasiasmirnova/Desktop/Beam/LightWallet/wallets/test_wallet/wallet.db \
-    --pass=REDACTED_PASSWORD \
+    --pass="$WALLET_PASSWORD" \
     --node_addr=127.0.0.1:10005 \
     --shader_app_file=app.wasm \
     --shader_contract_file=contract.wasm \
@@ -155,7 +155,7 @@ The contract is deployed with these settings (defined in `contract.h`):
 /Users/anastasiasmirnova/Desktop/Beam/LightWallet/binaries/macos/beam-wallet \
     --command=shader \
     --wallet_path=/Users/anastasiasmirnova/Desktop/Beam/LightWallet/wallets/test_wallet/wallet.db \
-    --pass=REDACTED_PASSWORD \
+    --pass="$WALLET_PASSWORD" \
     --node_addr=127.0.0.1:10005 \
     --shader_app_file=app.wasm \
     --shader_args="role=manager,action=view,cid=7c70746be5247487871c1829fb9a1415f0fec71af6d61151035cd788e138f39f"
@@ -186,7 +186,7 @@ This contract supports upgradeability. To deploy a new version:
 ### Step 1: Deploy New Version
 
 ```bash
-./deploy.sh test_wallet REDACTED_PASSWORD
+./deploy.sh test_wallet '<your-wallet-password>'
 # Note the new CONTRACT_ID
 ```
 
