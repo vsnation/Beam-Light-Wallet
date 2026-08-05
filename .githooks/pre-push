@@ -1,0 +1,45 @@
+#!/bin/sh
+# Runs the CI's own checks before anything leaves this machine.
+#
+# On 2026-08-05 a `git add -A`, after .gitignore was loosened in the same
+# commit, pushed 102 files including a live wallet password to a public repo.
+# The CI check for that exact string already existed. It never ran, because CI
+# runs after the push, which is too late for a secret.
+set -e
+fail=0
+
+# 1. Secrets. Extend this list, never shorten it.
+if git diff --cached --name-only 2>/dev/null | head -1 >/dev/null; then :; fi
+SECRETS=$(git grep -nIE 'BeamTest2024|-----BEGIN [A-Z ]*PRIVATE KEY-----|[0-9]{9,10}:AA[A-Za-z0-9_-]{33}' \
+            HEAD -- ':!*.githooks*' ':!*ci.yml' 2>/dev/null || true)
+if [ -n "$SECRETS" ]; then
+    echo "pre-push BLOCKED: a secret is committed"
+    echo "$SECRETS" | head -5
+    fail=1
+fi
+
+# 2. Anything enormous. 152 MB of a third-party app once went in this way.
+BIG=$(git ls-tree -r -l HEAD | awk '$4 > 5000000 {printf "  %.1f MB  %s\n", $4/1048576, $5}' || true)
+if [ -n "$BIG" ]; then
+    echo "pre-push WARNING: files over 5 MB are committed"
+    echo "$BIG" | head -5
+fi
+
+# 3. Syntax. A broken serve.py or app.js should never reach a user.
+python3 -c "import ast,sys; ast.parse(open('serve.py').read())" || fail=1
+command -v node >/dev/null && { node --check src/js/app.js >/dev/null || fail=1; }
+
+# 4. Authorship, per CLAUDE.md.
+# Both GitHub noreply forms are legitimately vsnation; the numeric-prefix one
+# is what github.com hands out. Anything else - a real address, a machine
+# default, an AI co-author - is not.
+BADAUTH=$(git log --format='%an <%ae>' -50 2>/dev/null \
+          | grep -vE '^vsnation <([0-9]+\+)?vsnation@users\.noreply\.github\.com>$' | sort -u || true)
+if [ -n "$BADAUTH" ]; then
+    echo "pre-push BLOCKED: wrong commit authorship"
+    echo "$BADAUTH"
+    fail=1
+fi
+
+[ "$fail" -eq 0 ] || { echo "push aborted"; exit 1; }
+echo "pre-push checks passed"
