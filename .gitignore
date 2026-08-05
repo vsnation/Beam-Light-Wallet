@@ -197,3 +197,6 @@ data/
 # wallet. 152 MB of videos and build artifacts once got swept in by `git add -A`
 # and had to be filtered back out of an unpushed branch.
 meme_game/
+
+# Agent tooling. Contains credentials and internal notes; never ship it.
+.claude/
