@@ -36,6 +36,21 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
 # reach this server but cannot read the page, so it can never learn this value.
 import secrets as _secrets
 SESSION_TOKEN = _secrets.token_urlsafe(32)
+
+# wallet-api's own authentication. Distinct from SESSION_TOKEN, and crucially it
+# is NEVER sent to the browser.
+#
+# wallet-api listens on a fixed port with no Origin, Host or CSRF checking of any
+# kind, so any page in the user's browser could POST tx_send straight to it and
+# skip every guard in this file. Content-Type: text/plain makes it a CORS
+# "simple" request, so there is no preflight to refuse - and the attacker never
+# needs to read the reply, because the transaction is already signed and
+# broadcast. Verified in a real browser from a different origin.
+#
+# --ip_whitelist does not help there: the malicious page runs on this machine, so
+# the request genuinely arrives from 127.0.0.1. wallet-api's ACL does help - it
+# requires a "key" field in the JSON-RPC body, and only this process knows it.
+WALLET_API_ACL_KEY = _secrets.token_urlsafe(32)
 WALLET_API_URL = "http://127.0.0.1:10000/api/wallet"
 WALLET_API_PORT = 10000
 BASE_DIR = Path(__file__).parent.absolute()
@@ -314,17 +329,29 @@ def get_wallet_api_pid():
 
 
 def is_wallet_api_running():
-    """Check if wallet-api is responding"""
+    """Check if wallet-api is responding, and that our ACL key is accepted."""
     try:
         req = urllib.request.Request(
             WALLET_API_URL,
-            data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "wallet_status"}).encode(),
+            data=json.dumps({
+                "jsonrpc": "2.0", "id": 1, "method": "wallet_status",
+                # ACL is on, so even a read needs the key.
+                "key": WALLET_API_ACL_KEY,
+            }).encode(),
             headers={"Content-Type": "application/json"},
             method="POST"
         )
         with urllib.request.urlopen(req, timeout=2) as response:
-            return response.status == 200
-    except:
+            if response.status != 200:
+                return False
+            # wallet-api answers 200 with a JSON-RPC error body when the key is
+            # rejected, so status alone would report a locked-out API as healthy.
+            try:
+                payload = json.loads(response.read())
+            except (ValueError, OSError):
+                return False
+            return "result" in payload
+    except Exception:
         return False
 
 
@@ -771,6 +798,7 @@ def start_wallet_api(wallet_name, password, node_addr=None):
     # session. The password goes in a 0600 config that is deleted once the
     # process has read it.
     cfg = write_secret_cfg({"pass": password}, tag="api")
+    acl_path = write_acl_file(WALLET_API_ACL_KEY)
     cmd = [
         str(WALLET_API_BINARY),
         f"--wallet_path={wallet_path}",
@@ -785,10 +813,17 @@ def start_wallet_api(wallet_name, password, node_addr=None):
         # tx_send. Verified from another address on the same network before this
         # was added. The whitelist is the only mechanism the binary provides.
         "--ip_whitelist=127.0.0.1",
+        # Requires a secret "key" in every JSON-RPC body. This is what stops a
+        # page in the user's own browser from driving the signing API directly;
+        # the whitelist above only stops other machines.
+        "--use_acl=1",
+        f"--acl_path={acl_path}",
         "--enable_assets",
         "--enable_lelantus"
     ]
     drop_secret_cfg(cfg, delay=20)
+    # loadACL runs once at startup, so the file need not outlive it.
+    drop_secret_cfg(acl_path, delay=20)
 
     try:
         with open(log_file, "w") as lf:
@@ -1197,6 +1232,19 @@ def write_secret_cfg(values, tag="beam"):
         for key, value in values.items():
             if value is not None:
                 f.write(f"{key}={value}\n")
+    return path
+
+
+def write_acl_file(key):
+    """Write a 0600 wallet-api ACL granting one key write access.
+
+    Format is one `<key>:read|write` per line (wallet/api/cli/api_cli.cpp).
+    """
+    fd, path = tempfile.mkstemp(prefix=".api-", suffix=".acl", dir=str(STATE_DIR))
+    os.close(fd)
+    os.chmod(path, 0o600)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(f"{key}:write\n")
     return path
 
 
@@ -1986,6 +2034,18 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                         elif MEMECLASH_SHADER and MEMECLASH_CONTRACT_ID and MEMECLASH_CONTRACT_ID in args:
                             data["params"]["contract"] = MEMECLASH_SHADER
                             body = json.dumps(data).encode()
+                except json.JSONDecodeError:
+                    pass
+
+            # Attach the ACL key. Done here, once, rather than at any call site,
+            # so a future endpoint cannot forget it. It must never be sent to
+            # the browser - that is the whole point.
+            if body:
+                try:
+                    data = json.loads(body)
+                    if isinstance(data, dict) and "method" in data:
+                        data["key"] = WALLET_API_ACL_KEY
+                        body = json.dumps(data).encode()
                 except json.JSONDecodeError:
                     pass
 
