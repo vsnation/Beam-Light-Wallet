@@ -12,7 +12,7 @@
     "min_consensus_height is the HF6 activation block. A node that cannot pass it is out of",
     "consensus no matter what its own logs claim about being synced."
   ],
-  "app_version": "1.2.0",
+  "app_version": "1.2.1",
   "min_consensus_height": 3928666,
   "hardfork": {
     "name": "HF6",
