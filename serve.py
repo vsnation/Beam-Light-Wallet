@@ -861,6 +861,10 @@ def create_wallet(wallet_name, password):
 
     # Create wallet directory
     wallet_dir = WALLETS_DIR / wallet_name
+    bad_pw = secret_cfg_safe(password)
+    if bad_pw:
+        return {"error": bad_pw}
+
     if wallet_dir.exists():
         return {"error": f"Wallet '{wallet_name}' already exists"}
 
@@ -925,6 +929,10 @@ def restore_wallet(wallet_name, password, seed_phrase):
         return {"error": f"beam-wallet binary not found at {WALLET_CLI_BINARY}"}
 
     wallet_dir = WALLETS_DIR / wallet_name
+    bad_pw = secret_cfg_safe(password)
+    if bad_pw:
+        return {"error": bad_pw}
+
     if wallet_dir.exists():
         return {"error": f"Wallet '{wallet_name}' already exists"}
 
@@ -1215,6 +1223,36 @@ def consensus_warning():
             "reason": info.get("unsupported_reason", ""),
         }
     return {"out_of_consensus": False}
+
+
+def secret_cfg_safe(value):
+    """Reject values that boost::program_options would silently mangle.
+
+    Secrets go to the BEAM binaries in a --config_file, because argv is readable
+    by any local process through `ps`. But boost's config parser strips a '#'
+    comment and trims surrounding whitespace, and it does the comment strip
+    BEFORE it handles quotes - so `pass="MyP@ss#2026!"` parses to the literal
+    `"MyP@ss`, not the password the user typed. Quoting does not rescue it;
+    verified against beam-wallet 7.5, which opened such a wallet with the
+    password `"abc`.
+
+    Left alone, a user who chose `MyP@ss#2026!` would get a wallet protected by
+    `MyP@ss` - silently, since unlock truncates identically - and would find the
+    password rejected the day they restored with the official BEAM tools.
+
+    Checked only when a wallet is created or restored. Unlock deliberately does
+    not check, so wallets already created with a '#' keep opening.
+    """
+    text = str(value)
+    if "#" in text:
+        return ("Password cannot contain '#'. The BEAM wallet tools treat it as "
+                "the start of a comment and would silently cut your password "
+                "short at that character.")
+    if text != text.strip():
+        return ("Password cannot begin or end with a space. The BEAM wallet "
+                "tools trim it, so the password you typed would not be the one "
+                "stored.")
+    return None
 
 
 def write_secret_cfg(values, tag="beam"):
