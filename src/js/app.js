@@ -3704,7 +3704,14 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
     showToastAdvanced('Switching Node', `Connecting to ${mode} node...`, 'pending');
 
     try {
-        const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+        const password = storedWalletPassword;
+        if (!password) {
+            // Every other caller checks this; this one silently sent undefined.
+            showToast({ title: 'Session expired',
+                        message: 'The wallet password is no longer held in this session.',
+                        hint: 'Unlock the wallet again to continue.' }, 'error');
+            return;
+        }
         const response = await fetch('/api/node/switch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3772,7 +3779,7 @@ async function performNodeChange(selector, newNode, isLocal, costConfirmed) {
     }
 
     // Use stored password - no prompting
-    const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+    const password = storedWalletPassword;
     if (!password) {
         showToast({ title: 'Session expired', message: 'The wallet password is no longer held in this session.', hint: 'Unlock the wallet again to continue.' }, 'error');
         selector.value = currentNode;
@@ -3934,7 +3941,7 @@ function closeRescanWarningModal() {
 
 // Switch to local node and perform rescan
 async function switchToLocalAndRescan() {
-    const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+    const password = storedWalletPassword;
     if (!password) {
         showToast({ title: 'Session expired', message: 'The wallet password is no longer held in this session, and switching to a local node needs it.', hint: 'Unlock the wallet again, then retry.' }, 'error');
         return;
@@ -4014,7 +4021,7 @@ async function performQuickRescan() {
 
 // Full rescan with local node
 async function performRescan() {
-    const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+    const password = storedWalletPassword;
     if (!password) {
         showToast({ title: 'Rescan failed', message: 'The wallet password is no longer held in this session, and a rescan needs it.', hint: 'Unlock the wallet again, then retry the rescan.' }, 'error');
         return;
@@ -5111,7 +5118,7 @@ async function lockWallet() {
         if (result.success) {
             // Clear stored password
             storedWalletPassword = null;
-            sessionStorage.removeItem('walletPassword');
+            storedWalletPassword = null;
 
             // Hide node sync banner
             updateNodeSyncBanner(false);
@@ -5370,7 +5377,7 @@ function startNodeSyncChecker() {
 }
 
 async function seamlessSwitchToLocalNode() {
-    const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
+    const password = storedWalletPassword;
     if (!password) {
         console.log('No stored password, cannot switch');
         return;
@@ -5441,7 +5448,10 @@ async function welcomeUnlock() {
     try {
         // Store password for node switching
         storedWalletPassword = password;
-        sessionStorage.setItem('walletPassword', password);
+        // Deliberately NOT persisted: sessionStorage survives navigation and is
+        // readable by any script in this origin, which is the same origin that
+        // holds the signing API. In memory only, so a reload requires unlocking
+        // again - the four callers that need it already say so clearly.
 
         // Step 1: Kill existing processes for clean start
         btn.innerHTML = '<div class="welcome-spinner"></div> Cleaning up...';
@@ -5726,9 +5736,19 @@ async function welcomeSeedContinue() {
             // Store password for background node switching
             storedWalletPassword = welcomeCreatedPassword;
             welcomeSelectedWallet = welcomeCreatedWallet;
-            sessionStorage.setItem('walletPassword', welcomeCreatedPassword);
+            // In memory only; see the note at the unlock handler.
             hideLockedOverlay();
             resetButton();
+
+            // The user has confirmed they wrote the seed down and we are past
+            // the point of needing it. Leaving it in a module global and in the
+            // DOM keeps the one secret that can move every coin sitting in the
+            // page for as long as the tab is open, reachable by any script that
+            // gets in. Drop both.
+            welcomeCreatedSeed = null;
+            welcomeCreatedPassword = null;
+            const seedGrid = document.getElementById('welcome-seed-grid');
+            if (seedGrid) seedGrid.innerHTML = '';
 
             const connected = await loadWalletData();
             if (connected) {
@@ -5856,7 +5876,10 @@ async function welcomeRestoreWallet() {
                 // Store password for background node switching
                 storedWalletPassword = password;
                 welcomeSelectedWallet = name;
-                sessionStorage.setItem('walletPassword', password);
+                // Deliberately NOT persisted: sessionStorage survives navigation and is
+        // readable by any script in this origin, which is the same origin that
+        // holds the signing API. In memory only, so a reload requires unlocking
+        // again - the four callers that need it already say so clearly.
                 hideLockedOverlay();
                 resetButton();
 
@@ -5997,12 +6020,12 @@ function renderAppStore() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    // Restore password from sessionStorage for node switching
-    const savedPassword = sessionStorage.getItem('walletPassword');
-    if (savedPassword) {
-        storedWalletPassword = savedPassword;
-        console.log('Restored password from session');
-    }
+    // The wallet password is deliberately NOT restored across loads. It used to
+    // live in sessionStorage so node switching survived a refresh, but that put
+    // it where any script in this origin could read it - the same origin that
+    // holds the session token and the signing proxy. Clear anything an older
+    // build left behind.
+    try { sessionStorage.removeItem('walletPassword'); } catch (e) {}
 
 
     // Show loading state. These stay on screen through the locked overlay, so
