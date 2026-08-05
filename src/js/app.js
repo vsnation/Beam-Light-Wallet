@@ -5,7 +5,10 @@
 // ============================================
 // Version and Auto-Update
 // ============================================
-const APP_VERSION = '1.0.5';
+// Placeholder only. The real value comes from config/binaries.json via
+// GET /api/status and is written into the DOM by applyServerVersion().
+// Do not hardcode a version here — that is how four of them disagreed.
+let APP_VERSION = '—';
 const GITHUB_REPO = 'vsnation/Beam-Light-Wallet';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -30,6 +33,16 @@ async function checkForUpdates(showNoUpdateMsg = false) {
         const latestVersion = (release.tag_name || '').replace(/^v/, '').trim();
         const currentVersion = APP_VERSION.trim();
 
+        // APP_VERSION comes from the server and is a placeholder until then.
+        // Comparing against it makes every release look newer, which prompts a
+        // DOWNGRADE - the exact opposite of what an update banner is for, and
+        // an especially bad thing to ask a user to approve.
+        if (!/^\d+\.\d+/.test(currentVersion)) {
+            console.log('Skipping update check: local version not known yet');
+            if (showNoUpdateMsg) showToast('Still starting up - try again in a moment', 'info');
+            return null;
+        }
+
         console.log(`Current version: "${currentVersion}", Latest: "${latestVersion}"`);
 
         // Compare versions - only show update if latest is strictly greater
@@ -47,7 +60,7 @@ async function checkForUpdates(showNoUpdateMsg = false) {
     } catch (e) {
         console.error('Update check failed:', e);
         if (showNoUpdateMsg) {
-            showToast('Update check failed: ' + e.message, 'error');
+            showErrorToast(e, 'Update check failed');
         }
         return null;
     }
@@ -175,7 +188,10 @@ async function bannerAutoUpdate(version) {
         const response = await fetch('/api/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ version })
+            // confirm:true is only ever set from a user gesture that has
+            // shown the warning. An update must never be applied because the
+            // app decided to — a compromised repo would then own every wallet.
+            body: JSON.stringify({ version, confirm: true })
         });
 
         const result = await response.json();
@@ -238,7 +254,10 @@ async function performAutoUpdate(version) {
         const response = await fetch('/api/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ version })
+            // confirm:true is only ever set from a user gesture that has
+            // shown the warning. An update must never be applied because the
+            // app decided to — a compromised repo would then own every wallet.
+            body: JSON.stringify({ version, confirm: true })
         });
 
         const result = await response.json();
@@ -438,14 +457,27 @@ function copyUpdateCommand(cmd) {
 // Official BEAM logo SVG
 const BEAM_LOGO = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 57 40"><defs><linearGradient id="a" x1=".03%" x2="54.79%" y1="50.23%" y2="50.23%"><stop offset="0%" stop-opacity="0"/><stop offset="100%" stop-color="#FFF"/></linearGradient><linearGradient id="b" x1="99.38%" x2="35.8%" y1="49.83%" y2="49.83%"><stop offset="0%" stop-opacity="0"/><stop offset="100%" stop-color="#FF51FF"/></linearGradient><linearGradient id="c" x1="100.43%" x2="48.94%" y1="50.11%" y2="50.11%"><stop offset="0%" stop-opacity="0"/><stop offset="100%" stop-color="#A18CFF"/></linearGradient><linearGradient id="d" x1="99.91%" x2="41.06%" y1="50.24%" y2="50.24%"><stop offset="0%" stop-opacity="0"/><stop offset="100%" stop-color="#AB38E6"/></linearGradient></defs><g fill="none"><path fill="#0B76FF" d="M28.47 33.21H40.3L28.48 12.58V.08l23.15 39.77H28.47z"/><path fill="#24C1FF" d="M28.47 33.21H16.66l11.8-20.63V.08L5.32 39.86h23.16z"/><path fill="#39FFF2" d="M28.47 17.8v13.33l-7.23.01z"/><path fill="#00E2C2" d="M28.47 17.8v13.33l7.24.01z"/><path fill="url(#a)" d="m.1 12.53 28.37 13.14v1.37L.11 20.82z"/><path fill="url(#b)" d="M56.9 8.7 28.47 25.68v.46L56.9 14.18z"/><path fill="url(#c)" d="m56.9 25.13-28.43 1.91v-.45l28.43-6.93z"/><path fill="url(#d)" d="M56.9 14.18 28.47 26.13v.46l28.43-6.93z"/></g></svg>');
 
-// Asset icons from ca_assets_updates.json - priority tokens with known logos
+// Asset icons, served locally.
+//
+// These used to point at raw.githubusercontent.com, arweave and ipfs.io. Each
+// icon is fetched only when the user holds or views that asset, so those hosts
+// received a request per token - which told GitHub, Arweave and IPFS the user's
+// IP address and which assets are in their wallet. On a privacy coin that is
+// the one thing the wallet exists to prevent, and it happened on every launch.
+//
+// Downloaded once and committed; see src/images/assets/. Adding an icon here
+// means adding a file, not a URL.
 const ASSET_ICONS = {
     0: BEAM_LOGO,
-    4: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/crown.ico',
-    7: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/beamx.png',
-    9: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/tico.ico',
-    47: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/47_nph.svg',
-    174: 'https://73ecj7qctz4nrza4bbbqmgriv4gh5uwwf65izu7wjdvrmozhbvbq.arweave.net/_sgk_gKeeNjkHAhDBhoorwx-0tYvuozT9kjrFjsnDUM'
+    4: '/images/assets/crown.ico',
+    7: '/images/assets/beamx.png',
+    9: '/images/assets/tico.ico',
+    47: '/images/assets/nph.svg',
+    174: '/images/assets/fomo.png',
+    186: '/images/assets/giga.png',
+    187: '/images/assets/chad.png',
+    190: '/images/assets/chad.png',
+    191: '/images/assets/giga.png'
 };
 
 // Priority token config with metadata
@@ -456,7 +488,11 @@ const ASSET_CONFIG = {
     7: { name: 'BeamX', symbol: 'BEAMX', color: '#da70d6', class: 'beamx', icon: ASSET_ICONS[7], decimals: 8 },
     9: { name: 'Tico', symbol: 'TICO', color: '#e91e63', class: 'fomo', icon: ASSET_ICONS[9], decimals: 8 },
     47: { name: 'Nephrit', symbol: 'NPH', color: '#3498db', class: 'fomo', icon: ASSET_ICONS[47], decimals: 8 },
-    174: { name: 'FOMO', symbol: 'FOMO', color: '#60a5fa', class: 'fomo', icon: ASSET_ICONS[174], decimals: 8 }
+    174: { name: 'FOMO', symbol: 'FOMO', color: '#60a5fa', class: 'fomo', icon: ASSET_ICONS[174], decimals: 8 },
+    186: { name: 'GigaChad', symbol: 'GIGA', color: '#a855f7', class: 'fomo', icon: ASSET_ICONS[186], decimals: 8 },
+    187: { name: 'Chad', symbol: 'CHAD', color: '#25c2a0', class: 'beam', icon: ASSET_ICONS[187], decimals: 8 },
+    190: { name: 'Chad', symbol: 'CHAD', color: '#25c2a0', class: 'beam', icon: ASSET_ICONS[190], decimals: 8 },
+    191: { name: 'GigaChad', symbol: 'GIGA', color: '#a855f7', class: 'fomo', icon: ASSET_ICONS[191], decimals: 8 }
 };
 
 // DEX Contract ID
@@ -573,17 +609,72 @@ const API_URL = '/api/wallet';
 const GROTH = 100000000;
 
 // Centralized interval management
+/**
+ * Feature flags.
+ *
+ * P2P ships disabled. It is ~10,000 lines of alpha whose sync backbone
+ * (gun-manhattan.herokuapp.com) returns 404 — Heroku killed free dynos in 2022 —
+ * it writes JSON into the install directory, which is read-only inside a signed
+ * app bundle, and it derives trust scores from a file any local process can
+ * edit. It is being replaced by a cross-chain DEX; see docs/P2P_REWORK.md.
+ *
+ * Flip to true to bring the existing page back verbatim.
+ */
+const FEATURE_P2P = false;
+
 const activeIntervals = {};
+// Remembered so a timer suspended while the window is hidden can be restarted.
+const intervalMeta = {};
 function startInterval(name, fn, ms) {
     if (activeIntervals[name]) clearInterval(activeIntervals[name]);
+    intervalMeta[name] = { fn, ms, suspended: false };
     activeIntervals[name] = setInterval(fn, ms);
 }
 function stopInterval(name) {
     if (activeIntervals[name]) { clearInterval(activeIntervals[name]); delete activeIntervals[name]; }
+    delete intervalMeta[name];
 }
 function stopAllIntervals() {
     Object.keys(activeIntervals).forEach(stopInterval);
 }
+
+/**
+ * Tear down the timers each page module owns. Those modules keep their own
+ * handles rather than using the registry above, so leaving a page has to ask
+ * them to clean up — otherwise their pollers outlive the page forever.
+ */
+function stopPageTimers() {
+    try { if (typeof cleanupMemeClash === 'function') cleanupMemeClash(); } catch (e) {}
+    try { if (typeof cleanupFuddle === 'function') cleanupFuddle(); } catch (e) {}
+    if (window._airdropTxInterval) {
+        clearInterval(window._airdropTxInterval);
+        window._airdropTxInterval = null;
+    }
+}
+
+/**
+ * Nothing needs to poll while the window is hidden. Suspending on blur is the
+ * single cheapest win available: a backgrounded wallet drops to zero requests
+ * instead of continuing to hammer the API for as long as it stays open.
+ */
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        Object.keys(activeIntervals).forEach(name => {
+            const meta = intervalMeta[name];
+            if (meta) meta.suspended = true;
+            clearInterval(activeIntervals[name]);
+        });
+    } else {
+        Object.keys(intervalMeta).forEach(name => {
+            const meta = intervalMeta[name];
+            if (meta && meta.suspended) {
+                meta.suspended = false;
+                activeIntervals[name] = setInterval(meta.fn, meta.ms);
+                try { meta.fn(); } catch (e) {}   // catch up immediately
+            }
+        });
+    }
+});
 
 // Sanitize numeric input - convert commas to decimal points
 function sanitizeNumericInput(input) {
@@ -725,6 +816,23 @@ async function apiCall(method, params = {}) {
 }
 
 // Format amount from groth to display
+// A failed panel that only says "Failed to load" is a dead end: the user's
+// only escape is to navigate away and back, and most never work that out.
+// Every load failure gets a retry that re-runs the same loader.
+//
+// retry is a bare global function name plus optional literal args, because
+// these render into innerHTML where a closure cannot survive.
+function errorState(message, retry, opts) {
+    const o = opts || {};
+    const detail = o.detail ? `<div class="error-state-detail">${escapeHtml(String(o.detail))}</div>` : '';
+    const button = retry
+        ? `<button class="error-state-retry" onclick="${escapeHtml(retry)}">Try again</button>`
+        : '';
+    const body = `<div class="error-state-box"><div class="error-state-msg">${escapeHtml(message)}</div>${detail}${button}</div>`;
+    // Table bodies cannot take a div child, so wrap when asked.
+    return o.colspan ? `<tr><td colspan="${o.colspan}">${body}</td></tr>` : body;
+}
+
 function formatAmount(groth, decimals = 8) {
     if (!groth && groth !== 0) return '0';
     const value = groth / GROTH;
@@ -788,7 +896,12 @@ async function loadWalletData() {
             });
         }
 
-        // Update sync status
+        // Refresh the independent tip occasionally, then judge our own sync
+        // against it. Cheap: one small request every few minutes.
+        if (!networkTipHeight || Date.now() - (window._lastTipCheck || 0) > 180000) {
+            window._lastTipCheck = Date.now();
+            refreshNetworkTip().then(() => updateSyncStatus(status)).catch(() => {});
+        }
         updateSyncStatus(status);
 
         // Try to get UTXOs
@@ -838,25 +951,169 @@ async function loadWalletData() {
 // Update sync status display
 let lastServerStatus = null;
 
+// How far behind the chain tip we tolerate before calling the wallet stale.
+// A BEAM block is ~1 minute, so 60 blocks is roughly an hour.
+const SYNC_BLOCK_TOLERANCE = 60;
+const SYNC_AGE_TOLERANCE_MS = 30 * 60 * 1000;
+
+// Last height we saw from a public explorer, used as an independent second
+// opinion. Without it a wallet stuck on a dead fork looks perfectly healthy.
+let networkTipHeight = 0;
+let walletSyncState = { state: 'unknown', height: 0, behind: 0, reason: '' };
+
+function isWalletOutOfSync() {
+    return walletSyncState.state === 'stale';
+}
+
+/**
+ * Decide whether the wallet is actually following the chain.
+ *
+ * wallet-api reports the truth in `is_in_sync` and `current_state_timestamp`;
+ * the old check was `current_state_hash && height > 0`, which is true for a
+ * wallet frozen on a dead fork. That is how HF6 went unnoticed for 34 days:
+ * the node stopped at 3,928,665 and the header kept saying "Mainnet".
+ */
+function computeSyncState(status) {
+    const height = status.current_height || 0;
+    if (!status.current_state_hash || height <= 0) {
+        return { state: 'syncing', height, behind: 0, reason: 'No chain state yet' };
+    }
+
+    // The node told us outright that it is not in sync.
+    if (status.is_in_sync === false) {
+        const behind = networkTipHeight > height ? networkTipHeight - height : 0;
+        return { state: 'stale', height, behind, reason: 'Node reports out of sync' };
+    }
+
+    // The tip we have is old in wall-clock terms.
+    if (status.current_state_timestamp) {
+        const ageMs = Date.now() - (status.current_state_timestamp * 1000);
+        if (ageMs > SYNC_AGE_TOLERANCE_MS) {
+            const mins = Math.round(ageMs / 60000);
+            const behind = networkTipHeight > height ? networkTipHeight - height : 0;
+            return { state: 'stale', height, behind, reason: `Last block is ${mins} min old` };
+        }
+    }
+
+    // An independent explorer says the chain is well ahead of us.
+    if (networkTipHeight && (networkTipHeight - height) > SYNC_BLOCK_TOLERANCE) {
+        return {
+            state: 'stale', height, behind: networkTipHeight - height,
+            reason: 'Behind the network tip'
+        };
+    }
+
+    return { state: 'synced', height, behind: 0, reason: '' };
+}
+
 function updateSyncStatus(status) {
+    walletSyncState = computeSyncState(status);
+
+    const badge = document.querySelector('.network-badge');
     const networkBadge = document.querySelector('.network-badge span');
     if (networkBadge) {
-        const height = status.current_height || 0;
-        const synced = status.current_state_hash && height > 0;
+        const height = walletSyncState.height;
 
-        // Check if local node is syncing
+        // Local node still doing its initial sync is a known, benign state.
         if (lastServerStatus?.node_mode === 'local' && lastServerStatus?.node_running && !lastServerStatus?.node_synced) {
             const progress = lastServerStatus.node_progress || 0;
             networkBadge.textContent = `Syncing ${progress}%`;
             networkBadge.style.color = 'var(--warning)';
-        } else {
-            networkBadge.textContent = synced ? `Mainnet (${height.toLocaleString()})` : 'Syncing...';
+            if (badge) badge.dataset.sync = 'syncing';
+        } else if (walletSyncState.state === 'stale') {
+            const behind = walletSyncState.behind;
+            networkBadge.textContent = behind
+                ? `Out of sync — ${behind.toLocaleString()} blocks behind`
+                : `Out of sync — ${walletSyncState.reason}`;
+            networkBadge.style.color = 'var(--error)';
+            if (badge) {
+                badge.dataset.sync = 'stale';
+                badge.title = `${walletSyncState.reason}. Balances and history are not current, and sending is disabled.`;
+            }
+        } else if (walletSyncState.state === 'synced') {
+            networkBadge.textContent = `Mainnet (${height.toLocaleString()})`;
             networkBadge.style.color = '';
+            if (badge) { badge.dataset.sync = 'synced'; badge.title = ''; }
+        } else {
+            networkBadge.textContent = 'Syncing...';
+            networkBadge.style.color = '';
+            if (badge) badge.dataset.sync = 'syncing';
         }
     }
 
-    // Show/hide balance warning
+    updateOutOfSyncBanner();
+    applySyncGating();
     updateBalanceWarning();
+}
+
+/**
+ * A stale wallet signs against a stale tip, so anything it broadcasts is very
+ * unlikely to confirm. Better to refuse than to take the user's money.
+ */
+function applySyncGating() {
+    const stale = isWalletOutOfSync();
+    document.querySelectorAll('[data-requires-sync]').forEach(el => {
+        el.disabled = stale;
+        el.classList.toggle('disabled-out-of-sync', stale);
+        if (stale) {
+            el.title = 'Unavailable while the wallet is out of sync with the network';
+        } else if (el.title === 'Unavailable while the wallet is out of sync with the network') {
+            el.title = '';
+        }
+    });
+}
+
+function updateOutOfSyncBanner() {
+    const existing = document.getElementById('out-of-sync-banner');
+    if (!isWalletOutOfSync()) {
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing) {
+        const detail = existing.querySelector('[data-detail]');
+        if (detail) detail.textContent = outOfSyncDetail();
+        return;
+    }
+
+    const banner = document.createElement('div');
+    banner.id = 'out-of-sync-banner';
+    banner.className = 'sync-banner-error';
+    banner.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/>
+        </svg>
+        <span><strong>This wallet is not following the network.</strong>
+        <span data-detail>${escapeHtml(outOfSyncDetail())}</span></span>
+    `;
+    const container = document.querySelector('.main-content') || document.body;
+    container.insertBefore(banner, container.firstChild);
+}
+
+function outOfSyncDetail() {
+    const behind = walletSyncState.behind;
+    const behindTxt = behind ? ` It is ${behind.toLocaleString()} blocks behind.` : '';
+    return `Balances and transaction history are out of date and sending is disabled.${behindTxt}`
+         + ' Check Settings → Node, or update your BEAM binaries.';
+}
+
+/** Independent height from a public explorer — never from our own node. */
+async function refreshNetworkTip() {
+    const endpoints = [
+        'https://explorer.0xmx.net/api/status',
+        'https://explorer-api.beamprivacy.com/status'
+    ];
+    for (const url of endpoints) {
+        try {
+            const r = await fetch(url, { cache: 'no-store' });
+            if (!r.ok) continue;
+            const j = await r.json();
+            if (j && j.height > 0) {
+                networkTipHeight = j.height;
+                return networkTipHeight;
+            }
+        } catch (e) { /* try the next one */ }
+    }
+    return networkTipHeight;
 }
 
 // Update balance outdated warning
@@ -909,10 +1166,40 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
     });
 });
 
+/**
+ * Take the app version from the server, which reads it from
+ * config/binaries.json. The welcome screen renders before this arrives, so any
+ * already-painted version label is patched in place.
+ */
+function applyServerVersion(status) {
+    if (!status || !status.version) return;
+    APP_VERSION = status.version;
+    document.querySelectorAll('.welcome-version, [data-app-version]').forEach(el => {
+        el.textContent = 'v' + APP_VERSION;
+    });
+}
+
+/** Hide anything whose feature flag is off. */
+function applyFeatureFlags() {
+    document.querySelectorAll('[data-feature="p2p"]').forEach(el => {
+        el.hidden = !FEATURE_P2P;
+    });
+}
+
 function showPage(pageId, updateUrl = true) {
-    // Stop page-specific intervals when leaving a page
+    // A disabled feature must not be reachable by URL or bookmark either.
+    if (pageId === 'p2p' && !FEATURE_P2P) {
+        pageId = 'dashboard';
+        updateUrl = true;
+    }
+
+    // Every page-scoped poller stops here. This used to stop exactly two of
+    // them, so fuddle, MemeClash and airdrop kept polling forever after you
+    // navigated away — and MemeClash started a fresh uncancellable interval on
+    // each visit, so an idle dashboard drifted towards ~100 API calls/minute.
     stopInterval('dexActivity');
     stopInterval('explorerRefresh');
+    stopPageTimers();
 
     // Update nav
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -941,6 +1228,7 @@ function showPage(pageId, updateUrl = true) {
         explorer: 'Explorer',
         appstore: 'App Store',
         fuddle: 'Fuddle',
+        memeclash: 'Meme Clash',
         donate: 'Support Development',
         settings: 'Settings'
     };
@@ -959,6 +1247,7 @@ function showPage(pageId, updateUrl = true) {
             explorer: '/explorer',
             appstore: '/appstore',
             fuddle: '/fuddle',
+            memeclash: '/memeclash',
             donate: '/donate',
             settings: '/settings'
         };
@@ -993,9 +1282,20 @@ function showPage(pageId, updateUrl = true) {
         renderAppStore();
     } else if (pageId === 'fuddle') {
         if (typeof initFuddle === 'function') initFuddle();
+    } else if (pageId === 'memeclash') {
+        if (typeof initMemeClash === 'function') initMemeClash();
     } else if (pageId === 'settings') {
         loadSettings();
+    } else if (pageId === 'p2p') {
+        // Load the P2P bundle the first time it is actually opened.
+        const frame = document.getElementById('p2p-iframe');
+        if (frame && !frame.src && frame.dataset.src) {
+            frame.src = frame.dataset.src;
+        }
     }
+
+    // Reflect feature flags in the chrome every time we render it.
+    applyFeatureFlags();
 }
 
 // Handle browser back/forward navigation
@@ -1027,6 +1327,8 @@ function parseUrlToPage(path) {
     if (path.startsWith('/dex')) return 'dex';
     if (path.startsWith('/p2p')) return 'p2p';
     if (path.startsWith('/airdrop')) return 'airdrop';
+    if (path.startsWith('/memeclash')) return 'memeclash';
+    if (path.startsWith('/fuddle')) return 'fuddle';
     if (path.startsWith('/settings')) return 'settings';
     if (path.startsWith('/donate')) return 'donate';
     return 'dashboard';
@@ -1093,7 +1395,111 @@ if (window.App) {
 }
 
 // Render asset cards
+/**
+ * Sum every asset into one figure. The per-asset USD values already existed via
+ * getAssetUsdValue; the dashboard just never added them up.
+ */
+function renderPortfolioTotal() {
+    const valueEl = document.getElementById('portfolio-total');
+    const subEl = document.getElementById('portfolio-sub');
+    if (!valueEl) return;
+
+    const assets = (walletData && walletData.assets) || [];
+    let usd = 0;
+    let beamGroth = 0;
+    let priced = 0;
+
+    assets.forEach(a => {
+        const total = (a.balance || 0) + (a.locked || 0);
+        if (total <= 0) return;
+        if (a.id === 0) beamGroth += total;
+        const v = getAssetUsdValue(a.id, total);
+        if (v > 0) { usd += v; priced++; }
+    });
+
+    if (usd > 0) {
+        valueEl.textContent = '$' + usd.toLocaleString(undefined, {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+        });
+        const held = assets.filter(a => ((a.balance || 0) + (a.locked || 0)) > 0).length;
+        const unpriced = held - priced;
+        subEl.textContent = `${formatAmount(beamGroth)} BEAM · ${held} asset${held === 1 ? '' : 's'}`
+            + (unpriced > 0 ? ` · ${unpriced} without a price` : '');
+    } else if (beamGroth > 0) {
+        // No price feed — still show something true rather than nothing.
+        valueEl.textContent = formatAmount(beamGroth) + ' BEAM';
+        subEl.textContent = 'USD value unavailable';
+    } else {
+        valueEl.textContent = '0';
+        subEl.textContent = 'No funds yet';
+    }
+}
+
+/**
+ * Loading placeholders for the three regions that used to sit blank or show a
+ * centred "Loading...". Each one traces the geometry of what is coming, so the
+ * page settles instead of jumping. The markup is decorative — aria-hidden — and
+ * a single .sr-only line carries the meaning for screen readers. It is all
+ * static HTML; nothing here is interpolated from the chain.
+ */
+function skeletonAssetCards(count) {
+    let html = '';
+    for (let i = 0; i < (count || 3); i++) {
+        html +=
+            '<div class="skeleton-card" aria-hidden="true">' +
+                '<div class="asset-card-header">' +
+                    '<div class="skeleton asset-icon"></div>' +
+                    '<div class="skeleton skeleton-text" style="width:28px;"></div>' +
+                '</div>' +
+                '<div class="skeleton skeleton-text" style="height:var(--text-xl);width:72%;"></div>' +
+                '<div class="skeleton skeleton-text" style="width:34%;"></div>' +
+                '<div class="skeleton skeleton-text" style="width:56%;margin-top:var(--space-4);"></div>' +
+            '</div>';
+    }
+    return html + '<span class="sr-only">Loading balances</span>';
+}
+
+function skeletonBalanceRows(count) {
+    let html = '';
+    for (let i = 0; i < (count || 4); i++) {
+        html +=
+            '<tr class="skeleton-row" aria-hidden="true">' +
+                '<td>' +
+                    '<div class="asset-cell">' +
+                        '<div class="skeleton asset-cell-icon"></div>' +
+                        '<div>' +
+                            '<div class="skeleton skeleton-text" style="width:92px;"></div>' +
+                            '<div class="skeleton skeleton-text" style="width:56px;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</td>' +
+                '<td><div class="skeleton skeleton-text" style="width:88px;"></div></td>' +
+                '<td><div class="skeleton skeleton-text" style="width:44px;"></div></td>' +
+                '<td><div class="skeleton skeleton-text" style="width:36px;"></div></td>' +
+                '<td><div class="skeleton skeleton-text" style="width:120px;margin-left:auto;"></div></td>' +
+            '</tr>';
+    }
+    return html;
+}
+
+function skeletonTxRows(count) {
+    let html = '';
+    for (let i = 0; i < (count || 5); i++) {
+        html +=
+            '<div class="skeleton-row" aria-hidden="true">' +
+                '<div class="skeleton tx-icon"></div>' +
+                '<div style="flex:1 1 auto;min-width:0;">' +
+                    '<div class="skeleton skeleton-text" style="width:38%;"></div>' +
+                    '<div class="skeleton skeleton-text" style="width:22%;"></div>' +
+                '</div>' +
+                '<div class="skeleton skeleton-text" style="width:96px;"></div>' +
+            '</div>';
+    }
+    return html + '<span class="sr-only">Loading transactions</span>';
+}
+
 function renderAssetCards() {
+    renderPortfolioTotal();
     const container = document.getElementById('asset-cards');
 
     // Filter to show only assets with balance, or at least BEAM
@@ -1180,7 +1586,25 @@ function renderBalancesTable() {
     const tbody = document.getElementById('balances-tbody');
 
     if (walletData.assets.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">No assets found</td></tr>`;
+        // padding:0 because .empty-state brings its own; the cell's 16/20 on top
+        // of that reads as a hole in the card.
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" style="padding:0;">
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12V7H5a2 2 0 010-4h14v4"/>
+                            <path d="M3 5v14a2 2 0 002 2h16v-5"/>
+                            <path d="M18 12a2 2 0 000 4h4v-4z"/>
+                        </svg>
+                        <h3>No assets yet</h3>
+                        <p>Your BEAM and tokens will appear here.</p>
+                        <div class="empty-state-actions">
+                            <button class="quick-btn quick-btn-primary" onclick="openReceiveModal()">Receive BEAM</button>
+                        </div>
+                    </div>
+                </td>
+            </tr>`;
         return;
     }
 
@@ -1393,6 +1817,11 @@ function updateQuickTradeUI() {
     document.getElementById('qt-swap-btn').textContent = 'Enter Amount';
 }
 
+// The two asset chips in the quick-trade modal look clickable, so they must
+// be. Both reuse the DEX token selector rather than growing a second picker.
+function openQuickTradeFromSelector() { openTokenSelector('qt-from'); }
+function openQuickTradeToSelector()   { openTokenSelector('qt-to'); }
+
 function quickTradeSwapDirection() {
     [qtFromAsset, qtToAsset] = [qtToAsset, qtFromAsset];
     updateQuickTradeUI();
@@ -1500,7 +1929,7 @@ async function executeQuickTrade() {
             throw new Error('Unexpected response from contract');
         }
     } catch (e) {
-        showToastAdvanced('Swap Failed', e.message, 'error');
+        showErrorToast(e, 'Swap failed');
     }
 
     qtTradeInProgress = false;
@@ -1629,7 +2058,7 @@ async function executeQuickWithdrawLP() {
             throw new Error('Unexpected response from contract');
         }
     } catch (e) {
-        showToastAdvanced('Withdrawal Failed', e.message, 'error');
+        showErrorToast(e, 'Withdrawal failed');
     }
 
     qwWithdrawInProgress = false;
@@ -2113,7 +2542,7 @@ async function executeSplit() {
         setTimeout(() => closeModal('split-utxo-modal'), 1500);
 
     } catch (e) {
-        showToastAdvanced('Split Failed', e.message, 'error');
+        showErrorToast(e, 'Could not split that coin');
         btn.style.display = '';
         btn.disabled = false;
         progress.style.display = 'none';
@@ -2278,7 +2707,7 @@ async function executeCombine() {
         setTimeout(() => closeModal('combine-utxo-modal'), 1500);
 
     } catch (e) {
-        showToastAdvanced('Combine Failed', e.message, 'error');
+        showErrorToast(e, 'Could not combine those coins');
         btn.style.display = '';
         btn.disabled = false;
         progress.style.display = 'none';
@@ -2288,22 +2717,78 @@ async function executeCombine() {
 }
 
 // Modal functions
+// Which modal is on top, so Escape and backdrop clicks know what to close.
+const _modalStack = [];
+let _focusBeforeModal = null;
+
 function openModal(id) {
-    document.getElementById(id).classList.add('active');
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!_modalStack.length) _focusBeforeModal = document.activeElement;
+    el.classList.add('active');
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    if (!_modalStack.includes(id)) _modalStack.push(id);
+
+    // Move focus into the dialog, or keyboard users are left stranded outside it.
+    const focusable = el.querySelector(
+        'input:not([type=hidden]), select, textarea, button, [href], [tabindex]:not([tabindex="-1"])');
+    if (focusable) setTimeout(() => focusable.focus(), 30);
 }
 
 function closeModal(id) {
-    document.getElementById(id).classList.remove('active');
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('active');
+    el.removeAttribute('aria-modal');
+    const i = _modalStack.indexOf(id);
+    if (i >= 0) _modalStack.splice(i, 1);
+    if (!_modalStack.length && _focusBeforeModal && _focusBeforeModal.focus) {
+        try { _focusBeforeModal.focus(); } catch (e) {}
+        _focusBeforeModal = null;
+    }
 }
+
+function closeTopModal() {
+    if (_modalStack.length) closeModal(_modalStack[_modalStack.length - 1]);
+}
+
+// Escape closes the top dialog, and Cmd/Ctrl+S/R/L do the three things people
+// actually do. Before this, the only global key binding in the whole wallet was
+// Ctrl+` for the debug console.
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _modalStack.length) {
+        e.preventDefault();
+        closeTopModal();
+        return;
+    }
+
+    const t = e.target;
+    const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
+                         t.tagName === 'SELECT' || t.isContentEditable);
+    if (typing || _modalStack.length) return;
+
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); openSendModal(); }
+    else if (k === 'r') { e.preventDefault(); openReceiveModal(); }
+    else if (k === 'l') { e.preventDefault(); if (typeof lockWallet === 'function') lockWallet(); }
+});
+
+// Clicking the backdrop closes the dialog, as every desktop app does.
+document.addEventListener('click', (e) => {
+    if (!_modalStack.length) return;
+    const top = document.getElementById(_modalStack[_modalStack.length - 1]);
+    if (top && e.target === top) closeTopModal();
+});
 
 function openReceiveModal() {
     openModal('receive-modal');
     generateAddress();
 }
 
-function openSendModal(assetId = 0) {
-    openModal('send-modal');
-}
+// (openSendModal is defined properly further down; the stub that used to sit
+// here was shadowed by it, so this one never ran. Removed to avoid the trap.)
 
 // Current address type for receive modal
 let currentReceiveType = 'regular';
@@ -2613,14 +3098,302 @@ function setReceiveType(type, evt) {
     generateAddress();
 }
 
-// Toast notification
-function showToast(message, type = 'info') {
+/**
+ * Turn anything throwable into a sentence a wallet user can act on.
+ *
+ * Accepts an Error, a JSON-RPC error payload, a {success:false, error} body
+ * from serve.py, or a bare string, and returns {title, message, hint} — `hint`
+ * may be ''. The unlock screen has hand-mapped a couple of these for a while
+ * (isPasswordError / PASSWORD_ERROR_MESSAGE); this is that idea generalised, so
+ * no catch block has to ship "-32603 Internal JSON-RPC error" to a human.
+ */
+function errorToMessage(e) {
+    const flatten = (err) => {
+        if (err === null || err === undefined) return '';
+        if (typeof err === 'string') return err;
+        if (typeof err !== 'object') return String(err);
+        const bits = [];
+        if (err.name === 'AbortError') bits.push('AbortError');
+        if (typeof err.message === 'string') bits.push(err.message);
+        if (typeof err.statusText === 'string') bits.push(err.statusText);
+        if (typeof err.error === 'string') bits.push(err.error);
+        else if (err.error && typeof err.error.message === 'string') bits.push(err.error.message);
+        const joined = bits.filter(Boolean).join(' ');
+        if (joined) return joined;
+        const str = String(err);
+        return str === '[object Object]' ? '' : str;
+    };
+
+    const raw = flatten(e).trim();
+    const text = raw.toLowerCase();
+    const has = (...needles) => needles.some(n => text.includes(n));
+
+    // The numeric code arrives either on the object or baked into the message
+    // string, depending on which layer caught it.
+    let code = null;
+    if (e && typeof e === 'object') {
+        if (typeof e.code === 'number') code = e.code;
+        else if (e.error && typeof e.error.code === 'number') code = e.error.code;
+    }
+    if (code === null) {
+        const m = raw.match(/-3\d{4}\b/);
+        if (m) code = parseInt(m[0], 10);
+    }
+
+    // Ordered most specific first: several BEAM failures share vocabulary.
+    // "not enough" in particular means two completely different problems.
+
+    if (has('invalid password', 'wrong password', 'file is not a database',
+            'decryption failed', 'authentication failed')) {
+        return {
+            title: 'That password did not work',
+            message: 'The wallet database could not be decrypted with the password you entered.',
+            hint: 'Check caps lock and try again. If the password is lost, restore the wallet from a backup of wallet.db, or from your 12-word seed phrase.'
+        };
+    }
+
+    if (code === -32021 || has('user cancelled', 'user canceled', 'rejected by user', 'user rejected')) {
+        return {
+            title: 'Request cancelled',
+            message: 'The confirmation was dismissed, so nothing was signed or sent.',
+            hint: ''
+        };
+    }
+
+    // UTXO fragmentation. Distinct from a shortfall: the money is there.
+    if (has('not enough inputs', 'no inputs available', 'insufficient inputs')) {
+        return {
+            title: 'Your coins are too fragmented',
+            message: 'The balance is there, but it is split across too many small coins to cover this in a single transaction.',
+            hint: 'Wait for pending transactions to confirm, or combine coins on the Coins page, then try again.'
+        };
+    }
+
+    if (has('insufficient', 'not enough funds', 'not enough money', 'exceeds your balance', 'no funds')) {
+        return {
+            title: 'Not enough funds',
+            message: 'This costs more than the available balance once the network fee is included.',
+            hint: 'Lower the amount, or wait for incoming transactions to confirm.'
+        };
+    }
+
+    if (code === -32600 || has('wallet is locked', 'wallet locked', 'locked or not available',
+                               'unlock it first', 'is locked') || /errcode:?\s*-5\b/.test(text)) {
+        return {
+            title: 'The wallet is locked',
+            message: 'The wallet is locked, so the request never reached the wallet service.',
+            hint: 'Unlock the wallet with your password, then try again.'
+        };
+    }
+
+    if (has('failed to fetch', 'networkerror', 'network request failed', 'load failed',
+            'connection refused', 'econnrefused', 'cannot connect', 'connection error',
+            'err_connection', 'connection reset', 'socket hang up')) {
+        return {
+            title: 'Cannot reach the wallet service',
+            message: 'The local wallet service is not responding, so nothing was sent.',
+            hint: 'It may have stopped. Lock and unlock the wallet, or restart the app, then try again.'
+        };
+    }
+
+    if (has('aborterror', 'timed out', 'timeout', 'etimedout')) {
+        return {
+            title: 'That took too long',
+            message: 'The wallet service did not answer in time, so the outcome is unknown.',
+            hint: 'Check Transactions before retrying — the request may still have gone through.'
+        };
+    }
+
+    if (has('out of sync', 'not in sync', 'still syncing', 'not following the network',
+            'blocks behind', 'stale tip', 'tip is behind', 'node is behind', 'not synchronized')) {
+        return {
+            title: 'The wallet is behind the network',
+            message: 'The wallet is behind the network, so balances and history are out of date and this action was blocked.',
+            hint: 'Wait for the node to catch up, or switch nodes under Settings, then try again.'
+        };
+    }
+
+    if (has('failed to register transaction', 'transaction rejected', 'rejected by the node', 'invalid transaction')) {
+        return {
+            title: 'The node rejected the transaction',
+            message: 'The transaction was built and signed, but the node refused to accept it.',
+            hint: 'Usually the wallet is behind the network, or a coin it wanted to spend was already used. Wait for it to catch up, check Transactions, then try again.'
+        };
+    }
+
+    if (has('invalid address', 'address is invalid', 'unrecognized address')) {
+        return {
+            title: 'That address is not valid',
+            message: 'BEAM did not recognise the recipient address.',
+            hint: 'Paste the full address again — a truncated or partly copied address is the usual cause.'
+        };
+    }
+
+    // "Procedure not found." is what wallet-api actually returns; the spec
+    // wording never appears.
+    if (code === -32601 || has('procedure not found', 'method not found', 'unknown method')) {
+        return {
+            title: 'This action is not supported here',
+            message: 'The wallet service does not offer that call.',
+            hint: 'Your BEAM binaries may be out of date. Update them and restart the app.'
+        };
+    }
+
+    if (code === -32602 || has('invalid parameters', 'invalid params', 'missing parameter')) {
+        return {
+            title: 'The wallet service rejected the request',
+            message: 'A value the wallet service needed was missing or malformed, so the request never ran.',
+            hint: 'That is a fault in the wallet rather than something you did. The terminal window running serve.py logs the failing call.'
+        };
+    }
+
+    if (code === -32603 || has('internal json-rpc error', 'internal jsonrpc error', 'internal error')) {
+        return {
+            title: 'The wallet could not complete that request',
+            message: 'The wallet service failed internally while running a contract call.',
+            hint: 'This is not a public-node limitation - contract calls work over public nodes. '
+                + 'Usual causes: the wallet is still syncing, or the node is busy. Retry in a moment.'
+        };
+    }
+
+    const http = text.match(/http (\d{3})/);
+    if (http) {
+        const status = parseInt(http[1], 10);
+        return {
+            title: status >= 500 ? 'The wallet server hit an error' : 'The wallet server refused that request',
+            message: `The local server answered with ${status} and the request did not run.`,
+            hint: 'The terminal window running serve.py has the full error.'
+        };
+    }
+
+    // Nothing matched. Show what we were handed — but never a naked code with
+    // no sentence around it.
+    const bare = !raw || /^[-\s\d]+$/.test(raw) || /^(api )?error\.?$/i.test(raw);
+    let message = raw.replace(/\s+/g, ' ');
+    if (message.length > 240) message = message.slice(0, 237) + '...';
+    if (message && !/[.!?]$/.test(message)) message += '.';
+    if (message) message = message.charAt(0).toUpperCase() + message.slice(1);
+
+    return {
+        title: 'Something went wrong',
+        message: bare
+            ? 'The wallet service reported a failure without saying what went wrong.'
+            : message,
+        hint: bare && code !== null
+            ? `Reported code ${code}. The terminal window running serve.py may have more detail.`
+            : ''
+    };
+}
+
+/**
+ * The catch-block front door: hand it whatever was thrown plus a short phrase
+ * for what the user was doing. The toast stays until dismissed.
+ */
+function showErrorToast(e, context) {
+    console.error(context || 'Error:', e);
+    const parts = errorToMessage(e);
+    // The caller knows what failed; errorToMessage only knows why — so lead
+    // with the caller's framing and let the diagnosis be the body.
+    return showToast({ title: context || parts.title, message: parts.message, hint: parts.hint }, 'error');
+}
+
+/**
+ * Toast notification.
+ *
+ * Two call shapes: the long-standing showToast(string, type), and
+ * showToast({title, message, hint}, type) which is what errorToMessage()
+ * returns. Errors never auto-dismiss — three seconds is not long enough to read
+ * a failure, let alone act on it — and every toast carries a close button.
+ */
+function showToast(message, type = 'info', options = {}) {
     const container = document.getElementById('toast-container');
+    if (!container) return null;
+
+    const parts = (message && typeof message === 'object')
+        ? message
+        : { message: (message === null || message === undefined) ? '' : String(message) };
+
+    const icons = {
+        success: '<path d="M20 6L9 17l-5-5"/>',
+        error: '<path d="M18 6L6 18M6 6l12 12"/>',
+        warning: '<path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/>',
+        pending: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+        info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>'
+    };
+    // 0 = stays until dismissed.
+    const timeouts = { success: 3200, info: 3200, pending: 5000, warning: 6000, error: 0 };
+
+    // 'pending' is a spinner variant of info; it has no colour of its own.
+    const variant = type === 'pending' ? 'info' : type;
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
+    toast.className = `toast toast-${variant}`;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+
+    const icon = document.createElement('div');
+    icon.className = `toast-icon ${type}`;
+    icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">${icons[type] || icons.info}</svg>`;
+    toast.appendChild(icon);
+
+    // textContent throughout: toast copy routinely carries chain and network
+    // strings, and none of it may be parsed as markup.
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    const line = (cls, text) => {
+        if (!text) return;
+        const el = document.createElement('div');
+        el.className = cls;
+        el.textContent = text;
+        body.appendChild(el);
+    };
+    line('toast-title', parts.title || parts.message);
+    if (parts.title) line('toast-subtitle', parts.message);
+    line('toast-hint', parts.hint);
+    toast.appendChild(body);
+
+    let closed = false;
+    let timer = null;
+    let deadline = 0;
+    let remaining = options.duration !== undefined ? options.duration : timeouts[type];
+    if (remaining === undefined) remaining = 3200;
+
+    const dismiss = () => {
+        if (closed) return;
+        closed = true;
+        clearTimeout(timer);
+        toast.classList.add('toast-leaving');
+        setTimeout(() => toast.remove(), 220);
+    };
+    const resume = () => {
+        if (closed || !remaining) return;
+        deadline = Date.now() + remaining;
+        clearTimeout(timer);
+        timer = setTimeout(dismiss, remaining);
+    };
+    const pause = () => {
+        if (closed || !remaining) return;
+        clearTimeout(timer);
+        // Floored so a toast never vanishes the instant the pointer leaves it.
+        remaining = Math.max(1200, deadline - Date.now());
+    };
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'toast-close';
+    close.setAttribute('aria-label', 'Dismiss notification');
+    close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+    close.addEventListener('click', dismiss);
+    toast.appendChild(close);
+
+    toast.addEventListener('mouseenter', pause);
+    toast.addEventListener('mouseleave', resume);
+    toast.addEventListener('focusin', pause);
+    toast.addEventListener('focusout', resume);
+
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    resume();
+
+    toast.dismiss = dismiss;
+    return toast;
 }
 
 // Guide
@@ -2638,6 +3411,29 @@ let currentNodeType = 'public'; // 'public' or 'local'
 let currentNode = 'eu-node01.mainnet.beam.mw:8100';
 let localNodeSyncProgress = 0;
 let ownerKey = null;
+
+// The hard fork block and the build that can pass it, read from
+// config/binaries.json — the same file serve.py reports /api/status from. A
+// node below the fork height is not usable yet, and a build older than
+// minVersion never gets past it no matter how long the bar runs.
+let forkInfo = null;
+
+async function loadForkInfo() {
+    if (forkInfo) return forkInfo;
+    try {
+        const resp = await fetch('/config/binaries.json', { cache: 'no-store' });
+        if (!resp.ok) return null;
+        const manifest = await resp.json();
+        forkInfo = {
+            height: manifest.min_consensus_height || 0,
+            name: (manifest.hardfork && manifest.hardfork.name) || 'hard fork',
+            minVersion: (manifest.hardfork && manifest.hardfork.min_beam_version) || ''
+        };
+    } catch (e) {
+        // Without it the sync panel just loses the fork annotation.
+    }
+    return forkInfo;
+}
 
 // Load settings
 async function loadSettings() {
@@ -2669,22 +3465,27 @@ async function loadSettings() {
 
             // Update node info from server status
             if (serverStatus) {
+                loadForkInfo();
+                // Before applyNodeModeUI: whether the node is running decides
+                // whether the sync panel stays visible in public mode.
+                updateNodeButtons(serverStatus.node_running);
                 currentNodeType = serverStatus.node_mode || 'public';
                 selectNodeType(currentNodeType);
 
                 // Update the actual node address display
                 if (currentNodeType === 'local') {
                     nodeEl.textContent = '127.0.0.1:10005';
-                    document.getElementById('settings-node-type').textContent = 'Local';
                 } else {
                     nodeEl.textContent = serverStatus.node_address || currentNode || 'eu-node01.mainnet.beam.mw:8100';
-                    document.getElementById('settings-node-type').textContent = 'Public';
                 }
 
-                // Show local node section if node is running
-                // Let startNodeSyncMonitoring handle the sync progress display
+                // A stopped node gets an honest empty panel rather than the 0%
+                // bar left over from the last time one ran.
                 if (serverStatus.node_running) {
-                    document.getElementById('local-node-section').style.display = 'block';
+                    startNodeSyncMonitoring();
+                } else {
+                    stopNodeSyncMonitoring();
+                    renderNodeSync(null);
                 }
             }
 
@@ -2733,6 +3534,124 @@ async function checkDexSupport() {
     }
 }
 
+/**
+ * Everything a mode button can start, it must first explain. A local node is a
+ * ~9 GB download and hours of syncing, so the choice is confirmed before any
+ * process is launched; the public node needs no ceremony.
+ */
+async function chooseNodeMode(type) {
+    if (type === currentNodeType) return;
+
+    if (type === 'local') {
+        const serverStatus = await checkServerStatus();
+        if (!serverStatus?.node_running && !(await confirmLocalNodeCost())) return;
+    }
+
+    await selectNodeType(type, true);
+}
+
+let localNodeCostResolve = null;
+
+/** Resolves true only if the user accepts the download after seeing its size. */
+function confirmLocalNodeCost() {
+    return new Promise(resolve => {
+        if (document.getElementById('local-node-cost-modal')) { resolve(false); return; }
+        localNodeCostResolve = resolve;
+
+        const modal = document.createElement('div');
+        modal.id = 'local-node-cost-modal';
+        modal.className = 'modal-overlay active';
+        modal.innerHTML = `
+            <div class="modal" style="max-width: 520px;">
+                <div class="modal-header">
+                    <h2 class="modal-title">Start a local node?</h2>
+                    <button class="modal-close" onclick="closeLocalNodeCost(false)">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p style="margin: 0 0 var(--space-4) 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-normal);">
+                        A local node downloads and verifies the chain on this machine.
+                    </p>
+                    <ul class="node-facts-list" style="margin-bottom: var(--space-4);">
+                        <li class="no"><strong>About 9 GB of disk</strong>, and several hours before the wallet can use it.</li>
+                        <li class="no">It runs only while this app is open, and re-syncs after long gaps.</li>
+                        <li class="yes">Unlocks Max Privacy and Offline addresses.</li>
+                        <li class="yes">Unlocks a full balance rescan after restoring a wallet.</li>
+                    </ul>
+                    <p style="margin: 0; color: var(--text-muted); font-size: var(--text-xs); line-height: var(--leading-normal);">
+                        You do not need one for sending, receiving, swaps, DEX, games or airdrops &mdash;
+                        those already work on the public node, and keep working while this syncs.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn modal-btn-secondary" onclick="closeLocalNodeCost(false)">Stay on public node</button>
+                    <button class="modal-btn modal-btn-primary" onclick="closeLocalNodeCost(true)">Download and start</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    });
+}
+
+function closeLocalNodeCost(accepted) {
+    const modal = document.getElementById('local-node-cost-modal');
+    if (modal) modal.remove();
+    const resolve = localNodeCostResolve;
+    localNodeCostResolve = null;
+    if (resolve) resolve(!!accepted);
+}
+
+/** Start/Stop should reflect what the node is actually doing. */
+let localNodeRunning = false;
+
+function updateNodeButtons(running) {
+    localNodeRunning = !!running;
+    const startBtn = document.getElementById('node-start-btn');
+    const stopBtn = document.getElementById('node-stop-btn');
+    if (startBtn) {
+        startBtn.disabled = !!running;
+        startBtn.title = running ? 'The local node is already running' : '';
+    }
+    if (stopBtn) {
+        stopBtn.disabled = !running;
+        stopBtn.title = running ? '' : 'The local node is not running';
+    }
+}
+
+/**
+ * Paint the mode toggle, the capability list and the local-node panel. Kept
+ * separate from selectNodeType so a handler that already knows which node it
+ * connected to can refresh the UI without having its address overwritten by
+ * the canonical one for that mode.
+ */
+function applyNodeModeUI(type) {
+    const publicBtn = document.getElementById('node-public-btn');
+    const localBtn = document.getElementById('node-local-btn');
+    if (publicBtn) {
+        publicBtn.classList.toggle('active', type === 'public');
+        publicBtn.disabled = (type === 'public');
+    }
+    if (localBtn) {
+        localBtn.classList.toggle('active', type === 'local');
+        localBtn.disabled = (type === 'local');
+    }
+
+    const typeEl = document.getElementById('settings-node-type');
+    if (typeEl) typeEl.textContent = type === 'public' ? 'Public' : 'Local';
+
+    // Show the capabilities and the cost of whichever mode is selected.
+    const publicFacts = document.getElementById('node-facts-public');
+    const localFacts = document.getElementById('node-facts-local');
+    if (publicFacts) publicFacts.hidden = (type !== 'public');
+    if (localFacts) localFacts.hidden = (type !== 'local');
+
+    // A running local node stays visible even from public mode — that is
+    // precisely when the user is waiting on its progress.
+    const localSection = document.getElementById('local-node-section');
+    if (localSection) {
+        localSection.style.display = (type === 'local' || localNodeRunning) ? 'block' : 'none';
+    }
+}
+
 // Select node type
 async function selectNodeType(type, triggerChange = false) {
     const publicBtn = document.getElementById('node-public-btn');
@@ -2744,24 +3663,10 @@ async function selectNodeType(type, triggerChange = false) {
     }
 
     currentNodeType = type;
+    applyNodeModeUI(type);
 
-    publicBtn.classList.toggle('active', type === 'public');
-    localBtn.classList.toggle('active', type === 'local');
-    document.getElementById('settings-node-type').textContent = type === 'public' ? 'Public' : 'Local';
-
-    // Update button disabled states - disable the active one
-    publicBtn.disabled = (type === 'public');
-    localBtn.disabled = (type === 'local');
-
-    const localSection = document.getElementById('local-node-section');
     const selector = document.getElementById('node-selector');
     const newValue = type === 'local' ? '127.0.0.1:10005' : 'eu-node01.mainnet.beam.mw:8100';
-
-    if (type === 'local') {
-        localSection.style.display = 'block';
-    } else {
-        localSection.style.display = 'none';
-    }
 
     // Update selector value and currentNode to match current state
     selector.value = newValue;
@@ -2781,8 +3686,9 @@ async function selectNodeType(type, triggerChange = false) {
                     return;
                 }
             }
-            // Otherwise perform normal node switch
-            await changeNode();
+            // The cost was already confirmed by chooseNodeMode, so changeNode
+            // must not ask a second time.
+            await changeNode(true);
         } finally {
             // Re-enable the non-active button after switch completes
             publicBtn.disabled = (currentNodeType === 'public');
@@ -2814,8 +3720,8 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
         if (result.success) {
             currentNode = nodeAddr;
             currentNodeType = mode;
+            applyNodeModeUI(mode);
             document.getElementById('settings-node').textContent = nodeAddr;
-            document.getElementById('settings-node-type').textContent = mode === 'local' ? 'Local' : 'Public';
             showToastAdvanced('Node Switched', `Now connected to ${nodeAddr}`, 'success');
             // Hide sync banner when on local node, show when switching to public
             if (mode === 'local') {
@@ -2828,24 +3734,47 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
             throw new Error(result.error || 'Failed to switch node');
         }
     } catch (e) {
-        showToastAdvanced('Switch Failed', e.message, 'error');
+        showErrorToast(e, 'Could not switch node');
         // Reset dropdown to current node
         document.getElementById('node-selector').value = currentNode;
     }
 }
 
 // Change node - actually restarts wallet-api with new node
-async function changeNode() {
+let nodeSwitchInFlight = false;
+
+async function changeNode(costConfirmed = false) {
     const selector = document.getElementById('node-selector');
     const newNode = selector.value;
     const isLocal = newNode.includes('127.0.0.1') || newNode.includes('localhost');
 
     if (newNode === currentNode) return;
+    // A second change event arriving mid-switch would stack a second cost
+    // prompt and a second /api/node/switch on top of the first.
+    if (nodeSwitchInFlight) return;
+    nodeSwitchInFlight = true;
+    try {
+        await performNodeChange(selector, newNode, isLocal, costConfirmed);
+    } finally {
+        nodeSwitchInFlight = false;
+    }
+}
+
+async function performNodeChange(selector, newNode, isLocal, costConfirmed) {
+    // Picking the local entry out of this dropdown starts the same ~9 GB sync
+    // as the mode button, so it asks the same question.
+    if (isLocal && !costConfirmed) {
+        const serverStatus = await checkServerStatus();
+        if (!serverStatus?.node_running && !(await confirmLocalNodeCost())) {
+            selector.value = currentNode;
+            return;
+        }
+    }
 
     // Use stored password - no prompting
     const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
     if (!password) {
-        showToastAdvanced('Error', 'Session expired. Please re-unlock your wallet.', 'error');
+        showToast({ title: 'Session expired', message: 'The wallet password is no longer held in this session.', hint: 'Unlock the wallet again to continue.' }, 'error');
         selector.value = currentNode;
         return;
     }
@@ -2869,16 +3798,20 @@ async function changeNode() {
         if (result.success) {
             currentNode = newNode;
             currentNodeType = isLocal ? 'local' : 'public';
+            applyNodeModeUI(currentNodeType);
             document.getElementById('settings-node').textContent = newNode;
-            document.getElementById('settings-node-type').textContent = isLocal ? 'Local' : 'Public';
 
             showToastAdvanced('Node Switched', `Now connected to ${newNode}`, 'success');
 
-            // Hide sync banner when on local node, show when switching to public
+            // Only watch a local node that exists. This used to be started
+            // unconditionally, so switching to a public node pinned a
+            // "Local node syncing..." banner over an app with no local node.
             if (isLocal) {
                 updateNodeSyncBanner(false);
             } else {
-                startNodeSyncChecker();
+                const after = await checkServerStatus();
+                if (after?.node_running) startNodeSyncChecker();
+                else updateNodeSyncBanner(false);
             }
 
             // Refresh wallet status
@@ -2887,7 +3820,7 @@ async function changeNode() {
             throw new Error(result.error || 'Failed to switch node');
         }
     } catch (e) {
-        showToastAdvanced('Switch Failed', e.message, 'error');
+        showErrorToast(e, 'Could not switch node');
         // Reset dropdown to current node
         selector.value = currentNode;
     }
@@ -2919,7 +3852,7 @@ async function reconnectNode() {
             throw new Error('Could not get wallet status');
         }
     } catch (e) {
-        showToastAdvanced('Connection Failed', e.message, 'error');
+        showErrorToast(e, 'Connection failed');
     }
 
     btn.disabled = false;
@@ -2966,7 +3899,8 @@ function showRescanWarningModal() {
 
                 <div class="info-section">
                     <h4>Option 1: Switch to Local Node (Recommended)</h4>
-                    <p>Start a local node which will automatically scan for your transactions. This provides full balance recovery.</p>
+                    <p>Start a local node which will automatically scan for your transactions. This provides full balance recovery,
+                       and costs about 9&nbsp;GB of disk and several hours of syncing before the scan can finish.</p>
                     <button class="quick-btn quick-btn-primary" onclick="closeRescanWarningModal(); switchToLocalAndRescan();" style="width: 100%; margin-top: 12px;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                             <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -3002,7 +3936,7 @@ function closeRescanWarningModal() {
 async function switchToLocalAndRescan() {
     const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
     if (!password) {
-        showToastAdvanced('Error', 'No password available. Please re-unlock your wallet.', 'error');
+        showToast({ title: 'Session expired', message: 'The wallet password is no longer held in this session, and switching to a local node needs it.', hint: 'Unlock the wallet again, then retry.' }, 'error');
         return;
     }
 
@@ -3029,7 +3963,7 @@ async function switchToLocalAndRescan() {
             throw new Error(result.error || 'Failed to switch to local node');
         }
     } catch (e) {
-        showToastAdvanced('Switch Failed', e.message, 'error');
+        showErrorToast(e, 'Could not switch node');
     }
 }
 
@@ -3062,7 +3996,7 @@ async function performQuickRescan() {
             showToastAdvanced('Refresh Complete', 'Wallet data updated', 'success');
             await loadWalletData();
         } catch (e2) {
-            showToastAdvanced('Rescan Failed', e2.message, 'error');
+            showErrorToast(e2, 'Rescan failed');
         }
     }
 
@@ -3082,7 +4016,7 @@ async function performQuickRescan() {
 async function performRescan() {
     const password = storedWalletPassword || sessionStorage.getItem('walletPassword');
     if (!password) {
-        showToastAdvanced('Rescan Failed', 'No password available. Please re-unlock your wallet.', 'error');
+        showToast({ title: 'Rescan failed', message: 'The wallet password is no longer held in this session, and a rescan needs it.', hint: 'Unlock the wallet again, then retry the rescan.' }, 'error');
         return;
     }
 
@@ -3117,7 +4051,7 @@ async function performRescan() {
             throw new Error(result.error || 'Rescan failed');
         }
     } catch (e) {
-        showToastAdvanced('Rescan Failed', e.message, 'error');
+        showErrorToast(e, 'Rescan failed');
     }
 
     rescanInProgress = false;
@@ -3447,7 +4381,7 @@ async function exportOwnerKey() {
             throw new Error(result.error || 'Failed to export');
         }
     } catch (e) {
-        showToastAdvanced('Export Failed', e.message, 'error');
+        showErrorToast(e, 'Could not export the owner key');
     }
 }
 
@@ -3460,54 +4394,16 @@ function copyOwnerKey() {
     }
 }
 
-// Update local node sync progress
-function updateSyncProgress(current, total) {
-    if (total === 0) return;
-
-    const percentage = Math.min(100, Math.round((current / total) * 100));
-    localNodeSyncProgress = percentage;
-
-    document.getElementById('sync-percentage').textContent = percentage + '%';
-    document.getElementById('sync-progress-fill').style.width = percentage + '%';
-    document.getElementById('sync-blocks').textContent = `${current.toLocaleString()} / ${total.toLocaleString()} blocks`;
-
-    if (percentage < 100) {
-        document.getElementById('sync-status-text').textContent = 'Syncing...';
-    } else {
-        document.getElementById('sync-status-text').textContent = 'Fully synced';
-    }
-}
+// updateSyncProgress() lived here: an unreferenced second writer for the same
+// sync elements, rendering a percentage with no notion of the network tip.
+// renderNodeSync() is the only thing that paints that panel now.
 
 // Advanced toast notification with icon
+// Kept for its many callers. It used to be a second, divergent toast renderer
+// that interpolated subtitles straight into innerHTML and expired errors after
+// 3.5s; it is now just the two-line call shape of showToast.
 function showToastAdvanced(title, subtitle, type = 'info') {
-    const container = document.getElementById('toast-container');
-
-    const iconMap = {
-        success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M20 6L9 17l-5-5"/></svg>',
-        error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg>',
-        pending: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
-        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
-    };
-
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type === 'pending' ? 'info' : type}`;
-    toast.innerHTML = `
-        <div class="toast-with-icon">
-            <div class="toast-icon ${type}">${iconMap[type] || iconMap.info}</div>
-            <div class="toast-content">
-                <div class="toast-title">${title}</div>
-                ${subtitle ? `<div class="toast-subtitle">${subtitle}</div>` : ''}
-            </div>
-        </div>
-    `;
-
-    container.appendChild(toast);
-
-    // Auto remove after delay (longer for pending)
-    const delay = type === 'pending' ? 5000 : 3500;
-    setTimeout(() => toast.remove(), delay);
-
-    return toast;
+    return showToast({ title: title, message: subtitle }, type);
 }
 
 // Filter balances
@@ -3537,12 +4433,48 @@ async function checkServerStatus() {
         if (response.ok) {
             const status = await response.json();
             lastServerStatus = status; // Store for sync status display
+            updateConsensusBanner(status.consensus);
+            applyServerVersion(status);
             return status;
         }
         return null;
     } catch (e) {
         return null;
     }
+}
+
+/**
+ * The bundled BEAM build can be too old to follow the chain at all — that is
+ * what HF6 did to every macOS install. No amount of waiting fixes it, so this
+ * says so plainly instead of letting the user watch a sync bar forever.
+ */
+function updateConsensusBanner(consensus) {
+    const existing = document.getElementById('consensus-banner');
+    if (!consensus || !consensus.out_of_consensus) {
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'consensus-banner';
+    banner.className = 'sync-banner-error';
+    banner.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <path d="M12 9v4M12 17h.01"/>
+        </svg>
+        <span>
+            <strong>Your BEAM binaries cannot follow the network.</strong>
+            Version ${escapeHtml(consensus.beam_version || '?')} stops at block
+            ${(consensus.fork_height || 0).toLocaleString()} (hard fork
+            ${escapeHtml((consensus.required_version || '') && 'HF6')}); version
+            ${escapeHtml(consensus.required_version || '?')} or newer is required.
+            Balances and history will stay frozen until the binaries are updated.
+        </span>
+    `;
+    const container = document.querySelector('.main-content') || document.body;
+    container.insertBefore(banner, container.firstChild);
 }
 
 // Welcome screen state
@@ -3710,15 +4642,15 @@ function showLockedOverlay(message) {
                     -webkit-text-fill-color: transparent;
                 }
                 .welcome-subtitle {
-                    font-size: 11px;
-                    color: #da70d6;
+                    font-size: 12px;
+                    color: var(--text-secondary, #94a3b8);
                     letter-spacing: 3px;
                     text-transform: uppercase;
                     margin-bottom: 6px;
                 }
                 .welcome-tagline {
                     font-size: 13px;
-                    color: #64748b;
+                    color: var(--text-muted, #8b98ab);
                 }
                 /* Card container */
                 .welcome-card {
@@ -4003,21 +4935,29 @@ function showLockedOverlay(message) {
                     <div class="welcome-brand">
                         <div class="welcome-logo-container">
                             <div class="welcome-logo-glow"></div>
-                            <svg class="welcome-logo" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <!-- Same geometry as the sidebar mark and the app icon:
+                                 one mark, not three variations on a theme. The
+                                 pink overlay and the third inner triangle are gone
+                                 — they muddied the silhouette at small sizes. -->
+                            <svg class="welcome-logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BEAM">
                                 <defs>
-                                    <linearGradient id="beamCyan" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#00e6d0"/>
-                                        <stop offset="100%" stop-color="#00bfff"/>
+                                    <linearGradient id="wlFaceL" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stop-color="#4ff5d0"/>
+                                        <stop offset="100%" stop-color="#1aa8cf"/>
                                     </linearGradient>
-                                    <linearGradient id="beamPink" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#da70d6"/>
-                                        <stop offset="100%" stop-color="#9370db"/>
+                                    <linearGradient id="wlFaceR" x1="1" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#2f7fd4"/>
+                                        <stop offset="100%" stop-color="#1c3f7a"/>
+                                    </linearGradient>
+                                    <linearGradient id="wlBeam" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#7dfbe4" stop-opacity="0.9"/>
+                                        <stop offset="100%" stop-color="#7dfbe4" stop-opacity="0"/>
                                     </linearGradient>
                                 </defs>
-                                <polygon points="100,25 170,135 30,135" fill="url(#beamCyan)"/>
-                                <polygon points="100,55 145,135 55,135" fill="#0a1628"/>
-                                <polygon points="100,85 125,130 75,130" fill="url(#beamCyan)" opacity="0.6"/>
-                                <polygon points="30,135 55,135 100,55 100,25" fill="url(#beamPink)" opacity="0.3"/>
+                                <polygon points="24,6 44,42 4,42"  fill="url(#wlFaceL)"/>
+                                <polygon points="24,6 44,42 24,42" fill="url(#wlFaceR)"/>
+                                <polygon points="24,17.9 35.8,39.4 12.2,39.4" fill="#0a1420"/>
+                                <polygon points="24,6 27,13 21,13" fill="url(#wlBeam)"/>
                             </svg>
                         </div>
                         <div class="welcome-title">BEAM</div>
@@ -4145,11 +5085,17 @@ function showLockedOverlay(message) {
         loadWelcomeWallets();
     }
     overlay.style.display = 'flex';
+    // The dashboard skeletons stay mounted underneath so unlocking reveals the
+    // page's shape, but the overlay is opaque: their shimmers would sweep
+    // unseen for as long as the wallet sits locked. Keep the shape, drop the
+    // motion (see body.wallet-locked .skeleton::after).
+    document.body.classList.add('wallet-locked');
 }
 
 function hideLockedOverlay() {
     const overlay = document.getElementById('locked-overlay');
     if (overlay) overlay.style.display = 'none';
+    document.body.classList.remove('wallet-locked');
 }
 
 // Lock wallet and show unlock screen
@@ -4187,7 +5133,7 @@ async function lockWallet() {
 
             showToast('Wallet locked', 'info');
         } else {
-            showToast(result.error || 'Failed to lock wallet', 'error');
+            showErrorToast(result.error, 'Could not lock the wallet');
         }
     } catch (e) {
         console.error('Lock wallet error:', e);
@@ -4246,16 +5192,66 @@ function updateWelcomeWalletSelect() {
     const select = document.getElementById('welcome-wallet-select');
     if (!select) return;
 
+    // With no wallets, the login form is the wrong screen entirely: an account
+    // picker reading "No wallets found" above a full-width UNLOCK WALLET button
+    // the user cannot possibly use, with Create and Restore demoted to 12px
+    // ghost links. Branch on wallet count instead.
+    applyFirstRunLayout(welcomeWallets.length === 0);
+
     if (welcomeWallets.length === 0) {
         select.innerHTML = '<option value="">No wallets found</option>';
         return;
     }
 
     select.innerHTML = welcomeWallets.map(w =>
-        `<option value="${w}">${w}</option>`
+        `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`
     ).join('');
 
     welcomeSelectedWallet = welcomeWallets[0];
+}
+
+/**
+ * First run has one job: get the user to a wallet. Hide the login controls,
+ * promote "Create a new wallet", and offer restore as the secondary path.
+ */
+function applyFirstRunLayout(isFirstRun) {
+    const view = document.getElementById('welcome-main-view');
+    if (!view) return;
+
+    const existing = document.getElementById('welcome-firstrun');
+    const fields = view.querySelectorAll('.welcome-field');
+    const unlockBtn = document.getElementById('welcome-unlock-btn');
+    const links = view.querySelector('.welcome-links');
+
+    if (!isFirstRun) {
+        if (existing) existing.remove();
+        fields.forEach(f => { f.style.display = ''; });
+        if (unlockBtn) unlockBtn.style.display = '';
+        if (links) links.style.display = '';
+        return;
+    }
+
+    fields.forEach(f => { f.style.display = 'none'; });
+    if (unlockBtn) unlockBtn.style.display = 'none';
+    if (links) links.style.display = 'none';
+    if (existing) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'welcome-firstrun';
+    panel.innerHTML = `
+        <p class="welcome-firstrun-lead">Welcome. You don't have a wallet on this computer yet.</p>
+        <button class="welcome-btn-primary" id="welcome-firstrun-create" onclick="showWelcomeView('create')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Create a new wallet
+        </button>
+        <button class="welcome-btn-secondary" id="welcome-firstrun-restore" onclick="showWelcomeView('restore')">
+            I already have a seed phrase
+        </button>
+        <p class="welcome-firstrun-note">Your wallet is created on this machine. Nothing is uploaded anywhere.</p>
+    `;
+    view.appendChild(panel);
 }
 
 function onWelcomeWalletSelect() {
@@ -4289,30 +5285,10 @@ let storedWalletPassword = null;
 async function startBackgroundNodeSync() {
     if (!storedWalletPassword) return;
 
-    // Start local node in background (with owner key)
-    try {
-        const exportRes = await fetch('/api/wallet/export_owner_key', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet: welcomeSelectedWallet, password: storedWalletPassword })
-        });
-        const exportResult = await exportRes.json();
-
-        if (exportResult.success && exportResult.owner_key) {
-            // Start local node with owner key
-            await fetch('/api/node/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ owner_key: exportResult.owner_key, password: storedWalletPassword })
-            });
-            console.log('Local node started in background');
-
-            // Start periodic check for sync status
-            startNodeSyncChecker();
-        }
-    } catch (e) {
-        console.log('Background node start failed:', e);
-    }
+    // Deliberately NOT starting a local node here. Contract calls do not need
+    // one — serve.py injects the shader and public nodes serve contract state —
+    // so this used to impose a ~9 GB download on every unlock for nothing.
+    // The local node is now an explicit choice in Settings → Node.
 }
 
 function updateNodeSyncBanner(show, progress, synced, label) {
@@ -4412,23 +5388,19 @@ async function seamlessSwitchToLocalNode() {
         if (result.success) {
             currentNodeType = 'local';
             currentNode = '127.0.0.1:10005';
-            showToastAdvanced('Local Node Active', 'Switched to local node for DEX support', 'success');
+            // DEX never needed the local node; Max Privacy and rescan do.
+            showToastAdvanced('Local Node Active', 'Max Privacy addresses and full rescan are now available', 'success');
 
             // Hide the sync banner
             updateNodeSyncBanner(false);
 
-            // Update UI if settings page is showing node info
-            const nodeStatusEl = document.getElementById('settings-node-type');
-            if (nodeStatusEl) nodeStatusEl.textContent = 'Local';
-
+            // One place applies the mode to the UI, so the capability list and
+            // the toggle cannot disagree about which node is in use.
+            applyNodeModeUI('local');
             const nodeSelector = document.getElementById('node-selector');
             if (nodeSelector) nodeSelector.value = '127.0.0.1:10005';
-
-            // Update node toggle buttons if on settings page
-            const publicBtn = document.getElementById('node-public-btn');
-            const localBtn = document.getElementById('node-local-btn');
-            if (publicBtn) { publicBtn.classList.remove('active'); publicBtn.disabled = false; }
-            if (localBtn) { localBtn.classList.add('active'); localBtn.disabled = true; }
+            const nodeAddrEl = document.getElementById('settings-node');
+            if (nodeAddrEl) nodeAddrEl.textContent = '127.0.0.1:10005';
 
             // Refresh DEX data
             if (typeof loadDexPools === 'function') {
@@ -4500,23 +5472,10 @@ async function welcomeUnlock() {
             console.log('Owner key export error:', e);
         }
 
-        // Step 3: Start beam-node with owner_key (non-blocking, for background sync)
+        // Step 3: No local node. A new wallet has no history to rescan, and a
+        // public node serves everything the wallet needs including contracts.
+        // Starting one here cost every new user a multi-hour, ~9 GB sync.
         let nodeStarted = false;
-        if (ownerKey) {
-            btn.innerHTML = '<div class="welcome-spinner"></div> Starting node...';
-            try {
-                const nodeRes = await fetch('/api/node/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ owner_key: ownerKey, password: password })
-                });
-                const nodeResult = await nodeRes.json();
-                nodeStarted = !!nodeResult.success;
-                console.log('Local node started with owner key');
-            } catch (e) {
-                console.log('Node start failed (will use public node):', e);
-            }
-        }
 
         // Step 3.5: Check if local node is already synced — if so, connect to it
         let unlockNode = 'eu-node01.mainnet.beam.mw:8100';
@@ -4579,8 +5538,13 @@ async function welcomeUnlock() {
             }
         }, 30000);
 
-        // Step 7: Start background sync checker to auto-switch to local node when synced
-        startNodeSyncChecker();
+        // Step 7: Only watch a local node the user actually asked for. This
+        // used to run unconditionally and silently migrate wallet-api onto the
+        // local node the moment it claimed to be synced — which, post-HF6,
+        // meant moving people onto a dead fork they could not get off.
+        if (currentNodeType === 'local') {
+            startNodeSyncChecker();
+        }
 
         // Step 8: Start node sync monitoring for settings UI
         startNodeSyncMonitoring();
@@ -4975,6 +5939,7 @@ function renderAppStore() {
                 </div>
             </div>
 
+            ${FEATURE_P2P ? `
             <div class="appstore-card" onclick="showPage('p2p')">
                 <div class="appstore-card-icon" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">
                     <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
@@ -4987,7 +5952,7 @@ function renderAppStore() {
                     <h3>P2P Marketplace</h3>
                     <p>Trade crypto peer-to-peer</p>
                 </div>
-            </div>
+            </div>` : ''}
 
             <div class="appstore-card" onclick="showPage('airdrop')">
                 <div class="appstore-card-icon" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">
@@ -4999,6 +5964,18 @@ function renderAppStore() {
                 <div class="appstore-card-info">
                     <h3>Airdrop</h3>
                     <p>Create and claim vouchers</p>
+                </div>
+            </div>
+
+            <div class="appstore-card" onclick="showPage('memeclash')">
+                <div class="appstore-card-icon" style="background: linear-gradient(135deg, #e11d48, #f59e0b);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="28" height="28">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                <div class="appstore-card-info">
+                    <h3>Meme Clash</h3>
+                    <p>$CHAD vs $GIGA — battle for supremacy</p>
                 </div>
             </div>
 
@@ -5027,12 +6004,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Restored password from session');
     }
 
-    // Check for updates (async, non-blocking)
-    checkForUpdates().catch(e => console.log('Update check skipped:', e.message));
 
-    // Show loading state
-    document.getElementById('asset-cards').innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading...</div>';
-    document.getElementById('balances-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">Loading...</td></tr>';
+    // Show loading state. These stay on screen through the locked overlay, so
+    // unlocking reveals the shape of the dashboard rather than an empty page.
+    document.getElementById('asset-cards').innerHTML = skeletonAssetCards();
+    document.getElementById('balances-tbody').innerHTML = skeletonBalanceRows();
 
     // Check if we're on an explorer route - explorer works without wallet API
     const appRoute = window.APP_ROUTE;
@@ -5043,6 +6019,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (serverStatus) {
         console.log('Server status:', serverStatus);
+
+        // Only now is APP_VERSION real, so only now can we compare against a
+        // release. Still non-blocking.
+        checkForUpdates().catch(e => console.log('Update check skipped:', e.message));
 
         if (!serverStatus.wallet_api_running) {
             // Explorer routes can work without wallet API
@@ -5111,10 +6091,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 30000);
     }
 
-    // Show guide for first-time users
-    if (!localStorage.getItem('guideShown')) {
-        setTimeout(showGuide, 1000);
-    }
+    // The guide no longer ambushes people one second after they unlock. It was
+    // a full-screen modal explaining what a privacy coin is, shown over the
+    // balance they had just come to look at, and it had to be dismissed before
+    // anything could be clicked. It is still one click away from the sidebar's
+    // "Help & Guide" button, which is where someone who wants it will look.
 });
 
 // Current asset for send modal
@@ -5161,10 +6142,18 @@ function openSendModal(assetId = 0) {
 // Set max amount for send
 function setMaxAmount() {
     const asset = walletData.assets.find(a => a.id === currentSendAsset);
-    if (asset) {
-        // Subtract fee (100000 groth = 0.001 BEAM) for BEAM transactions
-        const maxAmount = currentSendAsset === 0 ? Math.max(0, asset.balance - 100000) : asset.balance;
-        document.getElementById('send-amount').value = formatAmount(maxAmount);
+    if (!asset) return;
+    // Subtract fee (100000 groth = 0.001 BEAM) for BEAM transactions
+    const maxAmount = currentSendAsset === 0 ? Math.max(0, asset.balance - 100000) : asset.balance;
+    document.getElementById('send-amount').value = formatAmount(maxAmount);
+
+    // MAX on a confidential asset is still unsendable without BEAM for the fee.
+    // Say so now rather than after the confirmation dialog.
+    if (currentSendAsset !== 0) {
+        const beamAsset = walletData.assets.find(a => a.id === 0);
+        if (!beamAsset || (beamAsset.balance || 0) < 100000) {
+            showToast('This wallet has no BEAM for the 0.001 fee, which every send needs.', 'warning');
+        }
     }
 }
 
@@ -5173,6 +6162,12 @@ let pendingSendTx = null;
 
 // Send confirmation - shows confirmation modal first
 function confirmSend() {
+    // A stale wallet signs against a stale tip; the transaction is very
+    // unlikely to confirm and the user's coins sit locked meanwhile.
+    if (isWalletOutOfSync()) {
+        showToast('Wallet is out of sync with the network — sending is disabled until it catches up', 'error');
+        return;
+    }
     const address = document.getElementById('send-address').value.trim();
     const amount = document.getElementById('send-amount').value;
     const comment = document.getElementById('send-comment').value;
@@ -5189,6 +6184,38 @@ function confirmSend() {
     // Get asset info
     const assetInfo = getAssetInfo(currentSendAsset);
     const fee = 0.001; // 0.001 BEAM fee
+    const feeGroth = Math.round(fee * GROTH);
+    const amountGrothVal = Math.round(parseFloat(amount) * GROTH);
+
+    // Nothing here checked a balance, so overspending - and sending a
+    // confidential asset with no BEAM to pay the fee - both walked through the
+    // confirmation dialog and failed afterwards at the node. Failing after the
+    // user has confirmed reads as a broken wallet rather than a full one.
+    const sendAsset = walletData.assets.find(a => a.id === currentSendAsset);
+    const beamAsset = walletData.assets.find(a => a.id === 0);
+    const assetAvail = sendAsset ? (sendAsset.balance || 0) : 0;
+    const beamAvail = beamAsset ? (beamAsset.balance || 0) : 0;
+
+    if (currentSendAsset === 0) {
+        if (amountGrothVal + feeGroth > beamAvail) {
+            showToast(`Not enough BEAM. Sending ${formatAmount(amountGrothVal)} plus a `
+                + `${formatAmount(feeGroth)} fee needs ${formatAmount(amountGrothVal + feeGroth)}, `
+                + `and ${formatAmount(beamAvail)} is available.`, 'error');
+            return;
+        }
+    } else {
+        if (amountGrothVal > assetAvail) {
+            showToast(`Not enough ${assetInfo.symbol}. ${formatAmount(amountGrothVal)} requested, `
+                + `${formatAmount(assetAvail)} available.`, 'error');
+            return;
+        }
+        // The fee is always paid in BEAM, whatever asset is being sent.
+        if (beamAvail < feeGroth) {
+            showToast(`Sending ${assetInfo.symbol} still costs a ${formatAmount(feeGroth)} BEAM fee, `
+                + `and this wallet has ${formatAmount(beamAvail)} BEAM.`, 'error');
+            return;
+        }
+    }
 
     // Store pending transaction
     pendingSendTx = {
@@ -5340,7 +6367,7 @@ async function executeSend() {
         setTimeout(() => showDonationPopup(), 2000);
 
     } catch (e) {
-        showToastAdvanced('Transaction Failed', e.message, 'error');
+        showErrorToast(e, 'Transaction failed');
     }
 
     pendingSendTx = null;
@@ -5359,7 +6386,7 @@ async function generateNewAddress() {
         showToast('New SBBS address created!', 'success');
         await loadAddresses();
     } catch (e) {
-        showToast('Failed to create address: ' + e.message, 'error');
+        showErrorToast(e, 'Could not create an address');
     }
 }
 
@@ -5671,7 +6698,7 @@ function renderAllAssets(assets) {
 // Load transactions
 async function loadTransactions() {
     const container = document.getElementById('transactions-list');
-    container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading...</div>';
+    container.innerHTML = skeletonTxRows();
 
     try {
         // Ensure assets are loaded for proper name/icon display
@@ -5701,7 +6728,10 @@ async function loadTransactions() {
                         <path d="M12 2v20M17 7l-5-5-5 5M7 17l5 5 5-5"/>
                     </svg>
                     <h3>No transactions yet</h3>
-                    <p>Your transaction history will appear here</p>
+                    <p>Share your address to get your first payment.</p>
+                    <div class="empty-state-actions">
+                        <button class="quick-btn quick-btn-primary" onclick="openReceiveModal()">Receive BEAM</button>
+                    </div>
                 </div>
             `;
             return;
@@ -5710,7 +6740,7 @@ async function loadTransactions() {
         renderTransactions(txs);
     } catch (e) {
         console.error('Load transactions error:', e);
-        container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Failed to load transactions</div>';
+        container.innerHTML = errorState('Could not load transactions', 'loadTransactions()', { detail: e.message });
     }
 }
 
@@ -6265,7 +7295,7 @@ async function renderTransactions(txs) {
                 '<div class="tx-expand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M6 9l6 6 6-6"/></svg></div>' +
             '</div>' +
             metaHtml +
-            (tx.comment ? '<div class="tx-comment-visible">' + tx.comment + '</div>' : '') +
+            (tx.comment ? '<div class="tx-comment-visible">' + escapeHtml(tx.comment) + '</div>' : '') +
             '<div class="tx-details" id="tx-details-' + idx + '">' +
                 '<div class="tx-detail-grid">' +
                     '<div class="tx-detail-item"><span class="tx-detail-label">Transaction ID</span><span class="tx-detail-value" onclick="event.stopPropagation();copyToClipboard(\'' + txId + '\')" title="Click to copy">' + txId + '</span></div>' +
@@ -6321,7 +7351,7 @@ async function loadAddresses() {
         renderAddresses(addrs);
     } catch (e) {
         console.error('Load addresses error:', e);
-        container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Failed to load addresses</div>';
+        container.innerHTML = errorState('Could not load addresses', 'loadAddresses()', { detail: e.message });
     }
 }
 
@@ -6407,7 +7437,7 @@ function renderAddresses(addrs) {
                                  onclick="copyToClipboard('${a.address}')" title="Click to copy">
                                 ${addrShort}
                             </div>
-                            ${a.comment ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${a.comment}</div>` : ''}
+                            ${a.comment ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${escapeHtml(a.comment)}</div>` : ''}
                         </div>
                         <div style="display:flex;gap:6px;margin-left:8px;">
                             <button class="action-btn" onclick="copyToClipboard('${a.address}')" title="Copy" style="padding:6px;">
@@ -6433,17 +7463,45 @@ async function deleteAddress(address) {
         showToast('Address deleted', 'success');
         await loadAddresses();
     } catch (e) {
-        showToast('Failed to delete address: ' + e.message, 'error');
+        showErrorToast(e, 'Could not delete that address');
     }
 }
 
 // Copy to clipboard helper
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('Copied to clipboard!', 'success');
-    }).catch(e => {
-        showToast('Failed to copy', 'error');
-    });
+/**
+ * There used to be two of these ~4,900 lines apart. The later one won, so every
+ * single-argument caller (tx ids, kernels, addresses) copied with no feedback
+ * and swallowed failures. This is the union of both: button feedback when a
+ * button is passed, a toast otherwise, and errors surfaced either way.
+ */
+function copyToClipboard(text, btn) {
+    const ok = () => {
+        if (btn) {
+            btn.classList.add('copied');
+            const prev = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.classList.remove('copied'); btn.textContent = prev || 'Copy'; }, 2000);
+        } else {
+            showToast('Copied to clipboard!', 'success');
+        }
+    };
+    const fail = () => showToast('Failed to copy', 'error');
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok).catch(fail);
+        return;
+    }
+    // Fallback for embedded browsers without the async clipboard API.
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;';
+        document.body.appendChild(ta);
+        ta.select();
+        const done = document.execCommand('copy');
+        document.body.removeChild(ta);
+        done ? ok() : fail();
+    } catch (e) { fail(); }
 }
 
 // =============================================
@@ -6510,7 +7568,7 @@ async function loadDexActivity() {
         if (status) status.textContent = `${dexActivity.length} recent`;
     } catch (error) {
         console.error('Failed to load activity:', error);
-        feed.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">Failed to load activity</div>`;
+        feed.innerHTML = errorState('Could not load activity', 'loadActivityFeed()', { detail: e.message });
     }
 }
 
@@ -6765,14 +7823,16 @@ async function loadDexPools() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" width="48" height="48" style="margin-bottom:16px;">
                     <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
-                <h3 style="margin-bottom:8px;color:var(--warning);">DEX Unavailable</h3>
-                <p style="color:var(--text-secondary);margin-bottom:16px;max-width:400px;margin-left:auto;margin-right:auto;">
-                    DEX features require a node with shader support. Public nodes typically don't support smart contract calls.
+                <h3 style="margin-bottom:8px;color:var(--warning);">Could not load pools</h3>
+                <p style="color:var(--text-secondary);margin-bottom:16px;max-width:420px;margin-left:auto;margin-right:auto;">
+                    The DEX contract did not respond. This is usually temporary &mdash; the
+                    node may be busy or still catching up.
                 </p>
                 <p style="color:var(--text-muted);font-size:12px;margin-bottom:20px;">
-                    To use DEX: Switch to a local node in Settings
+                    A local node is <em>not</em> required: contract calls work over public nodes.
                 </p>
-                <button class="quick-btn" onclick="showPage('settings')">
+                <button class="quick-btn" onclick="loadDexPools()" style="margin-right:8px;">Try again</button>
+                <button class="quick-btn quick-btn-secondary" onclick="showPage('settings')">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="margin-right:8px;">
                         <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
                     </svg>
@@ -6938,7 +7998,53 @@ function renderDexPools() {
 }
 
 // Get asset info from config or cache
+/**
+ * Asset name/symbol/description come from on-chain metadata, which anyone can
+ * set to anything when they mint a Confidential Asset. These strings reach
+ * innerHTML in ~110 places, so they are escaped once here at the source rather
+ * than at every render site, where one miss is a scripting hole in a wallet.
+ */
+/**
+ * Asset metadata is written by whoever minted the asset, and `assets_list`
+ * returns every asset on the chain - not just the ones this wallet holds. So
+ * rendering `OPT_ICON_URL` as an <img src> means: anyone can mint a token whose
+ * icon points at a server they control, and every Light Wallet that opens the
+ * asset list sends them a request. That hands out the user's IP address and,
+ * for an asset they actually hold, what is in their wallet.
+ *
+ * On mainnet today that is not hypothetical - 14 distinct third-party hosts are
+ * already named in on-chain metadata, including imgur and several personal
+ * domains. A privacy coin wallet cannot be the thing that leaks this.
+ *
+ * Only self-contained sources are allowed through: files shipped with the
+ * wallet, and data: URIs, which cost no network request. Everything else
+ * returns null, and the existing initials-in-a-circle fallback renders instead.
+ */
+function safeAssetIcon(url) {
+    if (typeof url !== 'string' || !url) return null;
+    const u = url.trim();
+    // Bundled with the wallet.
+    if (u.startsWith('/images/') || u.startsWith('/icons/')) return u;
+    // Self-contained; no request leaves the machine. Images only - a data: URI
+    // can carry SVG, and SVG can carry script.
+    if (/^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(u)) return u;
+    return null;
+}
+
+function sanitizeAssetMeta(info) {
+    if (!info) return info;
+    const clean = { ...info };
+    ['symbol', 'name', 'description', 'shortDesc', 'longDesc'].forEach(k => {
+        if (typeof clean[k] === 'string') clean[k] = escapeHtml(clean[k]);
+    });
+    return clean;
+}
+
 function getAssetInfo(aid) {
+    return sanitizeAssetMeta(getAssetInfoRaw(aid));
+}
+
+function getAssetInfoRaw(aid) {
     // Priority tokens from config (with local/known icons)
     const config = ASSET_CONFIG[aid];
     if (config) return { aid, ...config };
@@ -6966,8 +8072,10 @@ function getAssetInfo(aid) {
             meta = parsed;
         }
 
-        // Parse icon from metadata
-        let icon = meta.OPT_ICON_URL || meta.OPT_LOGO_URL || meta.OPT_FAVICON_URL || meta.ICON || null;
+        // Parse icon from metadata, then refuse to fetch it from the internet.
+        // See safeAssetIcon: this string is written by whoever minted the asset.
+        let icon = safeAssetIcon(
+            meta.OPT_ICON_URL || meta.OPT_LOGO_URL || meta.OPT_FAVICON_URL || meta.ICON || null);
 
         // Check ASSET_ICONS as fallback
         if (!icon && ASSET_ICONS[aid]) {
@@ -7065,11 +8173,12 @@ function getAssetInfoBasic(aid) {
     if (cached) {
         const meta = cached.metadata_pairs || cached.metadata || {};
         const name = meta.N || meta.name || `Asset #${aid}`;
-        return {
+        // Same reasoning as getAssetInfo: attacker-controlled, headed for innerHTML.
+        return sanitizeAssetMeta({
             aid,
             symbol: meta.UN || meta.SN || (name !== `Asset #${aid}` ? name.split(' ')[0].substring(0, 10) : `CA${aid}`),
             name
-        };
+        });
     }
 
     return { aid, symbol: `CA${aid}`, name: `Asset #${aid}` };
@@ -7360,7 +8469,7 @@ async function executeAddLiquidityFromPoolModal() {
             throw new Error('Unexpected response from contract');
         }
     } catch (e) {
-        showToast('Failed: ' + e.message, 'error');
+        showErrorToast(e, 'Could not add liquidity');
     }
 
     pendingLiqOp = null;
@@ -7515,7 +8624,7 @@ async function executeRemoveLiquidity() {
             throw new Error('Unexpected response from contract');
         }
     } catch (e) {
-        showToast('Failed: ' + e.message, 'error');
+        showErrorToast(e, 'Could not withdraw liquidity');
     }
 
     pendingLiqOp = null;
@@ -7690,7 +8799,36 @@ function updateSwapButton() {
 
 // Show swap confirmation modal
 function executeSwap() {
+    if (isWalletOutOfSync()) {
+        showToast('Wallet is out of sync with the network — swapping is disabled until it catches up', 'error');
+        return;
+    }
     if (!dexQuote) return;
+
+    // Same omission as send had: the quote proves the pool can fill the trade,
+    // not that this wallet can pay for it. A swap is a contract call, so it
+    // costs BEAM even when BEAM is not one of the two assets - swapping FOMO
+    // for BEAMX from a wallet holding no BEAM fails at the node after the user
+    // has already confirmed.
+    const swapFromAvail = (walletData.assets.find(a => a.id === dexFromAsset.aid) || {}).balance || 0;
+    const swapBeamAvail = (walletData.assets.find(a => a.id === 0) || {}).balance || 0;
+    const swapSpend = dexQuote.amountSmall || 0;
+    const beamNeededForSwap = (dexFromAsset.aid === 0 ? swapSpend : 0) + CONTRACT_CALL_FEE_GROTH;
+
+    if (dexFromAsset.aid !== 0 && swapSpend > swapFromAvail) {
+        showToast(`Not enough ${dexFromAsset.symbol}. ${formatAmount(swapSpend)} requested, `
+            + `${formatAmount(swapFromAvail)} available.`, 'error');
+        return;
+    }
+    if (swapBeamAvail < beamNeededForSwap) {
+        showToast(dexFromAsset.aid === 0
+            ? `Not enough BEAM. Swapping ${formatAmount(swapSpend)} plus about `
+              + `${formatAmount(CONTRACT_CALL_FEE_GROTH)} in network fees needs `
+              + `${formatAmount(beamNeededForSwap)}, and ${formatAmount(swapBeamAvail)} is available.`
+            : `A swap is a contract call and costs about ${formatAmount(CONTRACT_CALL_FEE_GROTH)} BEAM `
+              + `in network fees. This wallet has ${formatAmount(swapBeamAvail)} BEAM.`, 'error');
+        return;
+    }
 
     const fromAmount = document.getElementById('dex-from-amount').value;
     const toAmount = document.getElementById('dex-to-amount').value;
@@ -7854,7 +8992,7 @@ async function confirmAndExecuteSwap() {
             throw new Error('No transaction data returned');
         }
     } catch (e) {
-        showToastAdvanced('Swap Failed', e.message, 'error');
+        showErrorToast(e, 'Swap failed');
     }
 
     dexSwapInProgress = false;
@@ -8261,7 +9399,7 @@ async function createPool() {
         renderAssetCards();
 
     } catch (e) {
-        showToastAdvanced('Pool Creation Failed', e.message, 'error');
+        showErrorToast(e, 'Could not create the pool');
     }
 }
 
@@ -8280,6 +9418,13 @@ async function openTokenSelector(mode) {
             console.log(`Loaded ${allAssetsCache.length} assets from blockchain`);
         } catch (e) {
             console.error('Failed to load assets:', e);
+            // Falling through to renderTokenList() here would show "No tokens
+            // found", which reads as "this wallet has no assets" when in fact
+            // the request failed. Say what actually happened and offer a retry.
+            document.getElementById('token-select-list').innerHTML =
+                errorState('Could not load the asset list', `openTokenSelector('${tokenSelectMode}')`,
+                           { detail: e.message });
+            return;
         }
     }
 
@@ -8318,7 +9463,8 @@ function initializeDexDefaults() {
 function renderTokenList() {
     const container = document.getElementById('token-select-list');
     const search = document.getElementById('token-search-input')?.value.toLowerCase() || '';
-    const isFromMode = tokenSelectMode === 'from';
+    // "From" sides only list what the user can actually spend.
+    const isFromMode = tokenSelectMode === 'from' || tokenSelectMode === 'qt-from';
 
     // Build comprehensive token list from all sources
     const tokenSet = new Map();
@@ -8435,6 +9581,18 @@ function selectToken(aid) {
         dexToAsset = info;
         updateSwapUI();
         debounceGetQuote();
+    } else if (tokenSelectMode === 'qt-from' || tokenSelectMode === 'qt-to') {
+        // Quick-trade picker. Swapping an asset onto the side that already
+        // holds it would leave both sides identical and quote against a pool
+        // that cannot exist, so flip instead of producing a dead pair.
+        if (tokenSelectMode === 'qt-from') {
+            if (qtToAsset && info.aid === qtToAsset.aid) qtToAsset = qtFromAsset;
+            qtFromAsset = info;
+        } else {
+            if (qtFromAsset && info.aid === qtFromAsset.aid) qtFromAsset = qtToAsset;
+            qtToAsset = info;
+        }
+        updateQuickTradeUI();
     } else if (tokenSelectMode === 'liq-a' || tokenSelectMode === 'liq-b') {
         setLiqToken(tokenSelectMode, info);
     }
@@ -8859,7 +10017,7 @@ async function executeAddLiquidity() {
             throw new Error(result?.error?.message || 'Failed to add liquidity');
         }
     } catch (e) {
-        showToastAdvanced('Add Liquidity Failed', e.message, 'error');
+        showErrorToast(e, 'Could not add liquidity');
     }
 
     addLiqInProgress = false;
@@ -9166,7 +10324,7 @@ async function executeWithdrawLiquidity() {
             throw new Error('Unexpected response from contract');
         }
     } catch (e) {
-        showToastAdvanced('Withdraw Failed', e.message, 'error');
+        showErrorToast(e, 'Withdrawal failed');
     }
 
     btn.disabled = false;
@@ -9218,6 +10376,170 @@ async function autoStartLocalNode() {
     }
 }
 
+// Local node sync samples. The first one gives a rate, the latest one tells
+// "slow" from "stopped" — a bar that is not moving has to say so.
+let nodeSyncFirst = { height: 0, at: 0 };
+let nodeSyncLast = { height: -1, at: 0 };
+let networkTipFetchedAt = 0;
+const NODE_STALL_MS = 10 * 60 * 1000;
+
+function setNodeSyncField(id, text, color) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    if (color !== undefined) el.style.color = color;
+}
+
+function formatSyncEta(ms) {
+    const minutes = Math.round(ms / 60000);
+    if (minutes < 2) return 'under a minute left';
+    if (minutes < 60) return `about ${minutes} min left`;
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest ? `about ${hours}h ${rest}m left` : `about ${hours}h left`;
+}
+
+/**
+ * Draw the local node against the *network* tip instead of against its own
+ * opinion of itself. A node wedged below the hard fork reports a healthy
+ * percentage forever, which is the exact failure this panel exists to expose.
+ * Returns true when the node has genuinely caught up.
+ */
+function renderNodeSync(nodeStatus) {
+    const fill = document.getElementById('sync-progress-fill');
+    const bar = document.getElementById('sync-progress-bar');
+    const stall = document.getElementById('node-stall');
+    if (!fill || !bar || !stall) return false;
+
+    if (!nodeStatus || !nodeStatus.running) {
+        nodeSyncFirst = { height: 0, at: 0 };
+        nodeSyncLast = { height: -1, at: 0 };
+        setNodeSyncField('sync-status-text', 'Not running', 'var(--text-muted)');
+        setNodeSyncField('sync-percentage', '—', 'var(--text-muted)');
+        setNodeSyncField('sync-blocks', '—');
+        setNodeSyncField('sync-remaining', '');
+        fill.style.width = '0%';
+        fill.classList.remove('stalled');
+        bar.hidden = true;
+        stall.hidden = true;
+        return false;
+    }
+
+    const now = Date.now();
+    const height = nodeStatus.height || 0;
+    // Two candidate tips: an independent explorer's, and the node's own sync
+    // target from its log. The higher of the two is the honest denominator.
+    const knownTip = Math.max(networkTipHeight || 0, nodeStatus.target || 0);
+    const haveTip = knownTip > 0;
+    const tip = Math.max(knownTip, height);
+    const behind = haveTip ? Math.max(tip - height, 0) : 0;
+    const atTip = haveTip && behind <= 2;
+    // A node that has not reported a height yet is starting up, not sitting at
+    // block 0: serve.py returns 0 until beam-node.log has a parseable line.
+    const starting = height <= 0;
+
+    if (height !== nodeSyncLast.height) {
+        nodeSyncLast = { height: height, at: now };
+        // Anchoring the rate baseline at that placeholder 0 makes the first
+        // fast_sync jump look like millions of blocks in one poll, which turned
+        // a multi-hour sync into "under a minute left".
+        if (!nodeSyncFirst.at && !starting) nodeSyncFirst = { height: height, at: now };
+    } else if (!nodeSyncLast.at) {
+        nodeSyncLast.at = now;
+    }
+
+    const consensus = lastServerStatus && lastServerStatus.consensus;
+    const forkHeight = forkInfo ? forkInfo.height : 0;
+    const belowFork = forkHeight > 0 && height > 0 && height < forkHeight;
+    const stuckMs = now - nodeSyncLast.at;
+    const stalled = !atTip && stuckMs >= NODE_STALL_MS;
+
+    // A build that cannot cross the fork will never fill this bar, so it does
+    // not get one.
+    if (consensus && consensus.out_of_consensus) {
+        const forkAt = consensus.fork_height || forkHeight;
+        bar.hidden = true;
+        fill.classList.remove('stalled');
+        setNodeSyncField('sync-status-text', 'Stopped at the hard fork', 'var(--warning)');
+        setNodeSyncField('sync-percentage', '—', 'var(--warning)');
+        setNodeSyncField('sync-blocks', height ? `${height.toLocaleString()} blocks` : '—');
+        setNodeSyncField('sync-remaining', '');
+        stall.hidden = false;
+        stall.classList.remove('neutral');
+        stall.innerHTML = `<strong>This node cannot finish syncing.</strong>
+            BEAM ${escapeHtml(consensus.beam_version || 'unknown')} stops at block
+            ${forkAt.toLocaleString()}${forkInfo ? ' (' + escapeHtml(forkInfo.name) + ')' : ''}, and
+            ${escapeHtml(consensus.required_version || 'a newer build')} or newer is required to pass it.
+            Stay on the public node until the binaries are updated.`;
+        return false;
+    }
+
+    const pct = (haveTip && !starting) ? Math.min(100, Math.max(0, (height / tip) * 100)) : null;
+    // No tip means no denominator, and a 0% bar next to a height of 3.5M is
+    // worse than no bar at all.
+    bar.hidden = (pct === null);
+    fill.style.width = (pct === null ? 0 : pct) + '%';
+
+    if (pct === null) {
+        setNodeSyncField('sync-percentage', '—', 'var(--text-muted)');
+        setNodeSyncField('sync-status-text',
+                         stalled ? 'Not advancing' : (starting ? 'Starting up' : 'Syncing'),
+                         stalled ? 'var(--warning)' : 'var(--text-secondary)');
+        setNodeSyncField('sync-blocks', starting ? 'No height reported yet' : `${height.toLocaleString()} blocks`);
+        // Only one of these is the actual reason there is no bar.
+        setNodeSyncField('sync-remaining', starting ? '' : 'Network height unavailable');
+    } else {
+        // One decimal, rounded down: the last percent of a ~9 GB sync is hours
+        // long, and a "100%" that still has 400 blocks to go is the same lie
+        // this panel is here to stop telling.
+        const shown = atTip ? 100 : Math.floor(pct * 10) / 10;
+        const tone = atTip ? 'var(--success)' : (stalled ? 'var(--warning)' : 'var(--beam-cyan)');
+        setNodeSyncField('sync-percentage', shown.toFixed(1) + '%', tone);
+        setNodeSyncField('sync-status-text',
+                         atTip ? 'At the network tip' : (stalled ? 'Not advancing' : 'Syncing'),
+                         atTip ? 'var(--success)' : (stalled ? 'var(--warning)' : 'var(--text-secondary)'));
+        setNodeSyncField('sync-blocks', `${height.toLocaleString()} / ${tip.toLocaleString()} blocks`);
+
+        let remaining = atTip ? '' : `${behind.toLocaleString()} blocks to go`;
+        const elapsed = now - nodeSyncFirst.at;
+        if (!atTip && nodeSyncFirst.at && elapsed >= 60000 && height > nodeSyncFirst.height) {
+            // Rate over the whole observed run, so one slow poll cannot swing it.
+            const rate = (height - nodeSyncFirst.height) / elapsed;
+            if (rate > 0) remaining += ' · ' + formatSyncEta(behind / rate);
+        }
+        setNodeSyncField('sync-remaining', remaining);
+    }
+
+    fill.classList.toggle('stalled', stalled);
+
+    let stallHtml = '';
+    // Amber is for "something is wrong"; a node that is merely still short of
+    // the fork is on schedule and gets the quiet treatment.
+    let neutral = false;
+    if (stalled) {
+        stallHtml = `<strong>No progress for ${Math.round(stuckMs / 60000)} minutes.</strong>
+            ${starting ? 'The node has not reported a block height at all.'
+                       : `The node has been at block ${height.toLocaleString()} since then.`}`;
+        if (belowFork) {
+            stallHtml += ` Block ${forkHeight.toLocaleString()} is the ${escapeHtml(forkInfo.name)} fork, and builds older
+                than ${escapeHtml(forkInfo.minVersion)} stop one block short of it and never recover.`;
+        }
+        stallHtml += ' Check logs/beam-node.log, or switch back to the public node.';
+    } else if (belowFork) {
+        neutral = true;
+        stallHtml = `<strong>Below the ${escapeHtml(forkInfo.name)} fork block (${forkHeight.toLocaleString()}).</strong>
+            The wallet keeps using the public node until the local node passes it. Builds older than
+            ${escapeHtml(forkInfo.minVersion)} stop one block short — this app ships
+            ${escapeHtml((lastServerStatus && lastServerStatus.beam_version) || 'the pinned build')}.`;
+    }
+    stall.classList.toggle('neutral', neutral);
+    stall.innerHTML = stallHtml;
+    stall.hidden = !stallHtml;
+
+    // The log-derived `synced` flag is trusted only when it agrees with the tip.
+    return atTip || (!!nodeStatus.synced && (!haveTip || behind <= SYNC_BLOCK_TOLERANCE));
+}
+
 function startNodeSyncMonitoring() {
     // Clear any existing interval
     stopNodeSyncMonitoring();
@@ -9226,66 +10548,64 @@ function startNodeSyncMonitoring() {
     const section = document.getElementById('local-node-section');
     if (section) section.style.display = 'block';
 
-    // Check sync every 10 seconds (reduced from 3s to save CPU)
-    startInterval('nodeSync', async () => {
+    nodeSyncFirst = { height: 0, at: 0 };
+    nodeSyncLast = { height: -1, at: 0 };
+    loadForkInfo();
+
+    // Most installs never start a local node. Polling for one forever is pure
+    // noise, so the monitor gives a newly launched node ~30s to appear and then
+    // stops; anything that starts one calls this again.
+    let absentPolls = 0;
+
+    const check = async () => {
         try {
-            // Get node status from server API
+            // The tip is what makes the percentage mean anything. It comes from
+            // a third-party explorer, so it runs on its own slower clock.
+            if (Date.now() - networkTipFetchedAt > 120000) {
+                networkTipFetchedAt = Date.now();
+                await refreshNetworkTip();
+            }
+
             const resp = await fetch(`/api/node/status`);
             const nodeStatus = await resp.json();
+            updateNodeButtons(!!nodeStatus.running);
+            const synced = renderNodeSync(nodeStatus);
 
-            if (nodeStatus.running) {
-                const current = nodeStatus.height || 0;
-                const target = nodeStatus.target || 0;
-                const progress = nodeStatus.progress || 0;
+            if (!nodeStatus.running) {
+                absentPolls++;
+                if (absentPolls >= 3 && currentNodeType !== 'local') stopNodeSyncMonitoring();
+                return;
+            }
+            absentPolls = 0;
 
-                // Update UI
-                document.getElementById('sync-percentage').textContent = progress + '%';
-                document.getElementById('sync-progress-fill').style.width = progress + '%';
-                document.getElementById('sync-blocks').textContent = `${current.toLocaleString()} / ${target.toLocaleString()} headers`;
+            if (synced) {
+                if (localNodeSyncProgress < 100) {
+                    localNodeSyncProgress = 100;
+                    showToastAdvanced('Node Synced', 'The local node has caught up with the network', 'success');
 
-                if (nodeStatus.synced) {
-                    document.getElementById('sync-status-text').textContent = 'Fully synced';
-                    document.getElementById('sync-status-text').style.color = 'var(--success)';
-
-                    if (localNodeSyncProgress < 100) {
-                        localNodeSyncProgress = 100;
-                        showToastAdvanced('Node Synced!', 'Local node is fully synchronized', 'success');
-
-                        // Auto-switch to local node if currently on public
-                        if (currentNodeType !== 'local' && storedWalletPassword) {
-                            showToastAdvanced('Node Ready', 'Switching to local node for full features...', 'pending');
-                            try {
-                                await seamlessSwitchToLocalNode();
-                            } catch (e) {
-                                console.log('Auto-switch to local node failed:', e);
-                            }
-                        } else if (currentNodeType === 'local') {
-                            showToastAdvanced('DEX Ready', 'You can now use DEX features with local node', 'success');
+                    // The user asked for this node explicitly, so connecting the
+                    // wallet to it once it is usable is what they were waiting for.
+                    if (currentNodeType !== 'local' && storedWalletPassword) {
+                        showToastAdvanced('Node Ready', 'Connecting the wallet to your local node...', 'pending');
+                        try {
+                            await seamlessSwitchToLocalNode();
+                        } catch (e) {
+                            console.log('Auto-switch to local node failed:', e);
                         }
-
-                        // Slow down monitoring once synced
-                        stopNodeSyncMonitoring();
-                        startInterval('nodeSync', async () => {
-                            const r = await fetch(`/api/node/status`);
-                            const s = await r.json();
-                            document.getElementById('sync-percentage').textContent = '100%';
-                            document.getElementById('sync-progress-fill').style.width = '100%';
-                            document.getElementById('sync-blocks').textContent = `${s.height?.toLocaleString() || 0} blocks`;
-                        }, 30000);
                     }
-                } else {
-                    localNodeSyncProgress = progress;
-                    document.getElementById('sync-status-text').textContent = 'Syncing headers...';
-                    document.getElementById('sync-status-text').style.color = 'var(--beam-cyan)';
                 }
+                // Nothing moves quickly once synced; poll three times slower.
+                startInterval('nodeSync', check, 30000);
             } else {
-                document.getElementById('sync-status-text').textContent = 'Node not running';
-                document.getElementById('sync-status-text').style.color = 'var(--warning)';
+                localNodeSyncProgress = nodeStatus.progress || 0;
             }
         } catch (e) {
             console.error('Sync check failed:', e);
         }
-    }, 10000);
+    };
+
+    check();
+    startInterval('nodeSync', check, 10000);
 }
 
 function stopNodeSyncMonitoring() {
@@ -9294,6 +10614,15 @@ function stopNodeSyncMonitoring() {
 
 // Start local node manually
 async function startLocalNode() {
+    // Same download as picking the Local Node mode, so it asks the same question.
+    const serverStatus = await checkServerStatus();
+    if (serverStatus?.node_running) {
+        updateNodeButtons(true);
+        startNodeSyncMonitoring();
+        return;
+    }
+    if (!(await confirmLocalNodeCost())) return;
+
     showToastAdvanced('Starting Node', 'Starting local BEAM node...', 'pending');
 
     try {
@@ -9305,14 +10634,16 @@ async function startLocalNode() {
         const result = await resp.json();
 
         if (result.success) {
-            showToastAdvanced('Node Started', 'Local node is syncing...', 'success');
+            showToastAdvanced('Node Started', 'The local node is syncing. This takes hours.', 'success');
             document.getElementById('local-node-section').style.display = 'block';
+            localNodeSyncProgress = 0;
+            updateNodeButtons(true);
             startNodeSyncMonitoring();
         } else {
-            showToastAdvanced('Start Failed', result.error || 'Unknown error', 'error');
+            showErrorToast(result.error, 'Could not start the local node');
         }
     } catch (e) {
-        showToastAdvanced('Start Failed', e.message, 'error');
+        showErrorToast(e, 'Could not start the local node');
     }
 }
 
@@ -9328,8 +10659,9 @@ async function stopLocalNode() {
         if (result.success) {
             showToastAdvanced('Node Stopped', 'Local node has been stopped', 'info');
             stopNodeSyncMonitoring();
-            document.getElementById('sync-status-text').textContent = 'Node stopped';
-            document.getElementById('sync-status-text').style.color = 'var(--text-muted)';
+            localNodeSyncProgress = 0;
+            updateNodeButtons(false);
+            renderNodeSync(null);
         }
     } catch (e) {
         console.error('Stop node error:', e);
@@ -9352,15 +10684,31 @@ function sortBalances(column) {
 let debugPanelOpen = false;
 
 function toggleDebugPanel() {
-    debugPanelOpen = !debugPanelOpen;
     const panel = document.getElementById('debug-panel');
-    if (debugPanelOpen) {
+    if (!panel) return;
+    if (!panel.classList.contains('visible')) {
+        // First toggle: show the panel bar
+        panel.classList.add('visible');
+        debugPanelOpen = false;
+    } else if (!debugPanelOpen) {
+        // Second toggle: expand the panel
+        debugPanelOpen = true;
         panel.classList.add('open');
         renderDebugLogs();
     } else {
-        panel.classList.remove('open');
+        // Third toggle: hide everything
+        debugPanelOpen = false;
+        panel.classList.remove('open', 'visible');
     }
 }
+
+// Keyboard shortcut: Ctrl+` to toggle debug panel
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        toggleDebugPanel();
+    }
+});
 
 // Create debug panel on load
 document.addEventListener('DOMContentLoaded', () => {
@@ -9378,8 +10726,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 border-top: 1px solid var(--glass-border);
                 z-index: 4000;
                 transition: height 0.3s ease;
-                display: flex;
+                display: none;
                 flex-direction: column;
+            }
+            #debug-panel.visible {
+                display: flex;
             }
             #debug-panel.open {
                 height: 350px;
@@ -10067,7 +11418,7 @@ async function executeDonation(amount) {
         renderBalancesTable();
 
     } catch (e) {
-        showToastAdvanced('Donation Failed', e.message, 'error');
+        showErrorToast(e, 'Donation failed');
     }
 }
 
@@ -10229,7 +11580,7 @@ async function createToken() {
         renderAssetCards();
 
     } catch (e) {
-        showToastAdvanced('Creation Failed', e.message, 'error');
+        showErrorToast(e, 'Could not create the token');
     } finally {
         btn.disabled = false;
         btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="vertical-align: middle; margin-right: 8px;"><path d="M12 5v14M5 12h14"/></svg> Create Token (60 BEAM)`;
@@ -10316,7 +11667,7 @@ async function toggleMyAssets() {
 
         } catch (e) {
             console.error('Failed to load owned assets:', e);
-            showToast('Failed to query Minter: ' + e.message, 'error');
+            showErrorToast(e, 'Could not read the Minter contract');
             ownedAssets = [];
         }
     } else {
@@ -10495,7 +11846,7 @@ async function executeMintToken() {
         renderAssetCards();
 
     } catch (e) {
-        showToastAdvanced('Minting Failed', e.message, 'error');
+        showErrorToast(e, 'Minting failed');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Mint Tokens';
@@ -10633,7 +11984,7 @@ async function executeBurnToken() {
         loadAllAssets();
 
     } catch (e) {
-        showToastAdvanced('Burn Failed', e.message, 'error');
+        showErrorToast(e, 'Burn failed');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '🔥 Burn Tokens';
@@ -11054,7 +12405,7 @@ async function loadExplorerBlocks(startHeight = null) {
         }
     } catch (e) {
         console.error('Explorer blocks error:', e);
-        container.innerHTML = `<tr><td colspan="${selectedCols.length}" class="loading-state">Failed to load blocks</td></tr>`;
+        container.innerHTML = errorState('Could not load blocks', 'loadBlocks()', { detail: e.message, colspan: selectedCols.length });
     }
 }
 
@@ -11236,7 +12587,7 @@ async function showBlockDetail(height) {
         `;
     } catch (e) {
         console.error('Block detail error:', e);
-        content.innerHTML = `<div class="error-state">Failed to load block: ${e.message}</div>`;
+        content.innerHTML = errorState('Could not load this block', null, { detail: e.message });
     }
 }
 
@@ -11294,10 +12645,42 @@ function parseExplorerTableRows(data) {
 }
 
 // Escape HTML
+/**
+ * Escape for HTML, including inside a quoted attribute.
+ *
+ * This used to be `div.textContent = str; return div.innerHTML`, which escapes
+ * < > and & but NOT quotes - the browser has no reason to escape a quote in
+ * text context. Most call sites here interpolate into `"`-delimited attributes,
+ * so a value containing a double quote closed the attribute and started a new
+ * one. Proven: escaping `" onmouseover="..." x="` and rendering it inside an
+ * href produced an element with real onmouseover and x attributes.
+ *
+ * That input is attacker-controlled: OPT_SITE_URL and friends come from on-chain
+ * asset metadata, and anyone can mint an asset. Script in this origin can read
+ * the session token and spend the wallet.
+ */
 function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * A URL safe to put in href. Escaping does not help here - `javascript:alert(1)`
+ * contains nothing that needs escaping - so the scheme itself must be checked.
+ * Anything not plainly http/https becomes '#'.
+ */
+function safeUrl(url) {
+    const raw = String(url == null ? '' : url).trim();
+    if (!raw) return '#';
+    try {
+        const parsed = new URL(raw, window.location.origin);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+    } catch (e) { /* not a URL at all */ }
+    return '#';
 }
 
 // Copy button HTML
@@ -11306,18 +12689,8 @@ function copyBtnHtml(text) {
 }
 
 // Copy to clipboard
-function copyToClipboard(text, btn) {
-    navigator.clipboard.writeText(text).then(() => {
-        if (btn) {
-            btn.classList.add('copied');
-            btn.textContent = 'Copied!';
-            setTimeout(() => {
-                btn.classList.remove('copied');
-                btn.textContent = 'Copy';
-            }, 2000);
-        }
-    });
-}
+// (copyToClipboard is defined once, above — the duplicate here shadowed it)
+
 
 // Show asset detail (full page, like BeamExplorer.html)
 async function showAssetDetail(assetId) {
@@ -11515,7 +12888,7 @@ async function showAssetDetail(assetId) {
                     <div class="detail-label">Owner Contract</div>
                     <div class="detail-value">${asset?.owner ? `<span class="hash truncate clickable" onclick="showContractDetail('${asset.owner}')" title="${asset.owner}">${asset.owner.slice(0,12)}...${asset.owner.slice(-8)}</span>` : 'None'}</div>
                 </div>
-                ${meta.OPT_SITE_URL ? `<div class="detail-item"><div class="detail-label">Website</div><div class="detail-value"><a href="${escapeHtml(meta.OPT_SITE_URL)}" target="_blank">${escapeHtml(meta.OPT_SITE_URL.slice(0,40))}...</a></div></div>` : ''}
+                ${meta.OPT_SITE_URL ? `<div class="detail-item"><div class="detail-label">Website</div><div class="detail-value"><a href="${escapeHtml(safeUrl(meta.OPT_SITE_URL))}" target="_blank" rel="noopener noreferrer">${escapeHtml(meta.OPT_SITE_URL.slice(0,40))}...</a></div></div>` : ''}
                 ${meta.OPT_SHORT_DESC ? `<div class="detail-item full-width"><div class="detail-label">Description</div><div class="detail-value">${escapeHtml(meta.OPT_SHORT_DESC)}</div></div>` : ''}
             </div>
 
@@ -11525,7 +12898,7 @@ async function showAssetDetail(assetId) {
         `;
     } catch (e) {
         console.error('Asset detail error:', e);
-        content.innerHTML = `<div class="error-state">Failed to load asset: ${e.message}</div>`;
+        content.innerHTML = errorState('Could not load this asset', null, { detail: e.message });
     }
 }
 
@@ -11736,7 +13109,7 @@ async function showContractDetail(cid) {
         `;
     } catch (e) {
         console.error('Contract detail error:', e);
-        content.innerHTML = `<div class="error-state">Failed to load contract: ${e.message}</div>`;
+        content.innerHTML = errorState('Could not load this contract', null, { detail: e.message });
     }
 }
 
@@ -11790,7 +13163,7 @@ async function loadExplorerAssets(force = false) {
         }
     } catch (e) {
         console.error('Explorer assets error:', e);
-        container.innerHTML = '<div class="loading-state">Failed to load assets</div>';
+        container.innerHTML = errorState('Could not load assets', 'loadExplorerAssets()', { detail: e.message });
     }
 }
 
@@ -11979,7 +13352,7 @@ async function loadExplorerContracts(force = false) {
         }
     } catch (e) {
         console.error('Explorer contracts error:', e);
-        container.innerHTML = '<tr><td colspan="5" class="loading-state">Failed to load contracts</td></tr>';
+        container.innerHTML = errorState('Could not load contracts', 'loadExplorerContracts()', { detail: e.message, colspan: 5 });
     }
 }
 
@@ -12150,10 +13523,10 @@ async function loadExplorerDexPools(force = false) {
     } catch (e) {
         console.error('Explorer DEX error:', e);
         if (poolsContainer) {
-            poolsContainer.innerHTML = '<tr><td colspan="9" class="loading-state">Failed to load pools</td></tr>';
+            poolsContainer.innerHTML = errorState('Could not load pools', 'loadExplorerDex()', { detail: e.message, colspan: 9 });
         }
         if (tradesContainer) {
-            tradesContainer.innerHTML = '<tr><td colspan="6" class="loading-state">Failed to load trades</td></tr>';
+            tradesContainer.innerHTML = errorState('Could not load trades', 'loadExplorerDex()', { detail: e.message, colspan: 6 });
         }
     }
 }
@@ -12560,10 +13933,10 @@ async function loadExplorerAtomicSwaps() {
     } catch (e) {
         console.error('Explorer Atomic Swaps error:', e);
         if (totalsContainer) {
-            totalsContainer.innerHTML = '<div class="error-state">Failed to load swap data</div>';
+            totalsContainer.innerHTML = errorState('Could not load swap data', 'loadExplorerSwaps()', { detail: e.message });
         }
         if (offersContainer) {
-            offersContainer.innerHTML = '<tr><td colspan="5" class="loading-state">Failed to load offers</td></tr>';
+            offersContainer.innerHTML = errorState('Could not load offers', 'loadExplorerSwaps()', { detail: e.message, colspan: 5 });
         }
     }
 }
@@ -12578,8 +13951,11 @@ function changeExplorerNode() {
     }
 }
 
-// Test Explorer connection
-async function testExplorerConnection() {
+// Test Explorer connection.
+// `announce` is false for the automatic check on load: an unreachable explorer
+// is already reported by the status dot, and an error toast now persists until
+// dismissed — so an offline user would be greeted by a sticky toast every time.
+async function testExplorerConnection(announce = true) {
     const statusEl = document.getElementById('explorer-connection-status');
     if (statusEl) {
         statusEl.innerHTML = '<span class="status-dot status-checking"></span> Testing...';
@@ -12591,7 +13967,7 @@ async function testExplorerConnection() {
             const data = await resp.json();
             explorerConnected = true;
             updateExplorerConnectionStatus(true);
-            showToast(`Connected to Explorer (Height: ${data.height?.toLocaleString()})`, 'success');
+            if (announce) showToast(`Connected to Explorer (Height: ${data.height?.toLocaleString()})`, 'success');
 
             // Reload explorer page if active
             if (document.getElementById('page-explorer')?.classList.contains('active')) {
@@ -12603,7 +13979,7 @@ async function testExplorerConnection() {
     } catch (e) {
         explorerConnected = false;
         updateExplorerConnectionStatus(false);
-        showToast('Explorer connection failed: ' + e.message, 'error');
+        if (announce) showErrorToast(e, 'Could not reach the explorer');
     }
 }
 
@@ -12628,8 +14004,8 @@ async function initExplorerSettings() {
     if (selector) {
         selector.value = EXPLORER_API;
     }
-    // Test connection on init
-    testExplorerConnection();
+    // Test connection on init, silently — the status dot carries the result.
+    testExplorerConnection(false);
 }
 
 // Fetch from Explorer API
@@ -12749,6 +14125,21 @@ function startExplorerRefresh() {
 window.addEventListener('message', async (event) => {
     // Only handle p2p_request messages
     if (!event.data || event.data.type !== 'p2p_request') return;
+
+    // This handler can tx_send and invoke_contract. It never checked who was
+    // asking, so any page holding a handle to this window - one that called
+    // window.open on the wallet, or an embedded frame - could post a message
+    // and have the wallet sign a transaction. The session token is no defence:
+    // the handler calls apiCall itself, with the token already attached.
+    //
+    // Only this exact origin may talk to it, and only when the feature that
+    // needs it is actually switched on.
+    if (event.origin !== window.location.origin) {
+        console.warn('[p2p] refused message from foreign origin:', event.origin);
+        return;
+    }
+    if (!FEATURE_P2P) return;
+    if (!event.source || event.source === window) return;
 
     const { id, action, params } = event.data;
     let result = null;
@@ -12886,12 +14277,28 @@ function saveAirdropCodes(codes) {
 }
 
 // Generate random voucher code: XXXX-XXXX-XXXX-XXXX
+//
+// These codes ARE the key to the locked funds - whoever presents one redeems
+// the voucher. They were generated with Math.random(), which in V8 is
+// xorshift128+ and not cryptographically secure: a handful of outputs from one
+// page context is enough to recover the generator state and reproduce every
+// other value it will ever produce. Airdrop codes are meant to be handed out,
+// so an attacker who receives a few legitimately could derive the batch's
+// remaining unclaimed codes and take the rest of the airdrop.
+//
+// crypto.getRandomValues, with rejection sampling so the alphabet stays
+// uniform. 32 symbols divides 256 exactly, so nothing is ever rejected here,
+// but the guard keeps it correct if the alphabet changes.
 function generateVoucherCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I,O,0,1 to avoid confusion
+    const limit = Math.floor(256 / chars.length) * chars.length;
     let code = '';
+    const buf = new Uint8Array(1);
     for (let i = 0; i < 16; i++) {
         if (i > 0 && i % 4 === 0) code += '-';
-        code += chars[Math.floor(Math.random() * chars.length)];
+        let b;
+        do { crypto.getRandomValues(buf); b = buf[0]; } while (b >= limit);
+        code += chars[b % chars.length];
     }
     return code;
 }
@@ -12919,6 +14326,132 @@ function renderAssetIcon(assetId, size = 32) {
     }
     const initials = (info.symbol || '??').substring(0, 2);
     return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${info.color || '#64748b'};display:flex;align-items:center;justify-content:center;font-size:${size*0.4}px;font-weight:600;color:#fff;">${initials}</div>`;
+}
+
+// ---- Gasless claims -------------------------------------------------------
+// The contract holds a pool of BEAM that is released alongside a voucher, so
+// the claim transaction funds its own kernel fee. Without it, a user with zero
+// BEAM cannot claim a FOMO or BEAMX voucher at all.
+
+// A BVM contract call costs far more than a plain transfer. Measured against
+// BEAM's live Faucet from a zero-balance wallet: unlocking 0.01 still left it
+// "Missing 0.001", unlocking 0.03 completed and left 0.019 - so 0.011 BEAM.
+// Treat this as a floor, not an exact quote: a call carrying more data costs
+// more, and the wallet computes the real fee when it builds the transaction.
+const CONTRACT_CALL_FEE_GROTH = 1100000;
+
+let airdropGas = null;
+
+// The live contract (8737e0d3…) predates the gas pool — it has no Method_7, so
+// a sponsor transaction against it would be built and then fail. view_gas
+// cannot tell "contract has no pool" apart from "pool is empty", so the
+// capability is tied to the deployment instead. Set this true in the same
+// commit that points AIRDROP_CID at a contract built from the current
+// contracts/airdrop sources.
+const AIRDROP_GAS_SUPPORTED = false;
+
+async function loadAirdropGas() {
+    if (!AIRDROP_CID) return;
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=user,action=view_gas,cid=${AIRDROP_CID}`,
+            create_tx: false
+        });
+        const output = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
+        airdropGas = output.gas || output;
+        renderAirdropGas();
+    } catch (e) {
+        console.log('Gas pool unavailable:', e.message || e);
+        const state = document.getElementById('gas-pool-state');
+        if (state) { state.textContent = 'unavailable'; state.className = 'gas-pool-state off'; }
+    }
+}
+
+function renderAirdropGas() {
+    const g = airdropGas;
+    const el = id => document.getElementById(id);
+    if (!g || !el('gas-pool')) return;
+
+    const perClaim = Number(g.per_claim || 0);
+    const balance  = Number(g.balance || 0);
+    const remaining = perClaim > 0 ? Math.floor(balance / perClaim) : 0;
+    const funded = Number(g.claims_funded || 0);
+
+    el('gas-pool-balance').textContent = formatAmount(balance);
+
+    const state = el('gas-pool-state');
+    if (perClaim <= 0) {
+        state.textContent = 'disabled';
+        state.className = 'gas-pool-state off';
+    } else if (remaining > 0) {
+        state.textContent = 'active';
+        state.className = 'gas-pool-state on';
+    } else {
+        state.textContent = 'empty';
+        state.className = 'gas-pool-state off';
+    }
+
+    el('gas-pool-meta').innerHTML = perClaim > 0
+        ? `<span><strong>${remaining.toLocaleString()}</strong> claims covered</span>`
+          + `<span>${formatAmount(perClaim)} BEAM each</span>`
+          + (funded ? `<span>${funded.toLocaleString()} already sponsored</span>` : '')
+        : '';
+
+    if (!AIRDROP_GAS_SUPPORTED) {
+        state.textContent = 'not on this contract';
+        state.className = 'gas-pool-state off';
+        el('gas-pool-explainer').textContent =
+            'The deployed airdrop contract does not have a gas pool yet. Until it is '
+          + 'upgraded, claiming a voucher requires a small amount of BEAM for the '
+          + 'transaction fee.';
+        const btn = el('gas-sponsor-btn'), inp = el('gas-sponsor-amount');
+        if (btn) { btn.disabled = true; btn.title = 'Requires the upgraded airdrop contract'; }
+        if (inp) inp.disabled = true;
+        return;
+    }
+
+    el('gas-pool-explainer').textContent = perClaim <= 0
+        ? 'Sponsorship is switched off, so claimants need their own BEAM to pay the transaction fee.'
+        : (remaining > 0
+            ? 'Anyone can claim a voucher without holding any BEAM — the pool covers their transaction fee.'
+            : 'The pool is empty, so claimants currently need their own BEAM for the fee. Top it up to re-enable gasless claims.');
+}
+
+async function sponsorAirdropGas() {
+    const input = document.getElementById('gas-sponsor-amount');
+    const btn = document.getElementById('gas-sponsor-btn');
+    const amount = parseFloat((input.value || '').replace(',', '.'));
+
+    if (!amount || amount <= 0) {
+        showToast('Enter how much BEAM to sponsor', 'error');
+        input.focus();
+        return;
+    }
+    const groth = Math.round(amount * GROTH);
+    const beam = walletData.assets.find(a => a.id === 0);
+    if (beam && beam.balance < groth) {
+        showToast(`Not enough BEAM: you have ${formatAmount(beam.balance)}`, 'error');
+        return;
+    }
+
+    btn.disabled = true;
+    const prev = btn.textContent;
+    btn.textContent = 'Sponsoring…';
+    try {
+        const result = await apiCall('invoke_contract', {
+            args: `role=user,action=sponsor_gas,cid=${AIRDROP_CID},amount=${groth}`,
+            create_tx: true
+        });
+        if (result.raw_data) await apiCall('process_invoke_data', { data: result.raw_data });
+        showToast(`Sponsored ${formatAmount(groth)} BEAM — thank you`, 'success');
+        input.value = '';
+        setTimeout(() => { loadAirdropGas(); loadAirdropStats(); }, 1500);
+    } catch (e) {
+        showErrorToast(e, 'Could not sponsor gas');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = prev;
+    }
 }
 
 // Load airdrop contract stats
@@ -13148,7 +14681,7 @@ async function loadAirdropFees() {
             listEl.appendChild(card);
         });
     } catch (e) {
-        listEl.innerHTML = `<div class="airdrop-tx-empty">Error loading fees: ${e.message}</div>`;
+        listEl.innerHTML = errorState('Could not load fees', 'loadAirdropFees()', { detail: e.message });
     }
 }
 
@@ -13170,7 +14703,7 @@ async function withdrawAirdropFee(assetId, amount) {
         showToast(`Withdrawn ${formatAmount(amount)} ${info.symbol} in fees`, 'success');
         setTimeout(() => { loadAirdropFees(); loadAirdropStats(); loadAirdropTransactions(); }, 1000);
     } catch (e) {
-        showToast(e.message || 'Failed to withdraw fees', 'error');
+        showErrorToast(e, 'Could not withdraw fees');
     }
 }
 
@@ -13195,6 +14728,7 @@ function initAirdropPage() {
 
     // Load stats
     loadAirdropStats();
+    loadAirdropGas();
 
     // Check if user is admin (show admin panel if owner)
     checkAirdropOwner();
@@ -13408,14 +14942,20 @@ async function claimVoucher() {
         // Refresh transaction list and stats
         setTimeout(() => { loadAirdropTransactions(); loadAirdropStats(); }, 1000);
     } catch (e) {
-        showToast(e.message || 'Failed to claim voucher', 'error');
+        showErrorToast(e, 'Could not claim that voucher');
         btn.disabled = false;
         btn.textContent = 'Claim Tokens';
     }
 }
 
+// Guards the paths that spend money. The button is only disabled after an
+// await, so without this a second click buys a second batch.
+let _airdropTxInFlight = false;
+
 // Create airdrop batch
 async function createAirdropBatch() {
+    if (_airdropTxInFlight) return;
+
     const assetId = parseInt(document.getElementById('airdrop-asset-select').value);
     const valueStr = document.getElementById('airdrop-value').value;
     const count = parseInt(document.getElementById('airdrop-count').value);
@@ -13444,9 +14984,25 @@ async function createAirdropBatch() {
         if (status && status.totals) {
             const assetTotal = status.totals.find(t => t.asset_id === assetId);
             const available = assetTotal ? (assetTotal.available || 0) : 0;
-            if (available < totalWithFeeGroth) {
-                const info = getAirdropAssetInfo(assetId);
+            const info = getAirdropAssetInfo(assetId);
+
+            // A contract call also costs BEAM on top of whatever asset is being
+            // given away. Checking only the asset let someone with plenty of
+            // FOMO and no BEAM sail past this and hit "Not enough inputs" from
+            // the node - the UI said yes and the transaction said no.
+            const beamTotal = status.totals.find(t => t.asset_id === 0);
+            const beamAvailable = beamTotal ? (beamTotal.available || 0) : 0;
+            const beamNeeded = (assetId === 0 ? totalWithFeeGroth : 0) + CONTRACT_CALL_FEE_GROTH;
+
+            if (assetId !== 0 && available < totalWithFeeGroth) {
                 showToast(`Insufficient balance. Need ${formatAmount(totalWithFeeGroth)} ${info.symbol} (incl. 1% fee), have ${formatAmount(available)} ${info.symbol}`, 'error');
+                return;
+            }
+            if (beamAvailable < beamNeeded) {
+                showToast(assetId === 0
+                    ? `Insufficient BEAM. Need ${formatAmount(beamNeeded)} (${formatAmount(totalWithFeeGroth)} incl. 1% fee, plus about ${formatAmount(CONTRACT_CALL_FEE_GROTH)} network fee), have ${formatAmount(beamAvailable)}`
+                    : `You have enough ${info.symbol}, but a contract call also costs BEAM. Need about ${formatAmount(CONTRACT_CALL_FEE_GROTH)} BEAM for the network fee, have ${formatAmount(beamAvailable)}`,
+                    'error');
                 return;
             }
         }
@@ -13460,6 +15016,7 @@ async function createAirdropBatch() {
     const progressText = document.getElementById('progress-text');
 
     btn.disabled = true;
+    _airdropTxInFlight = true;
     progressEl.style.display = 'block';
     progressText.textContent = 'Generating codes...';
     progressFill.style.width = '10%';
@@ -13598,10 +15155,11 @@ async function createAirdropBatch() {
         loadAirdropTransactions();
         loadAirdropStats();
     } catch (e) {
-        showToast(e.message || 'Failed to create batch', 'error');
+        showErrorToast(e, 'Could not create the batch');
         progressText.textContent = 'Failed';
     } finally {
         btn.disabled = false;
+        _airdropTxInFlight = false;
         setTimeout(() => { progressEl.style.display = 'none'; }, 5000);
     }
 }
@@ -13794,7 +15352,7 @@ async function loadMyBatches() {
             listEl.appendChild(card);
         });
     } catch (e) {
-        listEl.innerHTML = `<div class="empty-state">Error loading batches: ${e.message}</div>`;
+        listEl.innerHTML = errorState('Could not load your airdrops', 'loadMyBatches()', { detail: e.message });
     }
 }
 
@@ -13817,7 +15375,6 @@ async function loadSavedCodes(checkOnChain = false) {
 
     // If checking on-chain, update all statuses first
     if (checkOnChain && AIRDROP_CID) {
-        const keysToRemove = [];
         for (const key of batchKeys) {
             const batch = stored[key];
             if (!batch.codes) continue;
@@ -13865,24 +15422,17 @@ async function loadSavedCodes(checkOnChain = false) {
                     // Otherwise stay 'pending' — tx is still processing
                 }
             }
-            // Remove batches where ALL codes are NOT FOUND (stale from old contract)
-            // Only remove if batch is NOT pending and was created more than 10 minutes ago
+            // Flag batches where ALL codes are NOT FOUND (e.g. left over from an
+            // earlier contract deployment). They are never auto-deleted: a node that
+            // is behind or briefly unreachable can also report "not found", and
+            // throwing away codes throws away the only key to the locked funds.
+            // createdAt is an ISO string, so it has to be parsed before comparing.
             const allNotFound2 = batch.codes.every(c => c.status === 'not found');
-            const batchAge = Date.now() - (batch.createdAt || 0);
-            const isOldEnough = batchAge > 10 * 60 * 1000; // 10 minutes
-            if (allNotFound2 && batch.txStatus !== 'pending' && isOldEnough) {
-                keysToRemove.push(key);
-            }
-        }
-        // Delete stale batches
-        if (keysToRemove.length > 0) {
-            keysToRemove.forEach(k => delete stored[k]);
-            console.log(`Removed ${keysToRemove.length} stale batch(es) with all NOT FOUND codes`);
+            const createdMs = batch.createdAt ? new Date(batch.createdAt).getTime() : 0;
+            const isOldEnough = createdMs > 0 && (Date.now() - createdMs) > 10 * 60 * 1000;
+            batch.stale = !!(allNotFound2 && batch.txStatus !== 'pending' && isOldEnough);
         }
         saveAirdropCodes(stored);
-        // Update batchKeys after removal
-        batchKeys.length = 0;
-        batchKeys.push(...Object.keys(stored).sort().reverse());
     }
 
     listEl.innerHTML = '';
@@ -13941,6 +15491,25 @@ async function loadSavedCodes(checkOnChain = false) {
                 Transaction failed. These codes were NOT deployed to the blockchain and cannot be redeemed.
             `;
             batchDiv.appendChild(warn);
+        } else if (batch.stale) {
+            const warn = document.createElement('div');
+            warn.className = 'batch-failed-warning';
+            warn.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" width="16" height="16">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/>
+                </svg>
+                None of these codes exist on the current contract. They may belong to an older
+                deployment &mdash; or your node may be out of sync. Refresh again before removing them.
+            `;
+            batchDiv.appendChild(warn);
+        }
+
+        // Removing a batch discards the codes for good, so it is always explicit.
+        if (txStatus === 'failed' || batch.stale) {
+            const rm = document.createElement('div');
+            rm.className = 'saved-batch-actions';
+            rm.innerHTML = `<button class="btn-action-codes" onclick="removeSavedBatch('${key}')">Remove from list</button>`;
+            batchDiv.appendChild(rm);
         }
 
         // Action buttons (only for confirmed or unknown batches)
@@ -14010,6 +15579,23 @@ async function loadSavedCodes(checkOnChain = false) {
 
         listEl.appendChild(batchDiv);
     }
+}
+
+// Drop a saved batch from local storage (codes cannot be recovered afterwards)
+function removeSavedBatch(key) {
+    const stored = getAirdropCodes();
+    const batch = stored[key];
+    if (!batch) return;
+    const unclaimed = (batch.codes || []).filter(c => c.status !== 'claimed').length;
+    let msg = 'Remove this batch from your saved codes?';
+    if (unclaimed > 0) {
+        msg += `\n\n${unclaimed} code(s) are not claimed. Once removed the codes are gone `
+             + 'for good — cancel the batch on-chain first if you want the funds back.';
+    }
+    if (!confirm(msg)) return;
+    delete stored[key];
+    saveAirdropCodes(stored);
+    loadSavedCodes(false);
 }
 
 // Render status badge for a code
@@ -14105,7 +15691,7 @@ async function loadAirdropTransactions() {
         airdropTxs.slice(0, 10).forEach(tx => {
             const status = tx.status;
             const statusText = tx.status_string || 'unknown';
-            const comment = tx.comment || 'Contract call';
+            const comment = escapeHtml(tx.comment || 'Contract call');
             const fee = tx.fee ? (tx.fee / 100000000).toFixed(4) : '0';
             const time = tx.create_time ? new Date(tx.create_time * 1000).toLocaleString() : '';
             const txId = tx.txId || '';
@@ -14152,14 +15738,16 @@ async function loadAirdropTransactions() {
             listEl.appendChild(row);
         });
     } catch (e) {
-        listEl.innerHTML = '<div class="airdrop-tx-empty">Failed to load transactions</div>';
+        listEl.innerHTML = errorState('Could not load transactions', 'loadAirdropTransactions()', { detail: e.message });
     }
 }
 
 // Cancel batch and reclaim unclaimed vouchers
 async function cancelAirdropBatch(batchId) {
+    if (_airdropTxInFlight) return;
     if (!confirm('Cancel this batch? All unclaimed vouchers will be reclaimed to your wallet.')) return;
 
+    _airdropTxInFlight = true;
     try {
         const result = await apiCall('invoke_contract', {
             args: `role=user,action=cancel_batch,cid=${AIRDROP_CID},batch_id=${batchId}`,
@@ -14174,6 +15762,8 @@ async function cancelAirdropBatch(batchId) {
         loadMyBatches();
         setTimeout(() => { loadAirdropTransactions(); loadAirdropStats(); }, 1000);
     } catch (e) {
-        showToast(e.message || 'Failed to cancel batch', 'error');
+        showErrorToast(e, 'Could not cancel the batch');
+    } finally {
+        _airdropTxInFlight = false;
     }
 }

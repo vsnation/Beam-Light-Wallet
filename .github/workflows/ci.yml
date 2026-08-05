@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main, productisation]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile every Python file
+        run: python -m compileall -q serve.py tests/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Parse every shipped JS file
+        run: |
+          fail=0
+          for f in $(git ls-files 'src/**/*.js'); do
+            node --check "$f" || { echo "::error file=$f::syntax error"; fail=1; }
+          done
+          exit $fail
+
+      - name: Shell scripts parse
+        run: |
+          fail=0
+          for f in $(git ls-files '*.sh'); do
+            bash -n "$f" || { echo "::error file=$f::syntax error"; fail=1; }
+          done
+          exit $fail
+
+      - name: config/binaries.json is valid and complete
+        run: |
+          python - <<'PY'
+          import json, sys
+          m = json.load(open('config/binaries.json'))
+          assert m.get('app_version'), 'app_version missing'
+          assert m.get('min_consensus_height'), 'min_consensus_height missing'
+          for name, p in m['platforms'].items():
+              assert p.get('beam_version'), f'{name}: beam_version missing'
+              assert 'hf6_compatible' in p, f'{name}: hf6_compatible missing'
+          print('manifest OK:', m['app_version'])
+          PY
+
+  no-drift:
+    name: No hardcoded versions or secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The whole point of config/binaries.json is that these live in one place.
+      # A stray literal is how shipping the HF6 hotfix would silently miss a file.
+      - name: No hardcoded BEAM version outside the manifest
+        run: |
+          hits=$(grep -rnE '7\.5\.(13882|14493)' \
+                   --include='*.sh' --include='*.bat' --include='*.ps1' \
+                   --include='*.iss' --include='*.js' --include='*.py' . \
+                 | grep -v 'config/binaries.json' \
+                 | grep -v '^./docs/' \
+                 | grep -v '^./scripts/' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::BEAM version hardcoded outside config/binaries.json:"
+            echo "$hits"
+            exit 1
+          fi
+
+      - name: No wallet passwords committed
+        run: |
+          if grep -rn 'BeamTest2024' --include='*.py' --include='*.js' --include='*.sh' . ; then
+            echo "::error::a wallet password is committed"
+            exit 1
+          fi
+
+      # The frontend builds the DMG name itself; if it disagrees with the builder
+      # the in-app update link 404s, which is the current macOS experience.
+      - name: DMG filename agrees between builder and frontend
+        run: |
+          builder=$(grep -oE 'Beam-Light-Wallet-[^"]*\.dmg|BEAM-LightWallet-[^"]*\.dmg' build/macos/create-dmg.sh | head -1 | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+/VER/')
+          frontend=$(grep -ohE 'Beam-Light-Wallet-[^`"]*\.dmg|BEAM-LightWallet-[^`"]*\.dmg' src/js/app.js | head -1 | sed -E 's/\$\{[^}]*\}/VER/')
+          echo "builder=$builder frontend=$frontend"
+          if [ -n "$builder" ] && [ -n "$frontend" ] && [ "$builder" != "$frontend" ]; then
+            echo "::error::DMG name mismatch: builder '$builder' vs frontend '$frontend'"
+            exit 1
+          fi
+
+  ui-smoke:
+    name: Headless UI smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install selenium
+
+      - name: Start the wallet server
+        run: |
+          python3 serve.py 9080 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9080/api/status >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:9080/api/status
+
+      # No wallet, no funds — this exercises the unlock screen, routing and the
+      # security guards, which is exactly what regresses silently.
+      - name: UI smoke
+        run: python3 tests/test_selenium.py --headless
+        env:
+          BEAM_TEST_PASSWORD: ${{ secrets.BEAM_TEST_PASSWORD }}
+
+      - name: Security guards still hold
+        run: |
+          set -e
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:9080/api/wallet \
+                   -H 'Content-Type: application/json' -H 'Origin: https://evil.example' -d '{}')
+          [ "$code" = "403" ] || { echo "::error::cross-origin POST was not rejected (got $code)"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE 'http://127.0.0.1:9080/api/wallet/%2e%2e')
+          [ "$code" = "403" ] || [ "$code" = "400" ] || { echo "::error::path traversal not rejected (got $code)"; exit 1; }
+          echo "guards OK"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: tests/screenshots/
+          if-no-files-found: ignore

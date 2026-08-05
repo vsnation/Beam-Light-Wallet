@@ -1,0 +1,60 @@
+<!--
+  BEAM Light Wallet — large tier (1024, 512)
+
+  One mark: the BEAM prism. The previous icon packed seven competing elements
+  into one square (grid, prism, wallet, $F badge, shield, corner brackets, and
+  the words "LIGHT WALLET" set at 28px in Arial). At Dock size that text was
+  1.7px tall and the whole thing read as teal mud.
+
+  Apple's grid: artwork occupies ~824/1024 with transparent margin, and the
+  rounded square uses a 185/1024 corner radius. Never put words in an app icon.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#132033"/>
+      <stop offset="100%" stop-color="#070d16"/>
+    </linearGradient>
+
+    <!-- Left face: the brand cyan, brightest edge catching the light. -->
+    <linearGradient id="faceL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#4ff5d0"/>
+      <stop offset="100%" stop-color="#1aa8cf"/>
+    </linearGradient>
+
+    <!-- Right face: cooler and darker, so the form reads as a solid. -->
+    <linearGradient id="faceR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#2f7fd4"/>
+      <stop offset="100%" stop-color="#1c3f7a"/>
+    </linearGradient>
+
+    <linearGradient id="innerGlow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#7dfbe4" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#7dfbe4" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="26" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Rounded square, Apple radius ratio -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#ground)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185"
+        fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"/>
+
+  <!-- The prism, centred on the optical middle -->
+  <g filter="url(#softGlow)">
+    <polygon points="512,258 754,700 270,700" fill="url(#faceL)"/>
+    <polygon points="512,258 754,700 512,700" fill="url(#faceR)"/>
+    <!-- Hollow core: gives the mark its silhouette at every size -->
+    <polygon points="512,404 655,668 369,668" fill="#0a1420"/>
+    <polygon points="512,404 655,668 512,668" fill="#0d1a2b"/>
+    <!-- Light entering the top vertex -->
+    <polygon points="512,258 574,372 450,372" fill="url(#innerGlow)"/>
+  </g>
+</svg>

@@ -136,8 +136,10 @@ CLAUDE.md
 # Fuddle word lists (large, not part of wallet)
 data/fuddle/
 
-# Contract source code (compiled WASMs in shaders/ are sufficient)
-contracts/
+# Contract sources ARE tracked. The compiled .wasm in shaders/ hold real user
+# funds; without the source nobody — including us, after a disk failure — can
+# rebuild or audit them. Word lists stay out (see below).
+contracts/**/words_*.txt
 
 # Word lists (game answers - NEVER share publicly)
 fuddle_words_push/
@@ -147,8 +149,10 @@ data/fuddle/
 # Marketing & tooling scripts
 scripts/
 
-# Test files
-tests/
+# Test files are tracked. They used to carry a real mainnet wallet password,
+# which is why they were ignored; they now read $BEAM_TEST_PASSWORD instead.
+tests/screenshots/
+tests/**/*.png
 
 # Internal documentation
 ARCHITECTURE.md
@@ -188,3 +192,8 @@ build/releases/
 
 # Data directory (runtime)
 data/
+
+# Third-party Stadium web app kept alongside for reference; not part of the
+# wallet. 152 MB of videos and build artifacts once got swept in by `git add -A`
+# and had to be filtered back out of an unpushed branch.
+meme_game/

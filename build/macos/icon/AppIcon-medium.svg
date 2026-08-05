@@ -1,0 +1,26 @@
+<!--
+  BEAM Light Wallet — medium tier (256, 128)
+  Flat: the glow and the inner light disappear because at this size they turn
+  into noise. Same silhouette, fewer instructions to the eye.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#132033"/>
+      <stop offset="100%" stop-color="#070d16"/>
+    </linearGradient>
+    <linearGradient id="faceL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#4ff5d0"/>
+      <stop offset="100%" stop-color="#1aa8cf"/>
+    </linearGradient>
+    <linearGradient id="faceR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#2f7fd4"/>
+      <stop offset="100%" stop-color="#1c3f7a"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#ground)"/>
+  <polygon points="512,258 754,700 270,700" fill="url(#faceL)"/>
+  <polygon points="512,258 754,700 512,700" fill="url(#faceR)"/>
+  <polygon points="512,404 655,668 369,668" fill="#0a1420"/>
+  <polygon points="512,404 655,668 512,668" fill="#0d1a2b"/>
+</svg>

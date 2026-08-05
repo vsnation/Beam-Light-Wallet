@@ -224,10 +224,53 @@
 
 .seed-num {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 12px;
     min-width: 20px;
 }
 
 .seed-text {
     color: var(--text-primary);
+}
+
+/* ---- First run ---------------------------------------------------------
+   Shown when there are no wallets on this machine. The login form is hidden
+   entirely rather than shown in a state the user cannot act on. */
+#welcome-firstrun {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 12px);
+}
+.welcome-firstrun-lead {
+    color: var(--text-secondary);
+    font-size: var(--text-base, 14px);
+    line-height: var(--leading-normal, 1.5);
+    margin: 0 0 var(--space-2, 8px);
+}
+.welcome-btn-secondary {
+    width: 100%;
+    padding: 13px 16px;
+    border-radius: var(--radius-md, 12px);
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    font-size: var(--text-base, 14px);
+    font-weight: var(--weight-medium, 500);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.welcome-btn-secondary:hover {
+    background: var(--glass-hover);
+    border-color: rgba(255, 255, 255, 0.14);
+}
+.welcome-btn-secondary:focus-visible,
+.welcome-btn-primary:focus-visible {
+    outline: 2px solid var(--beam-cyan);
+    outline-offset: 2px;
+}
+.welcome-firstrun-note {
+    color: var(--text-muted);
+    font-size: var(--text-xs, 12px);
+    text-align: center;
+    margin: var(--space-2, 8px) 0 0;
 }

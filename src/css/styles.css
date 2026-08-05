@@ -1,38 +1,10 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        :root {
-            /* Core Colors */
-            --void: #050a0f;
-            --void-light: #0a1019;
-            --void-lighter: #0f1923;
-            --beam-cyan: #25c2a0;
-            --beam-cyan-dim: rgba(37, 194, 160, 0.15);
-            --beam-cyan-glow: rgba(37, 194, 160, 0.4);
-            --beam-pink: #da70d6;
-            --beam-pink-dim: rgba(218, 112, 214, 0.15);
-            --warning: #f59e0b;
-            --warning-dim: rgba(245, 158, 11, 0.15);
-            --error: #ef4444;
-            --success: #10b981;
-
-            /* Glass */
-            --glass: rgba(255, 255, 255, 0.03);
-            --glass-border: rgba(255, 255, 255, 0.06);
-            --glass-hover: rgba(255, 255, 255, 0.06);
-
-            /* Text */
-            --text-primary: #f0f4f8;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-
-            /* Sizing */
-            --sidebar-width: 72px;
-            --header-height: 64px;
-
-            /* Shadows */
-            --shadow-glow: 0 0 40px rgba(37, 194, 160, 0.15);
-            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
-        }
+        /* The tokens this file used to redeclare all live in variables.css now.
+           Keeping a copy here was actively harmful: this file loads second, so
+           every value in it beat the token file at equal specificity, and
+           --text-muted silently reverted app-wide to the pre-audit #64748b
+           (4.18:1 on --void, below the AA floor). */
 
         html { font-size: 16px; }
 
@@ -119,14 +91,11 @@
             height: 100%;
         }
 
-        .sidebar-logo::after {
-            content: '';
-            position: absolute;
-            inset: -4px;
-            border-radius: 50%;
-            background: var(--beam-cyan);
-            opacity: 0.2;
-            filter: blur(8px);
+        /* The glow used to be a circle behind a circular checkmark logo. The
+           mark is a prism now, so a round halo sits visibly wrong around it —
+           a drop-shadow follows the actual silhouette instead. */
+        .sidebar-logo svg {
+            filter: drop-shadow(0 0 10px rgba(37, 194, 160, 0.35));
         }
 
         .sidebar-nav {
@@ -147,6 +116,12 @@
             cursor: pointer;
             transition: all 0.2s ease;
             position: relative;
+            /* These are <button> now, for keyboard and screen-reader access;
+               strip the default chrome so they look exactly as before. */
+            background: none;
+            border: none;
+            padding: 0;
+            font: inherit;
         }
 
         .nav-item:hover {
@@ -260,6 +235,48 @@
             50% { opacity: 0.4; }
         }
 
+        /* The badge is a three-state control, not decoration. The dot colour
+           follows the state instead of being hard-coded cyan, and the red
+           state does not pulse — a pulsing red dot reads as "working on it",
+           which is the opposite of what it means. */
+        .network-badge[data-sync="stale"] {
+            background: var(--error-dim, rgba(239, 68, 68, 0.15));
+            color: var(--error, #ef4444);
+        }
+        .network-badge[data-sync="stale"]::before {
+            background: var(--error, #ef4444);
+            animation: none;
+        }
+        .network-badge[data-sync="syncing"] {
+            background: var(--warning-dim, rgba(245, 158, 11, 0.15));
+            color: var(--warning, #f59e0b);
+        }
+        .network-badge[data-sync="syncing"]::before {
+            background: var(--warning, #f59e0b);
+        }
+
+        .sync-banner-error {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 16px 0;
+            padding: 12px 16px;
+            border-radius: 10px;
+            background: var(--error-dim, rgba(239, 68, 68, 0.12));
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            color: var(--error, #ef4444);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .sync-banner-error strong { display: block; }
+        .sync-banner-error svg { flex-shrink: 0; }
+
+        .disabled-out-of-sync,
+        button.disabled-out-of-sync {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
         .header-right {
             display: flex;
             align-items: center;
@@ -361,7 +378,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             transition: all 0.2s ease;
             position: relative;
@@ -631,7 +648,7 @@
             border: 1px solid var(--glass-border);
             border-radius: 6px;
             padding: 4px 8px;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-secondary);
             cursor: pointer;
             transition: all 0.2s;
@@ -680,7 +697,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
             color: #fff;
             overflow: hidden;
@@ -721,6 +738,238 @@
         }
         .pool-stat-label { color: var(--text-muted); }
         .pool-stat-value { font-weight: 500; margin-top: 2px; }
+
+        /* DEX panel layout. These replace the inline style="" attributes the
+           swap/pools/liquidity markup used to carry; sizes come from the token
+           scale in variables.css rather than being invented per element. */
+        .dex-tabs {
+            display: flex;
+            gap: var(--space-2);
+        }
+        .liq-mode-tabs {
+            display: flex;
+            justify-content: center;
+            gap: var(--space-2);
+            margin-bottom: var(--space-5);
+        }
+
+        /* Compound selector so the width beats .balances-card's max-width:100%,
+           which is declared later in this file. */
+        .balances-card.dex-card {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: var(--space-6);
+        }
+        .dex-card-title {
+            margin-bottom: var(--space-5);
+            text-align: center;
+        }
+        /* When a subtitle follows, it carries the space under the heading. */
+        .dex-card-title:has(+ .dex-card-sub) { margin-bottom: var(--space-2); }
+        .dex-card-sub {
+            margin-bottom: var(--space-5);
+            text-align: center;
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+
+        .swap-input-group { margin-bottom: var(--space-4); }
+        .swap-input-group.swap-input-group-tight { margin-bottom: var(--space-2); }
+        .swap-input-group.swap-input-group-snug { margin-bottom: var(--space-3); }
+
+        .swap-label {
+            display: block;
+            margin-bottom: var(--space-1);
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+        .swap-field-row {
+            display: flex;
+            padding: var(--space-3);
+            background: var(--void);
+            border-radius: var(--radius-md);
+        }
+        .swap-field-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: var(--space-2);
+        }
+        .swap-balance {
+            margin-top: var(--space-1);
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+        /* Already spaced by the row it sits in. */
+        .swap-field-meta .swap-balance { margin-top: 0; }
+        .quick-amount-btns {
+            display: flex;
+            gap: var(--space-1);
+        }
+
+        .swap-direction-row {
+            margin: var(--space-3) 0;
+            text-align: center;
+        }
+        .swap-direction-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--void-lighter);
+            border: 2px solid var(--glass-border);
+            border-radius: var(--radius-full);
+            cursor: pointer;
+        }
+
+        /* Key/value quote panel, shared by the swap and both liquidity forms. */
+        .dex-summary {
+            padding: var(--space-3);
+            margin-bottom: var(--space-4);
+            background: var(--void);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            font-size: var(--text-sm);
+        }
+        .dex-summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: var(--space-2);
+        }
+        .dex-summary-row:last-child { margin-bottom: 0; }
+        .dex-summary-label { color: var(--text-muted); }
+        .dex-summary-value { font-family: var(--font-mono, 'JetBrains Mono', monospace); }
+        .dex-summary-value-out { color: var(--error); }
+        .dex-summary-value-in { color: var(--success); }
+
+        /* Initial state only: the JS owning these panels sets display inline,
+           which beats this rule. */
+        .dex-hidden { display: none; }
+
+        .dex-action-btn {
+            width: 100%;
+            padding: var(--space-4);
+            font-size: var(--text-md);
+        }
+
+        .dex-empty {
+            padding: var(--space-6);
+            text-align: center;
+            font-size: var(--text-sm);
+            color: var(--text-muted);
+        }
+
+        .dex-activity { margin-top: var(--space-6); }
+        .dex-activity-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-3);
+        }
+        .dex-activity-title {
+            font-size: var(--text-sm);
+            font-weight: var(--weight-medium);
+            color: var(--text-muted);
+        }
+        .dex-activity-status {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+        .dex-activity-list {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .pools-filters {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-4);
+            margin-bottom: var(--space-4);
+            padding: var(--space-3);
+            background: var(--void);
+            border-radius: var(--radius-md);
+        }
+        .pools-filter-field {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+        .pools-filter-label {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        /* The inline version read var(--border) and var(--text), neither of
+           which is defined, so the border shorthand was dropped outright. */
+        .pools-filter-input {
+            width: 100px;
+            padding: var(--space-2) var(--space-3);
+            background: var(--void-lighter);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: var(--text-sm);
+        }
+        .pools-filter-check {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        .pools-filter-checkbox {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .pools-filter-spacer { flex: 1; }
+        .pools-filter-btn {
+            padding: var(--space-2) var(--space-3);
+            font-size: var(--text-xs);
+        }
+        .pools-count {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+
+        .liq-separator {
+            margin: var(--space-2) 0;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        .liq-pool-options { margin-bottom: var(--space-4); }
+        .liq-pool-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+        }
+        .liq-pool-empty {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+        }
+
+        .lp-positions { margin-bottom: var(--space-5); }
+        .withdraw-percent-btns {
+            display: flex;
+            gap: var(--space-2);
+            margin-top: var(--space-2);
+        }
+        .withdraw-slider {
+            width: 100%;
+            margin-top: var(--space-3);
+        }
+        .withdraw-percent-readout {
+            margin-top: var(--space-2);
+            text-align: center;
+            font-size: var(--text-xl);
+            font-weight: var(--weight-semibold);
+        }
+        .withdraw-amounts { font-weight: var(--weight-medium); }
+
+        /* Placeholder colours before updateSwapUI()/updateLiqTokenUI() set the
+           real asset colour inline. */
+        .token-icon-cyan { background: var(--beam-cyan); }
+        .token-icon-pink { background: var(--beam-pink); }
 
         /* Transaction Card Styles */
         .tx-card {
@@ -783,14 +1032,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 8px;
+            font-size: 12px;
             color: #fff;
             overflow: hidden;
         }
         .tx-asset-icon img { width: 100%; height: 100%; }
         .tx-asset-id {
             color: var(--text-muted);
-            font-size: 10px;
+            font-size: 12px;
         }
 
         .tx-amount-col {
@@ -801,7 +1050,7 @@
             font-size: 14px;
         }
         .tx-fee {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -822,7 +1071,7 @@
             align-items: center;
             gap: 3px 10px;
             padding: 2px 16px 10px 76px;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
         .tx-meta .meta-dot { opacity: 0.4; }
@@ -831,7 +1080,7 @@
         }
         .tx-meta .meta-value.mono {
             font-family: var(--font-mono, 'JetBrains Mono', monospace);
-            font-size: 10px;
+            font-size: 12px;
             letter-spacing: -0.3px;
         }
         .tx-meta .copyable {
@@ -872,7 +1121,7 @@
             flex-direction: column;
         }
         .tx-detail-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             margin-bottom: 2px;
         }
@@ -990,7 +1239,7 @@
 
         .asset-id {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             background: var(--glass);
             padding: 4px 8px;
@@ -1013,7 +1262,7 @@
         }
 
         .asset-usd-below {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             opacity: 0.6;
             margin-top: -2px;
@@ -1138,7 +1387,7 @@
 
             .action-btn {
                 padding: 4px 8px;
-                font-size: 10px;
+                font-size: 12px;
             }
         }
 
@@ -1183,7 +1432,7 @@
         .balances-table th {
             text-align: left;
             padding: 12px 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -1280,7 +1529,7 @@
             border: 1px solid var(--glass-border);
             color: var(--text-secondary);
             font-family: inherit;
-            font-size: 11px;
+            font-size: 12px;
             cursor: pointer;
             transition: all 0.2s ease;
             white-space: nowrap;
@@ -1358,7 +1607,7 @@
         .utxo-table th {
             text-align: left;
             padding: 14px 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -1385,7 +1634,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
         }
 
@@ -1426,7 +1675,7 @@
 
         /* UTXO Health Badge */
         .utxo-health-badge {
-            font-size: 11px;
+            font-size: 12px;
             padding: 2px 8px;
             border-radius: 4px;
             font-weight: 500;
@@ -1446,7 +1695,7 @@
 
         /* UTXO Split Action Button */
         .utxo-split-action {
-            font-size: 11px;
+            font-size: 12px;
             padding: 4px 12px;
             border-radius: 6px;
             background: var(--beam-cyan-dim);
@@ -1463,7 +1712,7 @@
         }
 
         .utxo-combine-action {
-            font-size: 11px;
+            font-size: 12px;
             padding: 4px 12px;
             border-radius: 6px;
             background: var(--beam-pink-dim);
@@ -1538,7 +1787,7 @@
             transform: translateY(-1px);
         }
         .utxo-rec-meta {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -1618,7 +1867,7 @@
 
         /* Dashboard UTXO Hint Badge */
         .utxo-split-hint {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--warning);
             cursor: pointer;
             padding: 2px 0;
@@ -1752,7 +2001,7 @@
         }
 
         .confirm-asset-label {
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--text-muted);
@@ -1911,7 +2160,7 @@
         }
 
         .receive-tab-desc {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -1941,7 +2190,7 @@
         }
 
         .address-hint {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 400;
             text-transform: none;
             letter-spacing: 0;
@@ -2069,7 +2318,7 @@
             padding: 2px 8px;
             background: var(--beam-cyan-dim);
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--beam-cyan);
             cursor: help;
             position: relative;
@@ -2152,7 +2401,7 @@
             padding: 4px 10px;
             background: rgba(16, 185, 129, 0.15);
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--success);
             text-transform: uppercase;
@@ -2272,6 +2521,106 @@
         @keyframes syncShine {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
+        }
+
+        /* A bar that is not moving must not look like one that is. */
+        .sync-progress-fill.stalled {
+            background: var(--warning);
+        }
+
+        .sync-progress-fill.stalled::after {
+            animation: none;
+        }
+
+        /* What a node mode does and does not give you */
+        .node-facts {
+            margin-bottom: var(--space-4);
+        }
+
+        .node-facts[hidden] {
+            display: none;
+        }
+
+        .node-facts-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2);
+        }
+
+        .node-facts-list li {
+            position: relative;
+            padding-left: var(--space-6);
+            font-size: var(--text-sm);
+            line-height: var(--leading-normal);
+            color: var(--text-secondary);
+        }
+
+        .node-facts-list li::before {
+            position: absolute;
+            left: 0;
+            top: 0;
+            font-weight: var(--weight-bold);
+        }
+
+        .node-facts-list li.yes::before {
+            content: '✓';
+            color: var(--beam-cyan);
+        }
+
+        .node-facts-list li.no::before {
+            content: '✕';
+            color: var(--text-muted);
+        }
+
+        .node-facts-list li.no {
+            color: var(--text-muted);
+        }
+
+        .node-facts-cost {
+            margin: var(--space-3) 0 0 0;
+            font-size: var(--text-xs);
+            line-height: var(--leading-normal);
+            color: var(--text-muted);
+        }
+
+        .node-facts-cost strong {
+            color: var(--text-secondary);
+        }
+
+        /* Shown when the node cannot finish syncing, in place of a bar that never fills */
+        .node-stall {
+            margin-top: var(--space-3);
+            padding: var(--space-3) var(--space-4);
+            background: var(--warning-dim);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            border-radius: 10px;
+            font-size: var(--text-sm);
+            line-height: var(--leading-normal);
+            color: var(--text-secondary);
+        }
+
+        .node-stall[hidden] {
+            display: none;
+        }
+
+        .node-stall strong {
+            display: block;
+            margin-bottom: var(--space-1);
+            color: var(--warning);
+        }
+
+        /* Still short of the fork but making progress: a fact, not a fault. */
+        .node-stall.neutral {
+            background: var(--glass);
+            border-color: var(--glass-border);
+            color: var(--text-muted);
+        }
+
+        .node-stall.neutral strong {
+            color: var(--text-secondary);
         }
 
         /* Rescan Button */
@@ -2444,7 +2793,7 @@
 
         .owner-key-value {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
+            font-size: 12px;
             word-break: break-all;
             padding: 12px;
             background: var(--void-lighter);
@@ -2453,24 +2802,24 @@
             margin-top: 12px;
         }
 
-        /* Empty State */
+        /* Empty State. The action slot lives further down, with the skeletons. */
         .empty-state {
             text-align: center;
-            padding: 48px;
+            padding: var(--space-12, 48px);
             color: var(--text-muted);
         }
 
         .empty-state svg {
             width: 48px;
             height: 48px;
-            margin-bottom: 16px;
+            margin-bottom: var(--space-4, 16px);
             opacity: 0.5;
         }
 
         .empty-state h3 {
-            font-size: 16px;
-            font-weight: 500;
-            margin-bottom: 8px;
+            font-size: var(--text-md, 16px);
+            font-weight: var(--weight-medium, 500);
+            margin-bottom: var(--space-2, 8px);
             color: var(--text-secondary);
         }
 
@@ -2733,7 +3082,7 @@
                             box-shadow: 0 0 8px #25c2a0;
                         }
                         .welcome-version {
-                            font-size: 11px;
+                            font-size: 12px;
                             color: #64748b;
                             font-family: 'JetBrains Mono', monospace;
                         }
@@ -2784,7 +3133,7 @@
                             -webkit-text-fill-color: transparent;
                         }
                         .welcome-subtitle {
-                            font-size: 11px;
+                            font-size: 12px;
                             color: #da70d6;
                             letter-spacing: 3px;
                             text-transform: uppercase;
@@ -2985,11 +3334,11 @@
                             border: 1px solid rgba(100, 116, 139, 0.15);
                             border-radius: 6px;
                             font-family: 'JetBrains Mono', monospace;
-                            font-size: 11px;
+                            font-size: 12px;
                         }
                         .seed-number {
                             color: #64748b;
-                            font-size: 10px;
+                            font-size: 12px;
                             min-width: 16px;
                         }
                         .welcome-warning {
@@ -2998,7 +3347,7 @@
                             border-radius: 8px;
                             padding: 10px 12px;
                             color: #fbbf24;
-                            font-size: 11px;
+                            font-size: 12px;
                             margin: 12px 0;
                             line-height: 1.4;
                         }
@@ -3108,7 +3457,7 @@
                     }
                     .debug-btn {
                         padding: 4px 12px;
-                        font-size: 11px;
+                        font-size: 12px;
                         background: var(--glass);
                         border: 1px solid var(--glass-border);
                         border-radius: 4px;
@@ -3131,7 +3480,7 @@
                     .debug-stats {
                         display: flex;
                         gap: 16px;
-                        font-size: 11px;
+                        font-size: 12px;
                         color: var(--text-muted);
                     }
                     .debug-stat {
@@ -3212,7 +3561,7 @@
         }
 
         .explorer-section-title {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -3236,7 +3585,7 @@
             text-align: center;
         }
         .explorer-stat-label {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             margin-bottom: 4px;
         }
@@ -3318,7 +3667,7 @@
             color: var(--text-secondary);
         }
         .explorer-block-time {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -3548,7 +3897,7 @@
             gap: 2px;
         }
         .stat-pill-label {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -3578,7 +3927,7 @@
         .explorer-table th {
             padding: 14px 16px;
             text-align: left;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -3607,7 +3956,7 @@
         }
         .explorer-table .mono-text {
             font-family: var(--font-mono);
-            font-size: 11px;
+            font-size: 12px;
         }
         .explorer-table .negative {
             color: var(--error);
@@ -3763,7 +4112,7 @@
             margin-bottom: 8px;
         }
         .explorer-blocks-header span {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -3839,7 +4188,7 @@
             text-align: center;
         }
         .explorer-asset-card .asset-stat-label {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
             margin-bottom: 4px;
@@ -3879,7 +4228,7 @@
             background: var(--beam-cyan);
             color: var(--void);
             border-radius: 12px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
         }
@@ -3899,7 +4248,7 @@
             flex-direction: column;
         }
         .explorer-contract-card .contract-stat-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
         .explorer-contract-card .contract-stat-value {
@@ -4042,7 +4391,7 @@
             grid-column: 1 / -1;
         }
         .detail-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -4201,7 +4550,7 @@
             grid-column: 1 / -1;
         }
         .pool-card .pool-stat-label {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
             text-transform: uppercase;
         }
@@ -4226,7 +4575,7 @@
             border-bottom: 1px solid var(--glass-border);
         }
         .data-table th {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--text-muted);
             text-transform: uppercase;
@@ -4303,7 +4652,7 @@
         .copy-btn {
             display: inline-block;
             padding: 4px 8px;
-            font-size: 11px;
+            font-size: 12px;
             background: var(--glass);
             border: 1px solid var(--glass-border);
             border-radius: 4px;
@@ -4329,7 +4678,7 @@
             gap: 8px;
         }
         .asset-aid {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
@@ -4423,7 +4772,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 9px;
+            font-size: 12px;
             font-weight: 600;
             color: white;
             text-transform: uppercase;
@@ -4434,7 +4783,7 @@
             color: var(--text-primary);
         }
         .asset-badge-aid {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             margin-left: 2px;
         }
@@ -4468,7 +4817,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 12px;
             font-weight: 600;
             color: white;
             text-transform: uppercase;
@@ -4485,7 +4834,7 @@
             line-height: 1.2;
         }
         .asset-badge-full .asset-badge-aid {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--text-muted);
             line-height: 1.2;
             margin-left: 0;
@@ -4517,11 +4866,11 @@
             color: var(--text-primary);
         }
         .reserve-symbol {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--text-muted);
         }
         .reserve-usd {
-            font-size: 10px;
+            font-size: 12px;
             color: var(--beam-cyan);
             font-weight: 500;
         }
@@ -4535,14 +4884,14 @@
             color: var(--text-secondary);
         }
         .tvl-value {
-            font-size: 11px;
+            font-size: 12px;
             color: var(--beam-cyan);
             font-weight: 500;
         }
         .volatility-badge {
             padding: 4px 10px;
             border-radius: 12px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
             text-transform: uppercase;
         }
@@ -4583,7 +4932,7 @@
         .trade-type {
             padding: 3px 8px;
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 500;
             background: var(--beam-cyan-dim);
             color: var(--beam-cyan);
@@ -4655,7 +5004,7 @@
         .status-badge {
             padding: 4px 8px;
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 500;
         }
         .status-badge.active {
@@ -6092,4 +6441,384 @@
 }
 .node-sync-banner.synced .node-sync-bar-fill {
     background: var(--success);
+}
+/* ---- Portfolio headline -------------------------------------------------
+   The dashboard went quick-actions -> asset carousel -> balances table with no
+   aggregate figure anywhere. */
+.portfolio-headline {
+    padding: var(--space-5, 20px) 0 var(--space-4, 16px);
+}
+.portfolio-label {
+    font-size: var(--text-xs, 12px);
+    font-weight: var(--weight-medium, 500);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2, 8px);
+}
+.portfolio-value {
+    font-size: var(--text-display, 32px);
+    font-weight: var(--weight-semibold, 600);
+    line-height: var(--leading-tight, 1.25);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.portfolio-sub {
+    margin-top: var(--space-1, 4px);
+    font-size: var(--text-sm, 13px);
+    color: var(--text-secondary);
+}
+
+/* ---- Accessibility floor ------------------------------------------------ */
+:focus-visible {
+    outline: 2px solid var(--beam-cyan);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+.nav-item:focus-visible {
+    outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+    /* The rule above would freeze the shimmer mid-sweep, leaving a stray bright
+       band. Drop the sweep entirely and let the flat block do the work. */
+    .skeleton::after {
+        display: none;
+    }
+}
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap; border: 0;
+}
+
+/* ---- Loading skeletons --------------------------------------------------
+   A spinner says "busy"; a skeleton says "something of this shape is landing
+   here". It reserves the real geometry, so nothing reflows when the data
+   arrives. The shapes below deliberately reuse the live components' own box
+   classes (.asset-icon, .asset-cell-icon, .tx-icon) rather than re-declaring
+   their sizes, which is what keeps the placeholder and the real thing the same
+   size a month from now. */
+/* Surface only — no border-radius here on purpose. .skeleton is always composed
+   with a shape (.skeleton-text, or the live component's own icon class), and a
+   radius here would win on source order and square off .tx-icon's circle. */
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--glass-hover);
+}
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+    to { transform: translateX(100%); }
+}
+/* Nothing under the locked overlay is visible, so nothing under it should
+   animate. Set by showLockedOverlay()/hideLockedOverlay(). */
+body.wallet-locked .skeleton::after {
+    animation: none;
+}
+
+.skeleton-text {
+    height: var(--text-xs, 12px);
+    border-radius: 4px;
+}
+.skeleton-text + .skeleton-text {
+    margin-top: var(--space-2, 8px);
+}
+
+/* Traces .asset-card: 240px wide, 20px padding, 16px radius. */
+.skeleton-card {
+    flex: 0 0 240px;
+    padding: var(--space-5, 20px);
+    border-radius: var(--radius-lg, 16px);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+}
+@media (max-width: 768px) {
+    /* .asset-card narrows to 200px here, so the placeholder has to as well —
+       otherwise the carousel shifts sideways the moment data lands. */
+    .skeleton-card {
+        flex: 0 0 200px;
+    }
+}
+
+/* Traces .tx-card. Also used as a <tr> in .balances-table, where the cells
+   already carry the padding and the row must stay a table-row. */
+.skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 12px);
+    padding: var(--space-4, 16px);
+    background: var(--void-lighter);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md, 12px);
+    margin-bottom: var(--space-2, 8px);
+}
+.skeleton-row > .skeleton {
+    flex-shrink: 0;
+}
+tr.skeleton-row {
+    display: table-row;
+    background: none;
+    border: 0;
+    margin: 0;
+}
+
+/* ---- Empty states that offer a way out ----------------------------------
+   "Nothing here" is only half an answer; every dead end below now carries the
+   one action that ends it. */
+.empty-state p {
+    font-size: var(--text-sm, 13px);
+    line-height: var(--leading-normal, 1.5);
+    max-width: 36ch;
+    margin: 0 auto;
+}
+.empty-state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+    justify-content: center;
+    margin-top: var(--space-5, 20px);
+}
+
+/* ---- Toasts -------------------------------------------------------------
+   Errors used to disappear after 3s with no way to bring them back, so a
+   failure you blinked at was a failure you could not act on. Errors now stay
+   until dismissed; everything else auto-dismisses but pauses on hover/focus. */
+.toast-container {
+    max-width: min(400px, calc(100vw - var(--space-12)));
+    align-items: stretch;
+    gap: var(--space-2);
+}
+
+.toast {
+    position: relative;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    padding-right: var(--space-8);
+    line-height: var(--leading-normal);
+}
+
+.toast-warning {
+    border-left: 3px solid var(--warning);
+}
+
+.toast-icon {
+    margin-top: 1px;
+}
+
+.toast-icon.warning {
+    background: var(--warning-dim);
+    color: var(--warning);
+}
+
+.toast-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    /* Chain errors are long and unbroken; let them wrap rather than overflow. */
+    overflow-wrap: anywhere;
+}
+
+.toast-title {
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+    color: var(--text-primary);
+    line-height: var(--leading-tight);
+}
+
+.toast-subtitle {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    line-height: var(--leading-normal);
+}
+
+.toast-hint {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    line-height: var(--leading-normal);
+}
+
+.toast-close {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.toast-close:hover {
+    opacity: 1;
+    background: var(--glass-hover);
+    color: var(--text-primary);
+}
+
+.toast-leaving {
+    animation: toastOut 0.2s ease forwards;
+    pointer-events: none;
+}
+
+@keyframes toastOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(16px); opacity: 0; }
+}
+
+/* ---- Airdrop gas sponsorship -------------------------------------------
+   A user with zero BEAM cannot pay a kernel fee, so the pool that covers it
+   is a first-class part of the page, not a footnote. */
+.gas-pool {
+    margin: var(--space-4, 16px) 0;
+    padding: var(--space-4, 16px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md, 12px);
+    background: var(--glass);
+}
+.gas-pool-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+    color: var(--beam-cyan);
+    margin-bottom: var(--space-3, 12px);
+}
+.gas-pool-title {
+    font-size: var(--text-sm, 13px);
+    font-weight: var(--weight-semibold, 600);
+    color: var(--text-primary);
+}
+.gas-pool-state {
+    margin-left: auto;
+    font-size: var(--text-xs, 12px);
+    font-weight: var(--weight-medium, 500);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: var(--radius-full, 9999px);
+}
+.gas-pool-state.on  { background: var(--success-dim); color: var(--success); }
+.gas-pool-state.off { background: var(--warning-dim); color: var(--warning); }
+
+.gas-pool-body {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-4, 16px);
+}
+.gas-pool-balance {
+    font-size: var(--text-2xl, 28px);
+    font-weight: var(--weight-semibold, 600);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.gas-pool-unit {
+    font-size: var(--text-xs, 12px);
+    color: var(--text-muted);
+    margin-left: var(--space-2, 8px);
+}
+.gas-pool-meta {
+    display: flex;
+    gap: var(--space-4, 16px);
+    flex-wrap: wrap;
+    font-size: var(--text-xs, 12px);
+    color: var(--text-secondary);
+}
+.gas-pool-meta strong { color: var(--text-primary); }
+
+.gas-pool-explainer {
+    margin: var(--space-3, 12px) 0 var(--space-3, 12px);
+    font-size: var(--text-xs, 12px);
+    line-height: var(--leading-normal, 1.5);
+    color: var(--text-muted);
+}
+.gas-pool-actions {
+    display: flex;
+    gap: var(--space-2, 8px);
+    align-items: center;
+}
+.gas-pool-input {
+    flex: 0 1 140px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm, 8px);
+    border: 1px solid var(--glass-border);
+    background: var(--void-light);
+    color: var(--text-primary);
+    font-size: var(--text-base, 14px);
+    font-family: inherit;
+}
+.gas-pool-input:focus-visible {
+    outline: 2px solid var(--beam-cyan);
+    outline-offset: 1px;
+}
+
+/* Retryable failure states.
+   A panel that only says "Failed to load" strands the user: their sole escape
+   is to navigate away and back, which most never discover. Every load failure
+   renders through errorState() and gets this. */
+.error-state-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 32px 20px;
+    text-align: center;
+}
+.error-state-msg {
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+}
+.error-state-detail {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-family: var(--font-mono, monospace);
+    max-width: 42ch;
+    word-break: break-word;
+    opacity: 0.85;
+}
+.error-state-retry {
+    margin-top: 2px;
+    padding: 7px 18px;
+    border: 1px solid var(--beam-cyan, #00d4ff);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--beam-cyan, #00d4ff);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.error-state-retry:hover {
+    background: var(--beam-cyan, #00d4ff);
+    color: var(--void, #0a0e17);
+}
+.error-state-retry:focus-visible {
+    outline: 2px solid var(--beam-cyan, #00d4ff);
+    outline-offset: 2px;
 }

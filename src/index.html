@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BEAM Light Wallet</title>
     <link rel="icon" type="image/png" sizes="256x256" href="/icon-256.png">
+    <!-- SVG first: modern browsers scale it crisply at any tab size. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
     <link rel="manifest" href="/manifest.json">
@@ -12,14 +14,18 @@
     <meta name="description" content="BEAM Light Wallet - Decentralized Privacy Wallet">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <!-- Stylesheets (fonts loaded locally via @font-face in base.css) -->
+    <link rel="stylesheet" href="/css/fonts.css">
     <link rel="stylesheet" href="/css/variables.css">
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/css/welcome.css">
     <link rel="stylesheet" href="/css/fuddle.css">
+    <link rel="stylesheet" href="/css/meme_battle.css">
 
-    <!-- External Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <!-- Vendored, not CDN: this origin holds the session token and the JSON-RPC
+         proxy that forwards tx_send, so a script here can spend the wallet.
+         See js/vendor/PROVENANCE.md for the npm integrity verification. -->
+    <script src="/js/vendor/qrcode.js"></script>
     <!-- DEX Shader (loads window.DEX_SHADER for contract calls) -->
     <script src="/js/dex-shader.js"></script>
     <!-- Airdrop Shader (loads window.AIRDROP_SHADER for airdrop contract calls) -->
@@ -38,58 +44,77 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-logo">
-                <svg viewBox="0 0 40 40" fill="none">
-                    <circle cx="20" cy="20" r="18" stroke="url(#logo-gradient)" stroke-width="2" fill="none"/>
-                    <path d="M12 20L18 26L28 14" stroke="url(#logo-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <!-- The one brand mark. Four different logos used to claim to be
+                     it: this slot held a circle-with-checkmark (which reads
+                     "verified", not "wallet"), the unlock screen had a prism, the
+                     app icon had a wallet/shield/badge composite, and a generated
+                     bullseye shipped whenever the .icns was missing. The prism is
+                     the only one that survives reduction, so it is the mark.
+                     Defined once here and reused via <use href="#beam-mark">. -->
+                <svg viewBox="0 0 48 48" fill="none" class="beam-mark" role="img" aria-label="BEAM">
                     <defs>
-                        <linearGradient id="logo-gradient" x1="0" y1="0" x2="40" y2="40">
-                            <stop offset="0%" stop-color="#25c2a0"/>
-                            <stop offset="100%" stop-color="#00d4ff"/>
+                        <linearGradient id="beam-face-l" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stop-color="#4ff5d0"/>
+                            <stop offset="100%" stop-color="#1aa8cf"/>
                         </linearGradient>
+                        <linearGradient id="beam-face-r" x1="1" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#2f7fd4"/>
+                            <stop offset="100%" stop-color="#1c3f7a"/>
+                        </linearGradient>
+                        <g id="beam-mark">
+                            <polygon points="24,6 44,42 4,42"    fill="url(#beam-face-l)"/>
+                            <polygon points="24,6 44,42 24,42"   fill="url(#beam-face-r)"/>
+                            <polygon points="24,17.9 35.8,39.4 12.2,39.4" fill="var(--void, #050a0f)"/>
+                        </g>
                     </defs>
+                    <use href="#beam-mark"/>
                 </svg>
             </div>
 
             <nav class="sidebar-nav">
-                <div class="nav-item active" data-page="dashboard" data-tooltip="Dashboard">
+                <button type="button" class="nav-item active" data-page="dashboard" data-tooltip="Dashboard" aria-label="Dashboard">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="9" rx="1"/>
                         <rect x="14" y="3" width="7" height="5" rx="1"/>
                         <rect x="14" y="12" width="7" height="9" rx="1"/>
                         <rect x="3" y="16" width="7" height="5" rx="1"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="assets" data-tooltip="Assets">
+                </button>
+                <button type="button" class="nav-item" data-page="assets" data-tooltip="Assets" aria-label="Assets">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"/>
                         <path d="M12 6v12M6 12h12"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="transactions" data-tooltip="Transactions">
+                </button>
+                <button type="button" class="nav-item" data-page="transactions" data-tooltip="Transactions" aria-label="Transactions">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 2v20M17 7l-5-5-5 5M7 17l5 5 5-5"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="addresses" data-tooltip="Addresses">
+                </button>
+                <button type="button" class="nav-item" data-page="addresses" data-tooltip="Addresses" aria-label="Addresses">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
                         <circle cx="12" cy="10" r="3"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="dex" data-tooltip="DEX Trading">
+                </button>
+                <button type="button" class="nav-item" data-page="dex" data-tooltip="DEX Trading" aria-label="DEX Trading">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="p2p" data-tooltip="P2P Trading">
+                </button>
+                <!-- P2P is disabled in the default build (FEATURE_P2P in app.js).
+                     Its Gun relay is dead and it is being reworked as a
+                     cross-chain DEX — see docs/P2P_REWORK.md. -->
+                <button type="button" class="nav-item" data-page="p2p" data-tooltip="P2P Trading"
+                        aria-label="P2P Trading" data-feature="p2p" hidden>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="6" cy="6" r="3"/>
                         <circle cx="18" cy="18" r="3"/>
                         <path d="M6 21V9a9 9 0 009 9h6"/>
                         <path d="M18 3v12a9 9 0 01-9-9H3"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="airdrop" data-tooltip="Airdrop">
+                </button>
+                <button type="button" class="nav-item" data-page="airdrop" data-tooltip="Airdrop" aria-label="Airdrop">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M20 12v10H4V12"/>
                         <path d="M2 7h20v5H2z"/>
@@ -97,41 +122,52 @@
                         <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/>
                         <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="explorer" data-tooltip="Explorer">
+                </button>
+                <button type="button" class="nav-item" data-page="explorer" data-tooltip="Explorer" aria-label="Explorer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"/>
                         <path d="M21 21l-4.35-4.35"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="appstore" data-tooltip="App Store">
+                </button>
+                <button type="button" class="nav-item" data-page="memeclash" data-tooltip="Meme Clash" aria-label="Meme Clash">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/>
+                        <line x1="13" x2="19" y1="19" y2="13"/>
+                        <line x1="16" x2="20" y1="16" y2="20"/>
+                        <line x1="19" x2="21" y1="21" y2="19"/>
+                        <polyline points="14.5 6.5 18 3 21 3 21 6 6.5 17.5"/>
+                        <line x1="5" x2="9" y1="14" y2="18"/>
+                        <line x1="7" x2="3" y1="17" y2="21"/>
+                    </svg>
+                </button>
+                <button type="button" class="nav-item" data-page="appstore" data-tooltip="App Store" aria-label="App Store">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7" rx="1.5"/>
                         <rect x="14" y="3" width="7" height="7" rx="1.5"/>
                         <rect x="3" y="14" width="7" height="7" rx="1.5"/>
                         <rect x="14" y="14" width="7" height="7" rx="1.5"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="donate" data-tooltip="Support Development">
+                </button>
+                <button type="button" class="nav-item" data-page="donate" data-tooltip="Support Development" aria-label="Support Development">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
                     </svg>
-                </div>
-                <div class="nav-item" data-page="settings" data-tooltip="Settings">
+                </button>
+                <button type="button" class="nav-item" data-page="settings" data-tooltip="Settings" aria-label="Settings">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"/>
                         <path d="M12 1v4M12 19v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M1 12h4M19 12h4M4.2 19.8l2.8-2.8M17 7l2.8-2.8"/>
                     </svg>
-                </div>
+                </button>
             </nav>
 
             <div class="sidebar-footer">
-                <div class="nav-item" data-tooltip="Help & Guide" onclick="showGuide()">
+                <button type="button" class="nav-item" data-tooltip="Help & Guide" onclick="showGuide()" aria-label="Help & Guide">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"/>
                         <path d="M9 9a3 3 0 015.12 2.13c0 2-3 3-3 3M12 17h.01"/>
                     </svg>
-                </div>
+                </button>
             </div>
         </aside>
 
@@ -153,11 +189,6 @@
                     <button class="header-btn" onclick="openReceiveModal()" title="Receive">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 5v14M19 12l-7 7-7-7"/>
-                        </svg>
-                    </button>
-                    <button class="header-btn" title="Notifications">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
                         </svg>
                     </button>
                     <button class="header-btn" id="lock-btn" title="Lock Wallet" onclick="lockWallet()">
@@ -189,9 +220,17 @@
 
                 <!-- Dashboard Page -->
                 <div class="page active" id="page-dashboard">
+                    <!-- Portfolio total. "How much do I have?" is the first
+                         question a wallet answers, and there was no aggregate
+                         figure anywhere on the dashboard. -->
+                    <div class="portfolio-headline" id="portfolio-headline">
+                        <div class="portfolio-label">Total balance</div>
+                        <div class="portfolio-value" id="portfolio-total">—</div>
+                        <div class="portfolio-sub" id="portfolio-sub"></div>
+                    </div>
                     <!-- Quick Actions -->
                     <div class="quick-actions">
-                        <button class="quick-btn quick-btn-primary" onclick="openSendModal()">
+                        <button class="quick-btn quick-btn-primary" data-requires-sync onclick="openSendModal()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 19V5M5 12l7-7 7 7"/>
                             </svg>
@@ -373,7 +412,10 @@
                                     <path d="M12 2v20M17 7l-5-5-5 5M7 17l5 5 5-5"/>
                                 </svg>
                                 <h3>No transactions yet</h3>
-                                <p>Your transaction history will appear here</p>
+                                <p>Share your address to get your first payment.</p>
+                                <div class="empty-state-actions">
+                                    <button class="quick-btn quick-btn-primary" onclick="openReceiveModal()">Receive BEAM</button>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -402,7 +444,7 @@
                     <section class="section">
                         <div class="section-header">
                             <div class="section-title">DEX Trading</div>
-                            <div style="display:flex;gap:8px;">
+                            <div class="dex-tabs">
                                 <button class="quick-btn dex-tab active" data-dex-tab="swap" onclick="showDexTab('swap')">Swap</button>
                                 <button class="quick-btn dex-tab" data-dex-tab="pools" onclick="showDexTab('pools')">Pools</button>
                                 <button class="quick-btn dex-tab" data-dex-tab="liquidity" onclick="showDexTab('liquidity')">Liquidity</button>
@@ -411,23 +453,23 @@
 
                         <!-- Swap Tab -->
                         <div class="dex-panel active" id="dex-swap">
-                            <div class="balances-card" style="max-width:480px;margin:0 auto;padding:24px;">
-                                <h3 style="margin-bottom:20px;text-align:center;">Swap Tokens</h3>
+                            <div class="balances-card dex-card">
+                                <h3 class="dex-card-title">Swap Tokens</h3>
 
                                 <!-- From Token -->
-                                <div class="swap-input-group" style="margin-bottom:8px;">
-                                    <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">You Pay</label>
-                                    <div style="display:flex;background:var(--void);border-radius:12px;padding:12px;">
+                                <div class="swap-input-group swap-input-group-tight">
+                                    <label class="swap-label">You Pay</label>
+                                    <div class="swap-field-row">
                                         <input type="text" inputmode="decimal" id="dex-from-amount" class="swap-amount-input" placeholder="0.0" oninput="sanitizeNumericInput(this); debounceGetQuote()">
                                         <button class="token-select-btn" id="dex-from-token" onclick="openTokenSelector('from')">
-                                            <div class="token-icon-small" id="dex-from-icon" style="background:var(--beam-cyan);">BE</div>
+                                            <div class="token-icon-small token-icon-cyan" id="dex-from-icon">BE</div>
                                             <span id="dex-from-symbol">BEAM</span>
                                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                                         </button>
                                     </div>
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
-                                        <div style="font-size:11px;color:var(--text-muted);">Balance: <span id="dex-from-balance">0</span></div>
-                                        <div class="quick-amount-btns" style="display:flex;gap:4px;">
+                                    <div class="swap-field-meta">
+                                        <div class="swap-balance">Balance: <span id="dex-from-balance">0</span></div>
+                                        <div class="quick-amount-btns">
                                             <button class="quick-amount-btn" onclick="setQuickAmount(0.1)">0.1</button>
                                             <button class="quick-amount-btn" onclick="setQuickAmount(0.5)">0.5</button>
                                             <button class="quick-amount-btn" onclick="setQuickAmount(1)">1</button>
@@ -437,19 +479,19 @@
                                 </div>
 
                                 <!-- Swap Direction Button -->
-                                <div style="text-align:center;margin:12px 0;">
-                                    <button class="swap-direction-btn" onclick="swapDirection()" style="background:var(--void-lighter);border:2px solid var(--glass-border);border-radius:50%;width:40px;height:40px;cursor:pointer;">
+                                <div class="swap-direction-row">
+                                    <button class="swap-direction-btn" onclick="swapDirection()" title="Reverse swap direction" aria-label="Reverse swap direction">
                                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--beam-cyan)" stroke-width="2"><path d="M7 16V4M7 4L3 8M7 4l4 4M17 8v12M17 20l4-4M17 20l-4-4"/></svg>
                                     </button>
                                 </div>
 
                                 <!-- To Token -->
-                                <div class="swap-input-group" style="margin-bottom:16px;">
-                                    <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">You Receive</label>
-                                    <div style="display:flex;background:var(--void);border-radius:12px;padding:12px;">
+                                <div class="swap-input-group">
+                                    <label class="swap-label">You Receive</label>
+                                    <div class="swap-field-row">
                                         <input type="number" id="dex-to-amount" class="swap-amount-input" placeholder="0.0" readonly>
                                         <button class="token-select-btn" id="dex-to-token" onclick="openTokenSelector('to')">
-                                            <div class="token-icon-small" id="dex-to-icon" style="background:var(--beam-pink);">?</div>
+                                            <div class="token-icon-small token-icon-pink" id="dex-to-icon">?</div>
                                             <span id="dex-to-symbol">Select</span>
                                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                                         </button>
@@ -457,42 +499,43 @@
                                 </div>
 
                                 <!-- Swap Info - matches AllDapps -->
-                                <div id="dex-swap-info" style="display:none;background:var(--void);border-radius:10px;padding:16px;margin-bottom:16px;font-size:13px;border:1px solid var(--glass-border);">
-                                    <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
-                                        <span style="color:var(--text-muted);">Exchange Rate</span>
-                                        <span id="dex-rate" style="font-family:'JetBrains Mono',monospace;">-</span>
+                                <!-- getDexQuote() toggles display inline, which beats .dex-hidden. -->
+                                <div id="dex-swap-info" class="dex-summary dex-hidden">
+                                    <div class="dex-summary-row">
+                                        <span class="dex-summary-label">Exchange Rate</span>
+                                        <span id="dex-rate" class="dex-summary-value">-</span>
                                     </div>
-                                    <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
-                                        <span style="color:var(--text-muted);">You Pay</span>
-                                        <span id="dex-pay" style="font-family:'JetBrains Mono',monospace;color:var(--error);">-</span>
+                                    <div class="dex-summary-row">
+                                        <span class="dex-summary-label">You Pay</span>
+                                        <span id="dex-pay" class="dex-summary-value dex-summary-value-out">-</span>
                                     </div>
-                                    <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
-                                        <span style="color:var(--text-muted);">You Receive</span>
-                                        <span id="dex-receive" style="font-family:'JetBrains Mono',monospace;color:var(--success);">-</span>
+                                    <div class="dex-summary-row">
+                                        <span class="dex-summary-label">You Receive</span>
+                                        <span id="dex-receive" class="dex-summary-value dex-summary-value-in">-</span>
                                     </div>
-                                    <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
-                                        <span style="color:var(--text-muted);">Pool Fee (0.3%)</span>
-                                        <span id="dex-fee" style="font-family:'JetBrains Mono',monospace;">-</span>
+                                    <div class="dex-summary-row">
+                                        <span class="dex-summary-label">Pool Fee (0.3%)</span>
+                                        <span id="dex-fee" class="dex-summary-value">-</span>
                                     </div>
-                                    <div style="display:flex;justify-content:space-between;">
-                                        <span style="color:var(--text-muted);">Min. Received</span>
-                                        <span id="dex-min-receive" style="font-family:'JetBrains Mono',monospace;">-</span>
+                                    <div class="dex-summary-row">
+                                        <span class="dex-summary-label">Min. Received</span>
+                                        <span id="dex-min-receive" class="dex-summary-value">-</span>
                                     </div>
                                 </div>
 
                                 <!-- Swap Button -->
-                                <button class="quick-btn quick-btn-primary" id="dex-swap-btn" onclick="executeSwap()" style="width:100%;padding:16px;font-size:16px;" disabled>
+                                <button class="quick-btn quick-btn-primary dex-action-btn" id="dex-swap-btn" onclick="executeSwap()" disabled>
                                     Select tokens
                                 </button>
 
                                 <!-- Recent Activity Feed -->
-                                <div style="margin-top:24px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                        <span style="font-size:13px;color:var(--text-muted);font-weight:500;">Recent Activity</span>
-                                        <span id="activity-status" style="font-size:11px;color:var(--text-muted);">Loading...</span>
+                                <div class="dex-activity">
+                                    <div class="dex-activity-header">
+                                        <span class="dex-activity-title">Recent Activity</span>
+                                        <span id="activity-status" class="dex-activity-status">Loading...</span>
                                     </div>
-                                    <div id="dex-activity-feed" style="max-height:320px;overflow-y:auto;">
-                                        <div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">Loading recent activity...</div>
+                                    <div id="dex-activity-feed" class="dex-activity-list">
+                                        <div class="dex-empty">Loading recent activity...</div>
                                     </div>
                                 </div>
                             </div>
@@ -501,103 +544,103 @@
                         <!-- Pools Tab -->
                         <div class="dex-panel" id="dex-pools">
                             <!-- Pool Filters -->
-                            <div class="pools-filters" style="display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-bottom:16px;padding:12px;background:var(--void);border-radius:12px;">
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    <label style="font-size:12px;color:var(--text-muted);white-space:nowrap;">Min BEAM Reserve:</label>
-                                    <input type="number" id="pool-min-beam" value="10000" placeholder="10000"
-                                           style="width:100px;padding:6px 10px;background:var(--void-lighter);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;"
+                            <div class="pools-filters">
+                                <div class="pools-filter-field">
+                                    <label class="pools-filter-label" for="pool-min-beam">Min BEAM Reserve:</label>
+                                    <input type="number" id="pool-min-beam" class="pools-filter-input" value="10000" placeholder="10000"
                                            oninput="renderDexPools()">
                                 </div>
-                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-muted);">
-                                    <input type="checkbox" id="pool-show-low-lp" onchange="renderDexPools()" style="width:16px;height:16px;cursor:pointer;">
+                                <label class="pools-filter-check">
+                                    <input type="checkbox" id="pool-show-low-lp" class="pools-filter-checkbox" onchange="renderDexPools()">
                                     Show low liquidity pools
                                 </label>
-                                <div style="flex:1;"></div>
-                                <button class="quick-btn" onclick="openCreatePoolUI()" style="font-size:12px;padding:6px 12px;">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;"><path d="M12 5v14M5 12h14"/></svg>
+                                <div class="pools-filter-spacer"></div>
+                                <button class="quick-btn pools-filter-btn" onclick="openCreatePoolUI()">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                                     Create Pool
                                 </button>
-                                <span id="pools-count" style="font-size:12px;color:var(--text-muted);">0 pools</span>
+                                <span id="pools-count" class="pools-count">0 pools</span>
                             </div>
                             <div id="pools-list" class="pools-grid">
-                                <div style="text-align:center;padding:32px;color:var(--text-muted);">Loading pools...</div>
+                                <div class="dex-empty">Loading pools...</div>
                             </div>
                         </div>
 
                         <!-- Liquidity Tab -->
                         <div class="dex-panel" id="dex-liquidity">
                             <!-- Liquidity Mode Tabs -->
-                            <div style="display:flex;gap:8px;margin-bottom:20px;justify-content:center;">
+                            <div class="liq-mode-tabs">
                                 <button class="quick-btn liq-mode-btn active" data-liq-mode="add" onclick="switchLiqMode('add')">Add Liquidity</button>
                                 <button class="quick-btn liq-mode-btn" data-liq-mode="withdraw" onclick="switchLiqMode('withdraw')">Withdraw</button>
                             </div>
 
                             <!-- Add Liquidity Panel -->
                             <div class="liq-panel active" id="liq-add-panel">
-                                <div class="balances-card" style="max-width:480px;margin:0 auto;padding:24px;">
-                                    <h3 style="margin-bottom:8px;text-align:center;">Add Liquidity</h3>
-                                    <p style="text-align:center;color:var(--text-muted);font-size:12px;margin-bottom:20px;">Provide liquidity to earn trading fees</p>
+                                <div class="balances-card dex-card">
+                                    <h3 class="dex-card-title">Add Liquidity</h3>
+                                    <p class="dex-card-sub">Provide liquidity to earn trading fees</p>
 
                                     <!-- Token A Selection with Amount -->
-                                    <div class="swap-input-group" style="margin-bottom:12px;">
-                                        <label style="font-size:12px;color:var(--text-muted);">Token A</label>
-                                        <div style="display:flex;background:var(--void);border-radius:12px;padding:12px;">
+                                    <div class="swap-input-group swap-input-group-snug">
+                                        <label class="swap-label">Token A</label>
+                                        <div class="swap-field-row">
                                             <input type="text" inputmode="decimal" id="liq-amount-a" class="swap-amount-input" placeholder="0.0" oninput="sanitizeNumericInput(this); calcLiquidityB()">
-                                            <div class="token-select-btn" id="liq-token-a" onclick="openTokenSelector('liq-a')" style="cursor:pointer;">
-                                                <div class="token-icon-small" id="liq-icon-a" style="background:var(--beam-cyan);">BE</div>
+                                            <div class="token-select-btn" id="liq-token-a" onclick="openTokenSelector('liq-a')">
+                                                <div class="token-icon-small token-icon-cyan" id="liq-icon-a">BE</div>
                                                 <span id="liq-symbol-a">BEAM</span>
                                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                                                     <path d="M6 9l6 6 6-6"/>
                                                 </svg>
                                             </div>
                                         </div>
-                                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Balance: <span id="liq-balance-a">0</span></div>
+                                        <div class="swap-balance">Balance: <span id="liq-balance-a">0</span></div>
                                     </div>
 
-                                    <div style="text-align:center;margin:8px 0;color:var(--text-muted);">+</div>
+                                    <div class="liq-separator">+</div>
 
                                     <!-- Token B Selection with Amount -->
-                                    <div class="swap-input-group" style="margin-bottom:16px;">
-                                        <label style="font-size:12px;color:var(--text-muted);">Token B</label>
-                                        <div style="display:flex;background:var(--void);border-radius:12px;padding:12px;">
+                                    <div class="swap-input-group">
+                                        <label class="swap-label">Token B</label>
+                                        <div class="swap-field-row">
                                             <input type="text" inputmode="decimal" id="liq-amount-b" class="swap-amount-input" placeholder="0.0" oninput="sanitizeNumericInput(this); calcLiquidityA()">
-                                            <div class="token-select-btn" id="liq-token-b" onclick="openTokenSelector('liq-b')" style="cursor:pointer;">
-                                                <div class="token-icon-small" id="liq-icon-b" style="background:var(--beam-pink);">FO</div>
+                                            <div class="token-select-btn" id="liq-token-b" onclick="openTokenSelector('liq-b')">
+                                                <div class="token-icon-small token-icon-pink" id="liq-icon-b">FO</div>
                                                 <span id="liq-symbol-b">FOMO</span>
                                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                                                     <path d="M6 9l6 6 6-6"/>
                                                 </svg>
                                             </div>
                                         </div>
-                                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Balance: <span id="liq-balance-b">0</span></div>
+                                        <div class="swap-balance">Balance: <span id="liq-balance-b">0</span></div>
                                     </div>
 
                                     <!-- Available Pools for Selected Pair -->
-                                    <div id="liq-pool-options" style="margin-bottom:16px;">
-                                        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:8px;">Select Pool (by fee)</label>
-                                        <div id="liq-pool-list" style="display:flex;flex-wrap:wrap;gap:8px;">
+                                    <div id="liq-pool-options" class="liq-pool-options">
+                                        <label class="swap-label">Select Pool (by fee)</label>
+                                        <div id="liq-pool-list" class="liq-pool-list">
                                             <!-- Pool options rendered here -->
-                                            <div style="color:var(--text-muted);font-size:12px;">Select both tokens to see available pools</div>
+                                            <div class="liq-pool-empty">Select both tokens to see available pools</div>
                                         </div>
                                     </div>
 
                                     <!-- Pool Info -->
-                                    <div id="liq-pool-info" style="display:none;background:var(--void);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;">
-                                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                                            <span style="color:var(--text-muted);">Pool Rate</span>
+                                    <!-- selectLiqPool() toggles display inline, which beats .dex-hidden. -->
+                                    <div id="liq-pool-info" class="dex-summary dex-hidden">
+                                        <div class="dex-summary-row">
+                                            <span class="dex-summary-label">Pool Rate</span>
                                             <span id="liq-rate">-</span>
                                         </div>
-                                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                                            <span style="color:var(--text-muted);">Your Share</span>
+                                        <div class="dex-summary-row">
+                                            <span class="dex-summary-label">Your Share</span>
                                             <span id="liq-share">-</span>
                                         </div>
-                                        <div style="display:flex;justify-content:space-between;">
-                                            <span style="color:var(--text-muted);">LP Tokens</span>
+                                        <div class="dex-summary-row">
+                                            <span class="dex-summary-label">LP Tokens</span>
                                             <span id="liq-lp-tokens">-</span>
                                         </div>
                                     </div>
 
-                                    <button class="quick-btn quick-btn-primary" id="add-liq-btn" onclick="showAddLiquidityConfirmation()" style="width:100%;padding:16px;" disabled>
+                                    <button class="quick-btn quick-btn-primary dex-action-btn" id="add-liq-btn" onclick="showAddLiquidityConfirmation()" disabled>
                                         Select Pool
                                     </button>
                                 </div>
@@ -605,37 +648,38 @@
 
                             <!-- Withdraw Liquidity Panel -->
                             <div class="liq-panel" id="liq-withdraw-panel">
-                                <div class="balances-card" style="max-width:480px;margin:0 auto;padding:24px;">
-                                    <h3 style="margin-bottom:8px;text-align:center;">Withdraw Liquidity</h3>
-                                    <p style="text-align:center;color:var(--text-muted);font-size:12px;margin-bottom:20px;">Remove your liquidity from a pool</p>
+                                <div class="balances-card dex-card">
+                                    <h3 class="dex-card-title">Withdraw Liquidity</h3>
+                                    <p class="dex-card-sub">Remove your liquidity from a pool</p>
 
                                     <!-- Your LP Positions -->
-                                    <div id="lp-positions" style="margin-bottom:20px;">
-                                        <div style="text-align:center;padding:24px;color:var(--text-muted);">Loading your LP positions...</div>
+                                    <div id="lp-positions" class="lp-positions">
+                                        <div class="dex-empty">Loading your LP positions...</div>
                                     </div>
 
                                     <!-- Withdraw Amount -->
-                                    <div id="withdraw-form" style="display:none;">
-                                        <div class="swap-input-group" style="margin-bottom:16px;">
-                                            <label style="font-size:12px;color:var(--text-muted);">Withdraw Percentage</label>
-                                            <div style="display:flex;gap:8px;margin-top:8px;">
+                                    <!-- selectLPPosition() toggles display inline, which beats .dex-hidden. -->
+                                    <div id="withdraw-form" class="dex-hidden">
+                                        <div class="swap-input-group">
+                                            <label class="swap-label">Withdraw Percentage</label>
+                                            <div class="withdraw-percent-btns">
                                                 <button class="quick-amount-btn" onclick="setWithdrawPercent(25)">25%</button>
                                                 <button class="quick-amount-btn" onclick="setWithdrawPercent(50)">50%</button>
                                                 <button class="quick-amount-btn" onclick="setWithdrawPercent(75)">75%</button>
                                                 <button class="quick-amount-btn" onclick="setWithdrawPercent(100)">100%</button>
                                             </div>
-                                            <input type="range" id="withdraw-slider" min="0" max="100" value="100" style="width:100%;margin-top:12px;" oninput="updateWithdrawAmount()">
-                                            <div style="text-align:center;font-size:24px;font-weight:600;margin-top:8px;"><span id="withdraw-percent">100</span>%</div>
+                                            <input type="range" id="withdraw-slider" class="withdraw-slider" min="0" max="100" value="100" oninput="updateWithdrawAmount()" aria-label="Withdraw percentage">
+                                            <div class="withdraw-percent-readout"><span id="withdraw-percent">100</span>%</div>
                                         </div>
 
-                                        <div id="withdraw-preview" style="background:var(--void);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;">
-                                            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                                                <span style="color:var(--text-muted);">You'll Receive</span>
+                                        <div id="withdraw-preview" class="dex-summary">
+                                            <div class="dex-summary-row">
+                                                <span class="dex-summary-label">You'll Receive</span>
                                             </div>
-                                            <div id="withdraw-amounts" style="font-weight:500;">-</div>
+                                            <div id="withdraw-amounts" class="withdraw-amounts">-</div>
                                         </div>
 
-                                        <button class="quick-btn quick-btn-danger" id="withdraw-liq-btn" onclick="showWithdrawConfirmation()" style="width:100%;padding:16px;">
+                                        <button class="quick-btn quick-btn-danger dex-action-btn" id="withdraw-liq-btn" onclick="showWithdrawConfirmation()">
                                             Withdraw Liquidity
                                         </button>
                                     </div>
@@ -648,7 +692,11 @@
 
                 <!-- P2P Marketplace Page -->
                 <div class="page" id="page-p2p">
-                    <iframe id="p2p-iframe" src="/p2p/p2p.html" style="width: 100%; height: calc(100vh - 80px); border: none; background: transparent;"></iframe>
+                    <!-- src is set on first navigation to the P2P page. Loading it
+                         here cost every launch 635 KB (p2p.js 383K + p2p.css 163K +
+                         p2p.html 89K) plus a CDN script, for an alpha feature most
+                         sessions never open. -->
+                    <iframe id="p2p-iframe" data-src="/p2p/p2p.html" style="width: 100%; height: calc(100vh - 80px); border: none; background: transparent;"></iframe>
                 </div>
 
                 <!-- Airdrop Page -->
@@ -689,6 +737,34 @@
                             <div class="airdrop-stat-pill">
                                 <span class="airdrop-stat-label">Available</span>
                                 <span class="airdrop-stat-value" id="airdrop-stat-available">--</span>
+                            </div>
+                        </div>
+
+                        <!-- Gas sponsorship. A user holding zero BEAM cannot pay a
+                             kernel fee, so without a funded pool they cannot claim
+                             a FOMO/BEAMX voucher at all — which is the exact
+                             barrier an airdrop exists to remove. -->
+                        <div class="gas-pool" id="gas-pool">
+                            <div class="gas-pool-head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                                </svg>
+                                <span class="gas-pool-title">Gasless claims</span>
+                                <span class="gas-pool-state" id="gas-pool-state">checking…</span>
+                            </div>
+                            <div class="gas-pool-body">
+                                <div class="gas-pool-figure">
+                                    <span class="gas-pool-balance" id="gas-pool-balance">--</span>
+                                    <span class="gas-pool-unit">BEAM in the pool</span>
+                                </div>
+                                <div class="gas-pool-meta" id="gas-pool-meta"></div>
+                            </div>
+                            <p class="gas-pool-explainer" id="gas-pool-explainer"></p>
+                            <div class="gas-pool-actions">
+                                <input type="text" id="gas-sponsor-amount" class="gas-pool-input"
+                                       placeholder="0.5" inputmode="decimal" aria-label="Amount of BEAM to sponsor">
+                                <button class="quick-btn quick-btn-secondary" id="gas-sponsor-btn"
+                                        onclick="sponsorAirdropGas()">Sponsor BEAM</button>
                             </div>
                         </div>
 
@@ -1329,6 +1405,11 @@
                     <div id="fuddle-root"></div>
                 </div>
 
+                <!-- MemeClash Battle Page -->
+                <div class="page" id="page-memeclash">
+                    <div id="memeclash-root"></div>
+                </div>
+
                 <!-- Donate Page -->
                 <div class="page" id="page-donate">
                     <section class="section">
@@ -1452,23 +1533,23 @@
                                     <div class="info-panel">
                                         <div class="info-panel-title">Node Types</div>
                                         <div class="info-panel-text">
-                                            <strong>Public Node:</strong> Fast connection, no setup required. Use for everyday transactions.<br><br>
-                                            <strong>Local Node (fast_sync):</strong> Better privacy, DEX shader support. Required for swaps. Takes time to sync initially.
+                                            <strong>Public Node:</strong> Fast connection, no setup, nothing to download. Handles everyday transactions <em>and</em> smart contracts &mdash; swaps, DEX, games and airdrops all work here.<br><br>
+                                            <strong>Local Node:</strong> Optional. Better privacy, and needed only for Max Privacy / Offline addresses and full balance rescan. Downloads about 9&nbsp;GB and takes hours to sync.
                                         </div>
                                     </div>
                                 </span>
                             </div>
 
                             <!-- Node Type Selector -->
-                            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-                                <button class="node-type-btn active" id="node-public-btn" onclick="selectNodeType('public', true)">
+                            <div style="display: flex; gap: var(--space-3); margin-bottom: var(--space-4);">
+                                <button class="node-type-btn active" id="node-public-btn" onclick="chooseNodeMode('public')">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                                         <circle cx="12" cy="12" r="10"/>
                                         <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
                                     </svg>
                                     <span>Public Node</span>
                                 </button>
-                                <button class="node-type-btn" id="node-local-btn" onclick="selectNodeType('local', true)">
+                                <button class="node-type-btn" id="node-local-btn" onclick="chooseNodeMode('local')">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                                         <rect x="2" y="3" width="20" height="14" rx="2"/>
                                         <path d="M8 21h8M12 17v4"/>
@@ -1477,30 +1558,49 @@
                                 </button>
                             </div>
 
+                            <!-- What each mode actually gives you, and what it costs -->
+                            <div class="node-facts" id="node-facts-public">
+                                <ul class="node-facts-list">
+                                    <li class="yes">Send, receive and full transaction history</li>
+                                    <li class="yes">Swaps, DEX, games and airdrops &mdash; contract calls are served by public nodes</li>
+                                    <li class="no">Max Privacy and Offline addresses</li>
+                                    <li class="no">Full balance rescan after restoring a wallet</li>
+                                </ul>
+                                <p class="node-facts-cost">Nothing to download. Connects in seconds.</p>
+                            </div>
+                            <div class="node-facts" id="node-facts-local" hidden>
+                                <ul class="node-facts-list">
+                                    <li class="yes">Everything a public node does, verified against your own copy of the chain</li>
+                                    <li class="yes">Max Privacy and Offline addresses</li>
+                                    <li class="yes">Full balance rescan after restoring a wallet</li>
+                                </ul>
+                                <p class="node-facts-cost">Costs about <strong>9&nbsp;GB of disk</strong> and several hours of syncing before the wallet can use it. It runs only while this app is open.</p>
+                            </div>
+
                             <!-- Current Node Info -->
-                            <div style="display: flex; flex-direction: column; gap: 12px;">
-                                <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--void); border-radius: 8px;">
+                            <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+                                <div style="display: flex; justify-content: space-between; padding: var(--space-3); background: var(--void); border-radius: 8px;">
                                     <span style="color: var(--text-muted);">Current Node</span>
-                                    <span id="settings-node" class="mono-text" style="font-size: 12px;">eu-node01.mainnet.beam.mw:8100</span>
+                                    <span id="settings-node" class="mono-text" style="font-size: var(--text-xs);">eu-node01.mainnet.beam.mw:8100</span>
                                 </div>
-                                <div style="display: flex; justify-content: space-between; padding: 12px; background: var(--void); border-radius: 8px;">
+                                <div style="display: flex; justify-content: space-between; padding: var(--space-3); background: var(--void); border-radius: 8px;">
                                     <span style="color: var(--text-muted);">Node Type</span>
                                     <span id="settings-node-type">Public</span>
                                 </div>
                             </div>
 
                             <!-- Local Node Sync Progress -->
-                            <div id="local-node-section" style="margin-top: 16px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                                    <span style="color: var(--text-secondary); font-size: 14px; font-weight: 500;">Local Node</span>
-                                    <div style="display: flex; gap: 8px;">
-                                        <button class="quick-btn" onclick="startLocalNode()" style="padding: 4px 12px; font-size: 12px;">
+                            <div id="local-node-section" style="margin-top: var(--space-4);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
+                                    <span style="color: var(--text-secondary); font-size: var(--text-base); font-weight: var(--weight-medium);">Local Node</span>
+                                    <div style="display: flex; gap: var(--space-2);">
+                                        <button class="quick-btn" id="node-start-btn" onclick="startLocalNode()" style="padding: var(--space-1) var(--space-3); font-size: var(--text-xs);">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                                                 <polygon points="5 3 19 12 5 21 5 3"/>
                                             </svg>
                                             Start
                                         </button>
-                                        <button class="quick-btn" onclick="stopLocalNode()" style="padding: 4px 12px; font-size: 12px;">
+                                        <button class="quick-btn" id="node-stop-btn" onclick="stopLocalNode()" style="padding: var(--space-1) var(--space-3); font-size: var(--text-xs);">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                                                 <rect x="6" y="6" width="12" height="12"/>
                                             </svg>
@@ -1508,28 +1608,30 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div style="padding: 16px; background: var(--void); border-radius: 10px;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                        <span style="color: var(--text-muted); font-size: 13px;">Sync Progress</span>
-                                        <span id="sync-percentage" style="color: var(--beam-cyan); font-weight: 600; font-size: 15px;">0%</span>
+                                <div style="padding: var(--space-4); background: var(--void); border-radius: 10px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-3);">
+                                        <span id="sync-status-text" style="color: var(--text-secondary); font-size: var(--text-sm);">Not running</span>
+                                        <span id="sync-percentage" style="color: var(--beam-cyan); font-weight: var(--weight-semibold); font-size: var(--text-md);">&mdash;</span>
                                     </div>
-                                    <div class="sync-progress-bar">
+                                    <div class="sync-progress-bar" id="sync-progress-bar">
                                         <div class="sync-progress-fill" id="sync-progress-fill" style="width: 0%;"></div>
                                     </div>
-                                    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px;">
-                                        <span id="sync-status-text" style="color: var(--text-muted);">Waiting...</span>
-                                        <span id="sync-blocks" style="color: var(--text-muted);">0 / 0 headers</span>
+                                    <div style="display: flex; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-3); font-size: var(--text-xs); color: var(--text-muted);">
+                                        <span id="sync-blocks" class="mono-text">&mdash;</span>
+                                        <span id="sync-remaining"></span>
                                     </div>
                                 </div>
-                                <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
-                                    Running a local node enables DEX features and provides better privacy.
-                                    Initial sync downloads ~3.7GB of blockchain headers.
+                                <!-- Filled in when the node cannot reach the tip at all (fork-stale build) -->
+                                <div class="node-stall" id="node-stall" hidden></div>
+                                <p class="node-facts-cost" style="margin-top: var(--space-3);">
+                                    Progress is measured against the network tip reported by a public explorer, not against the node's
+                                    own opinion of itself. The wallet stays on a public node until this one reaches the tip.
                                 </p>
                             </div>
 
                             <!-- Node Selection Dropdown -->
-                            <div style="margin-top: 16px;">
-                                <label style="display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Select Node</label>
+                            <div style="margin-top: var(--space-4);">
+                                <label style="display: block; margin-bottom: var(--space-2); color: var(--text-muted); font-size: var(--text-sm);">Select Node</label>
                                 <select id="node-selector" class="search-input" style="width: 100%; cursor: pointer;" onchange="changeNode()">
                                     <option value="eu-node01.mainnet.beam.mw:8100">EU Node 1 (Primary)</option>
                                     <option value="eu-node02.mainnet.beam.mw:8100">EU Node 2</option>
@@ -1568,7 +1670,8 @@
                                             <path d="M12 8v4M12 16h.01"/>
                                         </svg>
                                         <span style="color: var(--warning); font-size: 13px;">
-                                            Public nodes don't support DEX shaders. Switch to a local node to use swap functionality.
+                                            Swaps are unavailable right now. A local node is not required &mdash; contract calls
+                                            work over public nodes &mdash; so this is usually a node that is busy or still catching up.
                                         </span>
                                     </div>
                                 </div>
@@ -2571,6 +2674,7 @@
     <!-- <script src="js/wallet-app.js"></script> -->
     <!-- JavaScript -->
     <script src="/js/pages/fuddle.js"></script>
+    <script src="/js/pages/meme_battle.js"></script>
     <script src="/js/app.js"></script>
 
     <!-- Modal Container -->

@@ -1,0 +1,103 @@
+{
+  "_comment": [
+    "The single source of truth for versions. BEAM_VERSION used to be hardcoded in 13 files",
+    "across bash, batch, PowerShell, Inno Pascal, JS and Markdown, and the app version",
+    "disagreed with itself four ways. Every installer and serve.py reads this file instead.",
+    "",
+    "sha256 values are the hash of the EXTRACTED binary, cross-checked against the",
+    "*-checksum.txt that BeamMW ships inside each archive. Pinning them here means a",
+    "substituted upstream artifact fails verification, which a checksum fetched from the",
+    "same place as the binary would not catch.",
+    "",
+    "min_consensus_height is the HF6 activation block. A node that cannot pass it is out of",
+    "consensus no matter what its own logs claim about being synced."
+  ],
+  "app_version": "1.2.0",
+  "min_consensus_height": 3928666,
+  "hardfork": {
+    "name": "HF6",
+    "height": 3928666,
+    "activated": "2026-06-30",
+    "min_beam_version": "7.5.14493",
+    "note": "Builds older than min_beam_version stall one block before this height and never recover."
+  },
+  "release_base": "https://github.com/BeamMW/beam/releases/download",
+  "platforms": {
+    "linux": {
+      "beam_version": "7.5.14493",
+      "hf6_compatible": true,
+      "asset_prefix": "linux",
+      "archive_ext": "zip",
+      "inner_ext": "tar",
+      "binaries": {
+        "wallet-api": {
+          "asset": "linux-wallet-api-7.5.14493.zip",
+          "sha256": "2fad3f6e08f88055a68ec7b0c67f535e1d99b649f0636d5046e2018eddb07bee"
+        },
+        "beam-node": {
+          "asset": "linux-beam-node-7.5.14493.zip",
+          "sha256": "e9bc41a717ef6d90a9f3fcc8f41fff71071afd401c16c6093f3351c814c19fa1"
+        },
+        "beam-wallet": {
+          "asset": "linux-beam-wallet-cli-7.5.14493.zip",
+          "sha256": "e4256c330939045ab90d78265987cb2e86057b201e7e8306d41e6d7dab4906fb"
+        }
+      }
+    },
+    "windows": {
+      "beam_version": "7.5.14493",
+      "hf6_compatible": true,
+      "_note": "Assets are prefixed 'win-', not 'windows-'. Two installers requested the wrong name and 404'd.",
+      "asset_prefix": "win",
+      "archive_ext": "zip",
+      "binaries": {
+        "wallet-api": {
+          "asset": "win-wallet-api-7.5.14493.zip",
+          "file": "wallet-api.exe",
+          "sha256": "b4472548302419ab38e7169d83fe7bee7ffec2b29095ab4d5b5923d32cfbe1de"
+        },
+        "beam-node": {
+          "asset": "win-beam-node-7.5.14493.zip",
+          "file": "beam-node.exe",
+          "sha256": "17ffa8cf7d2ccf8f7feea2cd9aa42e0babc541ba2086a52ee157575d173caa4e"
+        },
+        "beam-wallet": {
+          "asset": "win-beam-wallet-cli-7.5.14493.zip",
+          "file": "beam-wallet.exe",
+          "sha256": "1ab78fc5e28d7c31a6a48bae0f294ed15073602557650bcc118b9351c80a0064"
+        }
+      }
+    },
+    "macos": {
+      "beam_version": "7.5.14493",
+      "hf6_compatible": true,
+      "_note": [
+        "BeamMW ships no macOS build of the HF6 hotfix \u2014 their last mac release is",
+        "7.5.13882 (2024-05-25), which stalls forever at block 3928665. These are",
+        "built from the beam-7.5.14493 tag ourselves; see docs/BUILDING_BEAM_MACOS.md.",
+        "Verified on 2026-08-04: Rules signature carries 3928666-96df3f33ee02ad9e and",
+        "the binary syncs to the live tip against a public node.",
+        "arm64 only. Rebuild from the tag when upstream bumps."
+      ],
+      "arch": "arm64",
+      "self_built": true,
+      "release_base_override": "https://github.com/vsnation/Beam-Light-Wallet/releases/download",
+      "asset_prefix": "mac-arm64",
+      "archive_ext": "zip",
+      "binaries": {
+        "wallet-api": {
+          "asset": "mac-arm64-wallet-api-7.5.14493.zip",
+          "sha256": "102f28256c01cfa37243c1b79564283e3f0ab8ead3d153c67f8ca5dd6117b624"
+        },
+        "beam-node": {
+          "asset": "mac-arm64-beam-node-7.5.14493.zip",
+          "sha256": "d5aadc3f3758f1ff9bd433915c08d0e81c9388b11b84ec94d0f7eade2adb5a57"
+        },
+        "beam-wallet": {
+          "asset": "mac-arm64-beam-wallet-cli-7.5.14493.zip",
+          "sha256": "c694187b4b5e00afb30d2106a2bfd4303462af37f8764afee7c28abfdc1adebb"
+        }
+      }
+    }
+  }
+}
