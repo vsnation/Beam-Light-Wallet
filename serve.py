@@ -1374,6 +1374,53 @@ def sweep_leaked_secrets():
     if cleaned or stale:
         print(f"[security] redacted secrets in {cleaned} log file(s), removed {stale} stale secret file(s)")
 
+    prune_logs()
+
+
+# Logs are never rotated by the BEAM binaries, and two files here had already
+# reached 4.3 MB. For a privacy coin they are not innocuous: wallet-api logs
+# carry addresses and transaction detail, so an unbounded pile of them is a
+# growing record of everything the wallet has ever done.
+LOG_RETENTION_BYTES = 50 * 1024 * 1024
+LOG_RETENTION_COUNT = 20
+
+
+def prune_logs():
+    """Keep the log directory bounded, oldest first.
+
+    Only touches files nothing is writing to: the newest LOG_RETENTION_COUNT are
+    always kept, which covers the current session's open handles.
+    """
+    try:
+        logs = sorted(
+            (f for f in LOGS_DIR.glob("*.log") if f.is_file()),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return
+
+    removed = 0
+    freed = 0
+    total = 0
+    for i, f in enumerate(logs):
+        try:
+            size = f.stat().st_size
+        except OSError:
+            continue
+        total += size
+        too_many = i >= LOG_RETENTION_COUNT
+        too_big = total > LOG_RETENTION_BYTES and i >= 3  # never touch the live ones
+        if too_many or too_big:
+            try:
+                f.unlink()
+                removed += 1
+                freed += size
+            except OSError:
+                pass
+    if removed:
+        print(f"[logs] pruned {removed} old log file(s), freed {freed // 1024} KB")
+
 
 def _harden_file(path):
     try:
