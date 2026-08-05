@@ -628,7 +628,14 @@ async function mcFetchQuote() {
     if (swapEl2) swapEl2.outerHTML = mcRenderSwapSection();
 }
 
+// Guards mcExecuteSwap. It spends BEAM and had no protection at all, so a
+// double-click sent two trades. The progress overlay appears only after the
+// first await, which is far too late to stop the second click.
+let mcSwapInFlight = false;
+
 async function mcExecuteSwap() {
+    if (mcSwapInFlight) return;
+
     const input = document.getElementById('mc-swap-amount');
     if (!input) return;
     const beamVal = input.value;
@@ -637,6 +644,11 @@ async function mcExecuteSwap() {
         mcToast('Enter a valid BEAM amount');
         return;
     }
+
+    // Claimed after the synchronous validation and before any await, so those
+    // early returns cannot leave it stuck on.
+    mcSwapInFlight = true;
+    try {
 
     const teamName = mcSwapTeam === 0 ? 'CHAD' : 'GIGA';
     const expectedTokens = mcSwapQuote ? mcFormatAmount(mcSwapQuote.tokens_to_user) : '';
@@ -672,6 +684,9 @@ async function mcExecuteSwap() {
         mcTxProgressSuccess(`$${teamName} purchase sent!`);
     }
     setTimeout(() => mcLoadAll(), 1500);
+    } finally {
+        mcSwapInFlight = false;
+    }
 }
 
 // =========================================================================
