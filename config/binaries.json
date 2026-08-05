@@ -12,8 +12,7 @@
     "min_consensus_height is the HF6 activation block. A node that cannot pass it is out of",
     "consensus no matter what its own logs claim about being synced."
   ],
-
-  "app_version": "1.1.0",
+  "app_version": "1.2.0",
   "min_consensus_height": 3928666,
   "hardfork": {
     "name": "HF6",
@@ -22,9 +21,7 @@
     "min_beam_version": "7.5.14493",
     "note": "Builds older than min_beam_version stall one block before this height and never recover."
   },
-
   "release_base": "https://github.com/BeamMW/beam/releases/download",
-
   "platforms": {
     "linux": {
       "beam_version": "7.5.14493",
@@ -47,7 +44,6 @@
         }
       }
     },
-
     "windows": {
       "beam_version": "7.5.14493",
       "hf6_compatible": true,
@@ -72,12 +68,11 @@
         }
       }
     },
-
     "macos": {
       "beam_version": "7.5.14493",
       "hf6_compatible": true,
       "_note": [
-        "BeamMW ships no macOS build of the HF6 hotfix — their last mac release is",
+        "BeamMW ships no macOS build of the HF6 hotfix \u2014 their last mac release is",
         "7.5.13882 (2024-05-25), which stalls forever at block 3928665. These are",
         "built from the beam-7.5.14493 tag ourselves; see docs/BUILDING_BEAM_MACOS.md.",
         "Verified on 2026-08-04: Rules signature carries 3928666-96df3f33ee02ad9e and",
