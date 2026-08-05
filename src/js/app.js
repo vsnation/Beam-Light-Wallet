@@ -15094,6 +15094,31 @@ async function createAirdropBatch() {
         // Concatenate all hash+value entries into one hex blob
         const vouchersHex = entries.join('');
 
+        // Persist the codes BEFORE broadcasting.
+        //
+        // They used to be written after process_invoke_data, which is the call
+        // that puts the transaction on the network. Anything interrupting that
+        // gap - a crash, a closed tab, a lost machine - left funds locked on
+        // chain whose only key existed in a local variable. The codes are the
+        // key: redeeming needs the code, and cancelling needs hashes derived
+        // from it. Losing them strands the money permanently.
+        //
+        // Writing first can leave a record for a transaction that never
+        // happened, which is harmless and visible: it stays 'unconfirmed' and
+        // the reconciliation below resolves it.
+        const stored = getAirdropCodes();
+        const batchKey = `batch_${Date.now()}`;
+        stored[batchKey] = {
+            assetId,
+            valuePerVoucher: valueGroth,
+            count,
+            createdAt: new Date().toISOString(),
+            txid: null,
+            txStatus: 'unconfirmed',
+            codes: codes.map(c => ({ code: c.code, hash: c.hash, value: c.value, status: 'pending' }))
+        };
+        saveAirdropCodes(stored);
+
         const result = await apiCall('invoke_contract', {
             args: `role=user,action=create_batch,cid=${AIRDROP_CID},asset_id=${assetId},count=${count},vouchers=${vouchersHex}`,
             create_tx: true,
@@ -15111,18 +15136,9 @@ async function createAirdropBatch() {
         progressFill.style.width = '70%';
         progressText.textContent = 'Transaction submitted, waiting for confirmation...';
 
-        // Save codes to localStorage with PENDING status and txid
-        const stored = getAirdropCodes();
-        const batchKey = `batch_${Date.now()}`;
-        stored[batchKey] = {
-            assetId,
-            valuePerVoucher: valueGroth,
-            count,
-            createdAt: new Date().toISOString(),
-            txid: txid || null,
-            txStatus: 'pending',
-            codes: codes.map(c => ({ code: c.code, hash: c.hash, value: c.value, status: 'pending' }))
-        };
+        // Now attach the txid to the record that is already safely on disk.
+        stored[batchKey].txid = txid || null;
+        stored[batchKey].txStatus = 'pending';
         saveAirdropCodes(stored);
 
         // Display codes immediately (with pending status)
