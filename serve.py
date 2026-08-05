@@ -2761,9 +2761,41 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 
+    # The page holds the session token and drives a signing API, so it must not
+    # be framable and must not be able to reach hosts we did not choose.
+    #
+    # 'unsafe-inline' for scripts is unavoidable today: the UI carries ~287
+    # inline onclick handlers. It still buys the important part - script-src
+    # 'self' means an injected <script src> pointing at an attacker host is
+    # refused, and connect-src pins where data can be sent. Removing the inline
+    # handlers would let this be tightened properly.
+    CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        # Icons are vendored; data: covers the inline BEAM logo.
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        # Explorer for the network tip, GitHub for the update check, Telegram
+        # only if the user has configured their own bot in settings.
+        "connect-src 'self' https://explorer.0xmx.net https://explorer-api.beamprivacy.com "
+        "https://BeamSmart.net:8000 https://api.github.com https://api.telegram.org; "
+        "frame-ancestors 'none'; "
+        "base-uri 'none'; "
+        "form-action 'none'; "
+        "object-src 'none'"
+    )
+
     def end_headers(self):
         if not hasattr(self, '_cors_sent'):
             self.send_cors_headers()
+        if not hasattr(self, '_sec_headers_sent'):
+            self._sec_headers_sent = True
+            self.send_header("Content-Security-Policy", self.CSP)
+            # frame-ancestors covers modern browsers; this covers the rest.
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
         super().end_headers()
 
     # ---- static asset compression and caching ---------------------------
