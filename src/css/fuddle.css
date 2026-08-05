@@ -5,8 +5,7 @@
    ============================================================================= */
 
 /* === Display Font — Syne for bold headings === */
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap');
-
+/* font now vendored locally; see css/fonts.css */
 /* === Local Fonts — Space Mono for game elements === */
 @font-face {
     font-family: 'Space Mono';

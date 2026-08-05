@@ -4,8 +4,7 @@
    All backgrounds CSS-only (gradients, box-shadows, pseudo-elements).
    ============================================================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
+/* font now vendored locally; see css/fonts.css */
 /* ===== Team Colors & Pixel Palette ===== */
 :root {
     --chad-color: #25c2a0;

@@ -457,18 +457,27 @@ function copyUpdateCommand(cmd) {
 // Official BEAM logo SVG
 const BEAM_LOGO = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 57 40"><defs><linearGradient id="a" x1=".03%" x2="54.79%" y1="50.23%" y2="50.23%"><stop offset="0%" stop-opacity="0"/><stop offset="100%" stop-color="#FFF"/></linearGradient><linearGradient id="b" x1="99.38%" x2="35.8%" y1="49.83%" y2="49.83%"><stop offset="0%" stop-opacity="0"/><stop offset="100%" stop-color="#FF51FF"/></linearGradient><linearGradient id="c" x1="100.43%" x2="48.94%" y1="50.11%" y2="50.11%"><stop offset="0%" stop-opacity="0"/><stop offset="100%" stop-color="#A18CFF"/></linearGradient><linearGradient id="d" x1="99.91%" x2="41.06%" y1="50.24%" y2="50.24%"><stop offset="0%" stop-opacity="0"/><stop offset="100%" stop-color="#AB38E6"/></linearGradient></defs><g fill="none"><path fill="#0B76FF" d="M28.47 33.21H40.3L28.48 12.58V.08l23.15 39.77H28.47z"/><path fill="#24C1FF" d="M28.47 33.21H16.66l11.8-20.63V.08L5.32 39.86h23.16z"/><path fill="#39FFF2" d="M28.47 17.8v13.33l-7.23.01z"/><path fill="#00E2C2" d="M28.47 17.8v13.33l7.24.01z"/><path fill="url(#a)" d="m.1 12.53 28.37 13.14v1.37L.11 20.82z"/><path fill="url(#b)" d="M56.9 8.7 28.47 25.68v.46L56.9 14.18z"/><path fill="url(#c)" d="m56.9 25.13-28.43 1.91v-.45l28.43-6.93z"/><path fill="url(#d)" d="M56.9 14.18 28.47 26.13v.46l28.43-6.93z"/></g></svg>');
 
-// Asset icons from ca_assets_updates.json - priority tokens with known logos
+// Asset icons, served locally.
+//
+// These used to point at raw.githubusercontent.com, arweave and ipfs.io. Each
+// icon is fetched only when the user holds or views that asset, so those hosts
+// received a request per token - which told GitHub, Arweave and IPFS the user's
+// IP address and which assets are in their wallet. On a privacy coin that is
+// the one thing the wallet exists to prevent, and it happened on every launch.
+//
+// Downloaded once and committed; see src/images/assets/. Adding an icon here
+// means adding a file, not a URL.
 const ASSET_ICONS = {
     0: BEAM_LOGO,
-    4: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/crown.ico',
-    7: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/beamx.png',
-    9: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/tico.ico',
-    47: 'https://raw.githubusercontent.com/vsnation/BeamPay/master/assets/47_nph.svg',
-    174: 'https://73ecj7qctz4nrza4bbbqmgriv4gh5uwwf65izu7wjdvrmozhbvbq.arweave.net/_sgk_gKeeNjkHAhDBhoorwx-0tYvuozT9kjrFjsnDUM',
-    186: 'https://ipfs.io/ipfs/QmZrekbbMSqYNjbkyKM9Ar3k7f6RUW2zUmNv9cxGz8DZvJ',
-    187: 'https://ipfs.io/ipfs/QmYMksnyN1Cb32jMFkQcjxao3i7XSPL1dWJuHrGXcTr5cx',
-    190: 'https://ipfs.io/ipfs/QmYMksnyN1Cb32jMFkQcjxao3i7XSPL1dWJuHrGXcTr5cx',
-    191: 'https://ipfs.io/ipfs/QmZrekbbMSqYNjbkyKM9Ar3k7f6RUW2zUmNv9cxGz8DZvJ'
+    4: '/images/assets/crown.ico',
+    7: '/images/assets/beamx.png',
+    9: '/images/assets/tico.ico',
+    47: '/images/assets/nph.svg',
+    174: '/images/assets/fomo.png',
+    186: '/images/assets/giga.png',
+    187: '/images/assets/chad.png',
+    190: '/images/assets/chad.png',
+    191: '/images/assets/giga.png'
 };
 
 // Priority token config with metadata
@@ -7995,6 +8004,33 @@ function renderDexPools() {
  * innerHTML in ~110 places, so they are escaped once here at the source rather
  * than at every render site, where one miss is a scripting hole in a wallet.
  */
+/**
+ * Asset metadata is written by whoever minted the asset, and `assets_list`
+ * returns every asset on the chain - not just the ones this wallet holds. So
+ * rendering `OPT_ICON_URL` as an <img src> means: anyone can mint a token whose
+ * icon points at a server they control, and every Light Wallet that opens the
+ * asset list sends them a request. That hands out the user's IP address and,
+ * for an asset they actually hold, what is in their wallet.
+ *
+ * On mainnet today that is not hypothetical - 14 distinct third-party hosts are
+ * already named in on-chain metadata, including imgur and several personal
+ * domains. A privacy coin wallet cannot be the thing that leaks this.
+ *
+ * Only self-contained sources are allowed through: files shipped with the
+ * wallet, and data: URIs, which cost no network request. Everything else
+ * returns null, and the existing initials-in-a-circle fallback renders instead.
+ */
+function safeAssetIcon(url) {
+    if (typeof url !== 'string' || !url) return null;
+    const u = url.trim();
+    // Bundled with the wallet.
+    if (u.startsWith('/images/') || u.startsWith('/icons/')) return u;
+    // Self-contained; no request leaves the machine. Images only - a data: URI
+    // can carry SVG, and SVG can carry script.
+    if (/^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(u)) return u;
+    return null;
+}
+
 function sanitizeAssetMeta(info) {
     if (!info) return info;
     const clean = { ...info };
@@ -8036,8 +8072,10 @@ function getAssetInfoRaw(aid) {
             meta = parsed;
         }
 
-        // Parse icon from metadata
-        let icon = meta.OPT_ICON_URL || meta.OPT_LOGO_URL || meta.OPT_FAVICON_URL || meta.ICON || null;
+        // Parse icon from metadata, then refuse to fetch it from the internet.
+        // See safeAssetIcon: this string is written by whoever minted the asset.
+        let icon = safeAssetIcon(
+            meta.OPT_ICON_URL || meta.OPT_LOGO_URL || meta.OPT_FAVICON_URL || meta.ICON || null);
 
         // Check ASSET_ICONS as fallback
         if (!icon && ASSET_ICONS[aid]) {

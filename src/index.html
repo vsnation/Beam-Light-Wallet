@@ -14,6 +14,7 @@
     <meta name="description" content="BEAM Light Wallet - Decentralized Privacy Wallet">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <!-- Stylesheets (fonts loaded locally via @font-face in base.css) -->
+    <link rel="stylesheet" href="/css/fonts.css">
     <link rel="stylesheet" href="/css/variables.css">
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/styles.css">
@@ -21,8 +22,10 @@
     <link rel="stylesheet" href="/css/fuddle.css">
     <link rel="stylesheet" href="/css/meme_battle.css">
 
-    <!-- External Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <!-- Vendored, not CDN: this origin holds the session token and the JSON-RPC
+         proxy that forwards tx_send, so a script here can spend the wallet.
+         See js/vendor/PROVENANCE.md for the npm integrity verification. -->
+    <script src="/js/vendor/qrcode.js"></script>
     <!-- DEX Shader (loads window.DEX_SHADER for contract calls) -->
     <script src="/js/dex-shader.js"></script>
     <!-- Airdrop Shader (loads window.AIRDROP_SHADER for airdrop contract calls) -->
