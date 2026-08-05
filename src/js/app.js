@@ -12645,10 +12645,42 @@ function parseExplorerTableRows(data) {
 }
 
 // Escape HTML
+/**
+ * Escape for HTML, including inside a quoted attribute.
+ *
+ * This used to be `div.textContent = str; return div.innerHTML`, which escapes
+ * < > and & but NOT quotes - the browser has no reason to escape a quote in
+ * text context. Most call sites here interpolate into `"`-delimited attributes,
+ * so a value containing a double quote closed the attribute and started a new
+ * one. Proven: escaping `" onmouseover="..." x="` and rendering it inside an
+ * href produced an element with real onmouseover and x attributes.
+ *
+ * That input is attacker-controlled: OPT_SITE_URL and friends come from on-chain
+ * asset metadata, and anyone can mint an asset. Script in this origin can read
+ * the session token and spend the wallet.
+ */
 function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * A URL safe to put in href. Escaping does not help here - `javascript:alert(1)`
+ * contains nothing that needs escaping - so the scheme itself must be checked.
+ * Anything not plainly http/https becomes '#'.
+ */
+function safeUrl(url) {
+    const raw = String(url == null ? '' : url).trim();
+    if (!raw) return '#';
+    try {
+        const parsed = new URL(raw, window.location.origin);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+    } catch (e) { /* not a URL at all */ }
+    return '#';
 }
 
 // Copy button HTML
@@ -12856,7 +12888,7 @@ async function showAssetDetail(assetId) {
                     <div class="detail-label">Owner Contract</div>
                     <div class="detail-value">${asset?.owner ? `<span class="hash truncate clickable" onclick="showContractDetail('${asset.owner}')" title="${asset.owner}">${asset.owner.slice(0,12)}...${asset.owner.slice(-8)}</span>` : 'None'}</div>
                 </div>
-                ${meta.OPT_SITE_URL ? `<div class="detail-item"><div class="detail-label">Website</div><div class="detail-value"><a href="${escapeHtml(meta.OPT_SITE_URL)}" target="_blank">${escapeHtml(meta.OPT_SITE_URL.slice(0,40))}...</a></div></div>` : ''}
+                ${meta.OPT_SITE_URL ? `<div class="detail-item"><div class="detail-label">Website</div><div class="detail-value"><a href="${escapeHtml(safeUrl(meta.OPT_SITE_URL))}" target="_blank" rel="noopener noreferrer">${escapeHtml(meta.OPT_SITE_URL.slice(0,40))}...</a></div></div>` : ''}
                 ${meta.OPT_SHORT_DESC ? `<div class="detail-item full-width"><div class="detail-label">Description</div><div class="detail-value">${escapeHtml(meta.OPT_SHORT_DESC)}</div></div>` : ''}
             </div>
 
@@ -14094,6 +14126,21 @@ window.addEventListener('message', async (event) => {
     // Only handle p2p_request messages
     if (!event.data || event.data.type !== 'p2p_request') return;
 
+    // This handler can tx_send and invoke_contract. It never checked who was
+    // asking, so any page holding a handle to this window - one that called
+    // window.open on the wallet, or an embedded frame - could post a message
+    // and have the wallet sign a transaction. The session token is no defence:
+    // the handler calls apiCall itself, with the token already attached.
+    //
+    // Only this exact origin may talk to it, and only when the feature that
+    // needs it is actually switched on.
+    if (event.origin !== window.location.origin) {
+        console.warn('[p2p] refused message from foreign origin:', event.origin);
+        return;
+    }
+    if (!FEATURE_P2P) return;
+    if (!event.source || event.source === window) return;
+
     const { id, action, params } = event.data;
     let result = null;
     let error = null;
@@ -14230,12 +14277,28 @@ function saveAirdropCodes(codes) {
 }
 
 // Generate random voucher code: XXXX-XXXX-XXXX-XXXX
+//
+// These codes ARE the key to the locked funds - whoever presents one redeems
+// the voucher. They were generated with Math.random(), which in V8 is
+// xorshift128+ and not cryptographically secure: a handful of outputs from one
+// page context is enough to recover the generator state and reproduce every
+// other value it will ever produce. Airdrop codes are meant to be handed out,
+// so an attacker who receives a few legitimately could derive the batch's
+// remaining unclaimed codes and take the rest of the airdrop.
+//
+// crypto.getRandomValues, with rejection sampling so the alphabet stays
+// uniform. 32 symbols divides 256 exactly, so nothing is ever rejected here,
+// but the guard keeps it correct if the alphabet changes.
 function generateVoucherCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I,O,0,1 to avoid confusion
+    const limit = Math.floor(256 / chars.length) * chars.length;
     let code = '';
+    const buf = new Uint8Array(1);
     for (let i = 0; i < 16; i++) {
         if (i > 0 && i % 4 === 0) code += '-';
-        code += chars[Math.floor(Math.random() * chars.length)];
+        let b;
+        do { crypto.getRandomValues(buf); b = buf[0]; } while (b >= limit);
+        code += chars[b % chars.length];
     }
     return code;
 }
