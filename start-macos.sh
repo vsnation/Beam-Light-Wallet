@@ -14,6 +14,22 @@ set -e
 PORT=9080
 REPO_URL="https://github.com/vsnation/Beam-Light-Wallet"
 
+# ---------------------------------------------------------------------------
+# Updates track RELEASE TAGS, not branch HEAD.
+#
+# These scripts used to fetch origin/main - whatever happened to be on the
+# branch at that moment, including half-finished work. Worse, the y/N prompt
+# looked like a security control but is not one: agreeing to an update verifies
+# nothing. If the GitHub account or the repo were compromised, a user answering
+# "y" to a legitimate-looking prompt would execute the attacker's code.
+#
+# A tag is at least reviewed, deliberate and immutable-by-convention. It is NOT
+# a substitute for a signature: nothing here proves the tarball came from the
+# maintainer. Until releases are signed (minisign or GPG, both free), treat this
+# as reduced exposure, not a solved problem, and say so in the release notes.
+# ---------------------------------------------------------------------------
+
+
 # Platform (hardcoded for macOS; also the key into the manifest's "platforms")
 PLATFORM="macos"
 
@@ -292,7 +308,7 @@ if [ ! -f "$INSTALL_DIR/serve.py" ]; then
             git pull 2>/dev/null || true
         }
     else
-        curl -sL "$REPO_URL/archive/main.tar.gz" | tar -xz --strip-components=1 -C "$INSTALL_DIR"
+        curl -sL "$REPO_URL/archive/refs/tags/$(curl -s https://api.github.com/repos/vsnation/Beam-Light-Wallet/releases/latest | python3 -c "import sys,json;print(json.load(sys.stdin).get('tag_name',''))").tar.gz" | tar -xz --strip-components=1 -C "$INSTALL_DIR"
     fi
 
     echo "Installation complete!"
@@ -306,15 +322,17 @@ echo "Checking for updates..."
 cd "$INSTALL_DIR"
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-    if git fetch --quiet origin main 2>/dev/null; then
+    if git fetch --quiet --tags origin 2>/dev/null; then
         LOCAL_REV=$(git rev-parse HEAD 2>/dev/null)
-        REMOTE_REV=$(git rev-parse origin/main 2>/dev/null)
+        # Compare against the newest release tag, not the branch tip.
+        LATEST_TAG=$(git tag -l --sort=-v:refname | head -1)
+        REMOTE_REV=$(git rev-parse "$LATEST_TAG" 2>/dev/null)
         if [ -n "$REMOTE_REV" ] && [ "$LOCAL_REV" != "$REMOTE_REV" ]; then
             echo ""
             echo "============================================"
             echo "  UPDATE AVAILABLE"
             echo "============================================"
-            CHANGES=$(git log --oneline HEAD..origin/main 2>/dev/null | head -5)
+            CHANGES=$(git log --oneline HEAD..$(git tag -l --sort=-v:refname | head -1) 2>/dev/null | head -5)
             if [ -n "$CHANGES" ]; then
                 echo "  Changes:"
                 echo "$CHANGES" | while read -r line; do echo "    $line"; done
@@ -325,7 +343,7 @@ if [ -d "$INSTALL_DIR/.git" ]; then
             read -r UPDATE_CHOICE
             if [ "$UPDATE_CHOICE" = "y" ] || [ "$UPDATE_CHOICE" = "Y" ]; then
                 echo "Downloading update..."
-                git reset --hard origin/main 2>/dev/null || git pull origin main 2>/dev/null || true
+                LATEST_TAG=$(git tag -l --sort=-v:refname | head -1); if [ -n "$LATEST_TAG" ]; then git checkout -q "$LATEST_TAG" 2>/dev/null || true; else echo "  No release tag found; leaving the working copy alone."; fi
                 echo "Updated to $(git log --oneline -1 2>/dev/null)"
             else
                 echo "Update skipped. Will ask again next launch."
@@ -337,7 +355,7 @@ if [ -d "$INSTALL_DIR/.git" ]; then
         echo "Skipped (no internet connection)"
     fi
 else
-    REMOTE_SHA=$(curl -s --connect-timeout 5 "https://api.github.com/repos/vsnation/Beam-Light-Wallet/commits/main" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha',''))" 2>/dev/null || echo "")
+    REMOTE_SHA=$(curl -s --connect-timeout 5 "https://api.github.com/repos/vsnation/Beam-Light-Wallet/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name',''))" 2>/dev/null || echo "")
     LOCAL_SHA_FILE="$INSTALL_DIR/.last_update_sha"
     LOCAL_SHA=""
     [ -f "$LOCAL_SHA_FILE" ] && LOCAL_SHA=$(cat "$LOCAL_SHA_FILE" 2>/dev/null)
@@ -352,7 +370,7 @@ else
         if [ "$UPDATE_CHOICE" = "y" ] || [ "$UPDATE_CHOICE" = "Y" ]; then
             echo "Downloading update..."
             TEMP_DIR=$(mktemp -d)
-            if curl -sL --connect-timeout 5 "$REPO_URL/archive/main.tar.gz" -o "$TEMP_DIR/latest.tar.gz" 2>/dev/null; then
+            if curl -sL --connect-timeout 5 "$REPO_URL/archive/refs/tags/$REMOTE_SHA.tar.gz" -o "$TEMP_DIR/latest.tar.gz" 2>/dev/null; then
                 mkdir -p "$TEMP_DIR/extracted"
                 tar -xzf "$TEMP_DIR/latest.tar.gz" --strip-components=1 -C "$TEMP_DIR/extracted" 2>/dev/null
                 if [ -f "$TEMP_DIR/extracted/serve.py" ]; then
