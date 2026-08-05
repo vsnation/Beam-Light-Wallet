@@ -1916,6 +1916,21 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 "error": str(e)
             })
 
+    def _valid_wallet_name(self, name):
+        """Reject a wallet name that is not a plain identifier.
+
+        These names become path components under WALLETS_DIR. Only delete
+        validated; unlock, create, restore, rescan, node switch and owner-key
+        export each took whatever they were given. All six sit behind the CSRF
+        and token guards, so this is defence in depth rather than an open door -
+        but it costs nothing and there is no reason for a wallet name to contain
+        a slash or a dot-dot.
+        """
+        if WALLET_NAME_RE.match(name or ""):
+            return True
+        self.send_json({"error": "Invalid wallet name"}, 400)
+        return False
+
     def handle_node_start(self):
         """Start local beam-node"""
         try:
@@ -1943,6 +1958,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             mode = body.get("mode", "public")
             password = body.get("password") or active_password
             wallet_name = body.get("wallet")
+            if not self._valid_wallet_name(wallet_name):
+                return
             node_addr = body.get("node")
 
             if not password:
@@ -1978,6 +1995,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             global node_mode, active_password, active_owner_key
             body = self.get_json_body()
             wallet_name = body.get("wallet")
+            if not self._valid_wallet_name(wallet_name):
+                return
             password = body.get("password")
             node_addr = body.get("node")
 
@@ -2020,6 +2039,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         try:
             body = self.get_json_body()
             wallet_name = body.get("wallet")
+            if not self._valid_wallet_name(wallet_name):
+                return
             password = body.get("password")
 
             if not wallet_name:
@@ -2044,6 +2065,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         try:
             body = self.get_json_body()
             wallet_name = body.get("wallet")
+            if not self._valid_wallet_name(wallet_name):
+                return
             password = body.get("password")
             seed_phrase = body.get("seed_phrase")
 
@@ -2086,6 +2109,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         try:
             body = self.get_json_body()
             wallet_name = body.get("wallet") or active_wallet
+            if not self._valid_wallet_name(wallet_name):
+                return
             password = body.get("password")
 
             if not wallet_name:
@@ -2211,6 +2236,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             global active_password, active_owner_key
             body = self.get_json_body()
             wallet_name = body.get("wallet")
+            if not self._valid_wallet_name(wallet_name):
+                return
             password = body.get("password")
 
             if not wallet_name:
