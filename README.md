@@ -24,6 +24,16 @@
 
 ---
 
+
+## Using it from your phone
+
+Your phone is only a screen: keys, seed phrase and `wallet.db` never leave
+your computer. The wallet binds to loopback and refuses any request that did
+not arrive there, so access is over an SSH tunnel (free, no ports opened).
+
+See **[docs/MOBILE_ACCESS.md](docs/MOBILE_ACCESS.md)** — including the part
+people get wrong: the tunnel must use port 9080 on *both* ends.
+
 ## Quick Install
 
 **Which platforms follow mainnet today**
