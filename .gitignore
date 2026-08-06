@@ -200,3 +200,8 @@ meme_game/
 
 # Agent tooling. Contains credentials and internal notes; never ship it.
 .claude/
+
+# The signing PRIVATE key must never be here. The public key is committed
+# deliberately by the maintainer once they generate their own keypair.
+*-release-key.pem
+.beam-release-key.pem

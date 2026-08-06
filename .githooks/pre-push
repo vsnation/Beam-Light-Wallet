@@ -11,7 +11,15 @@ fail=0
 # 1. Secrets. Extend this list, never shorten it.
 if git diff --cached --name-only 2>/dev/null | head -1 >/dev/null; then :; fi
 SECRETS=$(git grep -nIE 'BeamTest2024|-----BEGIN [A-Z ]*PRIVATE KEY-----|[0-9]{9,10}:AA[A-Za-z0-9_-]{33}' \
-            HEAD -- ':!*.githooks*' ':!*ci.yml' 2>/dev/null || true)
+            HEAD -- ':!*.githooks*' ':!*ci.yml' ':!scripts/release-sign.sh' ':!scripts/verify-release.sh' 2>/dev/null || true)
+
+# A signing private key in the repo would make every signature meaningless.
+KEYS=$(git ls-files | grep -E '(release-key|private).*\.pem$' || true)
+if [ -n "$KEYS" ]; then
+    echo "pre-push BLOCKED: a private key looks committed"
+    echo "$KEYS"
+    fail=1
+fi
 if [ -n "$SECRETS" ]; then
     echo "pre-push BLOCKED: a secret is committed"
     echo "$SECRETS" | head -5
