@@ -376,14 +376,40 @@ if [ -f "$BUILD_DIR/AppIcon.icns" ]; then
     echo "Icon copied to app bundle"
 fi
 
-# Copy resources
-echo "Copying application files..."
-cp -r "$PROJECT_DIR/src" "$APP_BUNDLE/Contents/Resources/"
-cp -r "$PROJECT_DIR/js" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
-cp -r "$PROJECT_DIR/config" "$APP_BUNDLE/Contents/Resources/"
-cp -r "$PROJECT_DIR/shaders" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
-cp "$PROJECT_DIR/serve.py" "$APP_BUNDLE/Contents/Resources/"
-cp "$PROJECT_DIR/README.md" "$APP_BUNDLE/Contents/Resources/"
+# Copy resources from the COMMITTED tree, not the working directory.
+#
+# This used to `cp -r "$PROJECT_DIR/src"` and friends, which ships whatever
+# happens to be on disk: editor leftovers, .DS_Store, scratch files, and any
+# untracked file at all. That is not hypothetical - a directory of agent config
+# containing a live API token sat untracked in this working tree, and the same
+# mechanism would have shipped it to every user who installed the DMG.
+#
+# git archive exports exactly what is committed at BUILD_REF, so the DMG matches
+# a reviewable commit and nothing else.
+BUILD_REF="${BUILD_REF:-HEAD}"
+echo "Copying application files from git ref: $BUILD_REF"
+
+if ! git -C "$PROJECT_DIR" rev-parse --verify --quiet "$BUILD_REF" >/dev/null; then
+    echo "ERROR: '$BUILD_REF' is not a valid git ref. Set BUILD_REF, or commit first."
+    exit 1
+fi
+
+if [ -n "$(git -C "$PROJECT_DIR" status --porcelain --untracked-files=no)" ]; then
+    echo ""
+    echo "  WARNING: the working tree has uncommitted changes."
+    echo "  They will NOT be in this build - it is made from $BUILD_REF."
+    echo ""
+fi
+
+EXPORT_DIR="$(mktemp -d)"
+git -C "$PROJECT_DIR" archive "$BUILD_REF" | tar -x -C "$EXPORT_DIR"
+
+for item in src js config shaders serve.py README.md; do
+    if [ -e "$EXPORT_DIR/$item" ]; then
+        cp -r "$EXPORT_DIR/$item" "$APP_BUNDLE/Contents/Resources/"
+    fi
+done
+rm -rf "$EXPORT_DIR"
 
 # Note: User data (binaries, wallets, logs, node_data) stored in
 # ~/.beam-light-wallet/ to survive updates
