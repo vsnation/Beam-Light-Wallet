@@ -162,3 +162,18 @@ a:hover {
     cursor: not-allowed;
     pointer-events: none;
 }
+
+/* The hidden attribute must actually hide things.
+   
+   The UA stylesheet implements [hidden] as `display: none`, which any author
+   rule setting `display` silently overrides. `.nav-item { display: flex }` did
+   exactly that, so the P2P nav button - a feature switched off in code, with a
+   dead relay behind it - stayed visible and clickable, and every
+   `el.hidden = !FEATURE_X` in applyFeatureFlags() was a no-op for anything
+   styled with a display value.
+   
+   This is the standard remedy and the one place !important is correct: nothing
+   should be able to out-specify "this is hidden". */
+[hidden] {
+    display: none !important;
+}
