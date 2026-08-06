@@ -82,17 +82,52 @@ jobs:
             exit 1
           fi
 
-      # The frontend builds the DMG name itself; if it disagrees with the builder
-      # the in-app update link 404s, which is the current macOS experience.
-      - name: DMG filename agrees between builder and frontend
+      # The frontend used to construct a DMG filename and link straight to it.
+      # v1.0.5 shipped Beam-Light-Wallet-1.0.5.dmg while the frontend asked for
+      # BEAM-LightWallet-1.0.5.dmg, and later releases ship no DMG at all, so
+      # every in-app "Update Now" click landed on a GitHub 404. The links now
+      # point at the release tag page, which cannot drift. Keep it that way.
+      - name: Update links point at a release page, not a guessed filename
         run: |
-          builder=$(grep -oE 'Beam-Light-Wallet-[^"]*\.dmg|BEAM-LightWallet-[^"]*\.dmg' build/macos/create-dmg.sh | head -1 | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+/VER/')
-          frontend=$(grep -ohE 'Beam-Light-Wallet-[^`"]*\.dmg|BEAM-LightWallet-[^`"]*\.dmg' src/js/app.js | head -1 | sed -E 's/\$\{[^}]*\}/VER/')
-          echo "builder=$builder frontend=$frontend"
-          if [ -n "$builder" ] && [ -n "$frontend" ] && [ "$builder" != "$frontend" ]; then
-            echo "::error::DMG name mismatch: builder '$builder' vs frontend '$frontend'"
+          bad=$(grep -n 'releases/download/[^"`]*\.dmg' src/js/app.js || true)
+          if [ -n "$bad" ]; then
+            echo "::error::app.js links directly to a DMG asset; use the release tag page instead"
+            echo "$bad"
             exit 1
           fi
+          if ! grep -q 'releases/tag/v' src/js/app.js; then
+            echo "::error::no release-page link found in app.js — the guard would pass vacuously"
+            exit 1
+          fi
+          echo "update links OK"
+
+      # Every credential that reached this repo did so through a broad `git add`.
+      # This is the same scan the pre-push hook runs, so CI catches it even if
+      # someone pushes without hooks installed.
+      - name: No credentials committed
+        run: |
+          hits=$(grep -rInE '[0-9]{9,10}:AA[A-Za-z0-9_-]{33}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}' \
+                   --exclude-dir=.git --exclude='ci.yml' --exclude-dir=.githooks . || true)
+          if [ -n "$hits" ]; then
+            echo "::error::a credential is committed:"
+            echo "$hits" | head -5
+            exit 1
+          fi
+          echo "no credentials found"
+
+      # The DMG must be built from a git ref, not the working tree, or untracked
+      # files ship to users. That is how a live API token nearly went out.
+      - name: DMG builds from the committed tree
+        run: |
+          # Ignore comment lines: the script explains the old approach in prose.
+          if grep -vE '^\s*#' build/macos/create-dmg.sh \
+             | grep -qE 'cp -r "\$PROJECT_DIR/(src|config|shaders)"'; then
+            echo "::error::create-dmg.sh copies the working tree; it must use git archive"
+            exit 1
+          fi
+          grep -q 'git .*archive' build/macos/create-dmg.sh || {
+            echo "::error::create-dmg.sh no longer exports from git"; exit 1; }
+          echo "DMG source OK"
 
   ui-smoke:
     name: Headless UI smoke test

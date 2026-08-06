@@ -126,7 +126,7 @@ async function showUpdateNotification(version, url, releaseNotes) {
                 font-size: 13px;
                 font-weight: 600;
             ">Update Now</button>`
-        : `<a href="https://github.com/${GITHUB_REPO}/releases/download/v${version}/BEAM-LightWallet-${version}.dmg" style="
+        : `<a href="https://github.com/${GITHUB_REPO}/releases/tag/v${version}" target="_blank" rel="noopener noreferrer" style="
                 background: var(--bg-dark);
                 color: var(--text-primary);
                 border: none;
@@ -370,7 +370,14 @@ async function showUpdateModal(version, url) {
         `;
     } else if (installType === 'dmg') {
         // DMG installation - download new DMG
-        const dmgUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/BEAM-LightWallet-${version}.dmg`;
+        // The release PAGE, not a guessed asset filename. Both link sites used to
+        // construct BEAM-LightWallet-<version>.dmg, but v1.0.5 shipped
+        // Beam-Light-Wallet-1.0.5.dmg and later releases ship no DMG at all, so
+        // every "Update Now" click landed on a GitHub 404. A filename is a
+        // detail that drifts; the tag page is stable, lists whatever assets
+        // actually exist, and shows the release notes - which for a security
+        // release is what the user should read anyway.
+        const dmgUrl = `https://github.com/${GITHUB_REPO}/releases/tag/v${version}`;
         modalContent = `
             <div class="modal" style="max-width: 450px;">
                 <div class="modal-header">
