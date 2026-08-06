@@ -5380,8 +5380,23 @@ function startNodeSyncChecker() {
             const res = await fetch('/api/node/status');
             const status = await res.json();
 
-            if (status.running && status.synced) {
-                console.log('Local node synced! Switching...');
+            // A node's own log saying "100%" is its opinion of itself, and this
+            // wallet has already been burned by trusting that: an HF6-stalled
+            // node reports a perfectly plausible tip forever. Switch only when
+            // its height is independently corroborated by the network tip we
+            // fetch from an explorer.
+            const tip = (typeof networkTipHeight === 'number') ? networkTipHeight : 0;
+            const nodeH = Number(status.height || 0);
+            const corroborated = tip > 0 && nodeH > 0 && (tip - nodeH) <= 5;
+
+            if (status.running && status.synced && !corroborated) {
+                console.log(`Local node claims synced at ${nodeH}, network tip ${tip} — not switching yet`);
+                updateNodeSyncBanner(true, 99, false, 'Local node almost ready — confirming against the network...');
+                return;
+            }
+
+            if (status.running && status.synced && corroborated) {
+                console.log('Local node synced and corroborated! Switching...');
 
                 if (currentNodeType !== 'local') {
                     updateNodeSyncBanner(true, 100, true, 'Local node synced — switching...');

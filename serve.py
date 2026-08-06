@@ -492,12 +492,35 @@ def stop_wallet_api():
 
 
 def get_beam_node_pid():
-    """Get beam-node PID if running (cross-platform)"""
-    # Check stored process object first (works on all platforms)
+    """PID of OUR beam-node, or None.
+
+    The fallback used to be `pgrep -f beam-node`, which matches any process
+    whose full command line merely contains that string - a `tail` of
+    beam-node.log, a grep, an editor, the user's own shell. The wallet then
+    believed a local node was running when none was, and this repository has
+    already been bitten once by exactly this (see the lsof note in CLAUDE.md
+    about killing beam-node because it had outgoing connections on port 10000).
+
+    Match the executable name exactly, then confirm the process really is the
+    binary we ship, so an unrelated program called beam-node cannot be mistaken
+    for ours.
+    """
     if beam_beam_node_process and beam_beam_node_process.poll() is None:
         return beam_beam_node_process.pid
-    # Fallback: search by name
-    return find_pid_by_name("beam-node")
+
+    try:
+        if PLATFORM == "windows":
+            return find_pid_by_name("beam-node")
+        r = subprocess.run(["pgrep", "-x", "beam-node"], capture_output=True, text=True, timeout=5)
+        for pid in r.stdout.split():
+            cmd = subprocess.run(["ps", "-o", "command=", "-p", pid],
+                                 capture_output=True, text=True, timeout=5).stdout.strip()
+            argv0 = cmd.split()[0] if cmd else ""
+            if argv0 == str(BEAM_NODE_BINARY) or os.path.basename(argv0) == "beam-node":
+                return int(pid)
+        return None
+    except Exception:
+        return None
 
 
 def is_node_running():
@@ -514,6 +537,20 @@ def get_node_sync_status():
         log_file = LOGS_DIR / "beam-node.log"
         if not log_file.exists():
             return {"running": True, "synced": False, "height": 0, "progress": 0}
+
+        # A log left behind by a previous run describes a node that no longer
+        # exists. Reading it as live state is how this reported "48% synced,
+        # height 217637" for a node that had not run in two days, which in turn
+        # drove a "you are 175,066 blocks behind" warning at a wallet that was
+        # sitting exactly on the tip. If nothing has been written recently, say
+        # the state is unknown rather than inventing one.
+        try:
+            age = time.time() - log_file.stat().st_mtime
+        except OSError:
+            age = 0
+        if age > 300:
+            return {"running": True, "synced": False, "height": 0, "progress": 0,
+                    "stale_log": True, "log_age_seconds": int(age)}
 
         # Read log with encoding fallback (Windows beam-node may write UTF-16)
         content = None
@@ -545,7 +582,11 @@ def get_node_sync_status():
             match = re.search(r'Updating node:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
             if match:
                 progress = int(match.group(1))
-                current_height = int(match.group(2))
+                # Those two numbers count fast-sync work units, NOT block
+                # heights. Reporting the first as a height produced "217637"
+                # while the same log said "My Tip: 3949672" a few lines up, and
+                # the UI then subtracted it from the real tip. Height comes from
+                # "My Tip" below, and only from there.
                 target_height = int(match.group(3))
                 if progress == 100:
                     synced = True
