@@ -87,7 +87,7 @@
       "binaries": {
         "wallet-api": {
           "asset": "mac-arm64-wallet-api-7.5.14493.zip",
-          "sha256": "102f28256c01cfa37243c1b79564283e3f0ab8ead3d153c67f8ca5dd6117b624"
+          "sha256": "46856bebcef045173fbe39c7c75efc34b74f80fb1e02761fb977b5bf6453c82e"
         },
         "beam-node": {
           "asset": "mac-arm64-beam-node-7.5.14493.zip",

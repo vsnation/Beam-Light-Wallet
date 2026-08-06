@@ -40,6 +40,29 @@ let swapMyOffers = [];
 let swapBoardError = null;
 let swapSupported = null;      // null until probed
 let swapTxInFlight = false;
+let swapCoinConnected = {};    // coin id -> bool | undefined (unknown)
+
+/**
+ * Is the other chain's wallet reachable?
+ *
+ * An atomic swap has to build a hash time-locked contract on BOTH chains, so
+ * BEAM needs a connection to a Bitcoin/Litecoin/Ethereum wallet to do its half.
+ * Without one, an offer can be typed and published-looking right up to the
+ * point wallet-api answers "No connection with the BTC wallet".
+ *
+ * That is the failure this whole codebase has been full of: the interface says
+ * yes and the transaction says no. Ask first, and say so before the form is
+ * filled in.
+ */
+async function checkSwapCoinConnection(coinId) {
+    try {
+        await apiCall('swap_recommended_fee_rate', { coin: coinId }, { quiet: true });
+        swapCoinConnected[coinId] = true;
+    } catch (e) {
+        swapCoinConnected[coinId] = !/No connection with|Doesn't have an/i.test(String(e && e.message || e));
+    }
+    return swapCoinConnected[coinId];
+}
 
 function swapCoinById(id) {
     return SWAP_COINS.find(c => c.id === id) || SWAP_COINS[0];
@@ -157,6 +180,8 @@ async function loadSwapMarket() {
         swapMyOffers = (Array.isArray(mine) ? mine : [])
             .map(o => swapNormaliseOffer(o, coin.symbol))
             .filter(Boolean);
+
+        await checkSwapCoinConnection(coin.id);
     } catch (e) {
         swapBoardError = e && e.message ? e.message : String(e);
         swapBook = { bids: [], asks: [] };
@@ -219,12 +244,26 @@ function renderSwapMarket() {
         return;
     }
 
+    const connected = swapCoinConnected[coin.id];
+    const notConnected = connected === false;
+    const connBanner = notConnected ? `
+        <div class="swap-unavailable" style="margin-bottom:var(--space-4);margin-top:0;">
+            <h3>No ${escapeHtml(coin.symbol)} wallet connected</h3>
+            <p>An atomic swap builds a time-locked contract on <em>both</em> chains, so
+               your wallet needs a way to reach ${escapeHtml(coin.name)} to do its half.
+               You can browse the book without one, but publishing or taking an offer
+               will fail.</p>
+            <p class="swap-note">Connect an Electrum server or node for
+               ${escapeHtml(coin.symbol)} in Settings, then reload this page.</p>
+        </div>` : '';
+
     const totalOffers = swapBook.bids.length + swapBook.asks.length;
     const spread = (swapBook.bids[0] && swapBook.asks[0])
         ? swapBook.asks[0].price - swapBook.bids[0].price
         : null;
 
     el.innerHTML = `
+        ${connBanner}
         <div class="swap-book">
             <div class="swap-book-head">
                 <span>Price <em>${escapeHtml(coin.symbol)}/BEAM</em></span>
@@ -271,6 +310,12 @@ async function takeSwapOffer(token) {
     if (swapTxInFlight) return;
     if (isWalletOutOfSync()) {
         showToast('Wallet is out of sync — taking an offer is disabled until it catches up', 'error');
+        return;
+    }
+    if (swapCoinConnected[swapMarketCoin] === false) {
+        const c = swapCoinById(swapMarketCoin);
+        showToast(`No ${c.symbol} wallet is connected, so this swap could not settle. `
+            + `Connect ${c.name} in Settings first.`, 'error');
         return;
     }
 
@@ -347,6 +392,11 @@ async function createSwapOffer() {
 
     if (isWalletOutOfSync()) {
         showToast('Wallet is out of sync — creating an offer is disabled until it catches up', 'error');
+        return;
+    }
+    if (swapCoinConnected[coin.id] === false) {
+        showToast(`No ${coin.symbol} wallet is connected, and a swap needs one to lock `
+            + `the other side. Connect ${coin.name} in Settings first.`, 'error');
         return;
     }
 
