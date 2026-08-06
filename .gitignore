@@ -147,7 +147,14 @@ data/fuddle/
 **/words_*.txt
 
 # Marketing & tooling scripts
-scripts/
+# Local tooling: marketing automation, deploy helpers, and the word-list
+# seeders whose answers must stay private. Ignore the contents rather than the
+# directory itself, so specific files can be un-ignored below - git cannot
+# un-ignore a file inside an excluded directory.
+scripts/*
+# ...except the release verification tooling, which users must be able to fetch.
+!scripts/release-sign.sh
+!scripts/verify-release.sh
 
 # Test files are tracked. They used to carry a real mainnet wallet password,
 # which is why they were ignored; they now read $BEAM_TEST_PASSWORD instead.
