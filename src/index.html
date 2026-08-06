@@ -390,6 +390,10 @@
                                     Create Token
                                 </button>
                             </div>
+                            <!-- Wrapped: .balances-table carries min-width:700px, so
+                                 unwrapped it stretches the whole document on a phone
+                                 instead of scrolling inside its own box. -->
+                            <div class="balances-table-wrapper">
                             <table class="balances-table">
                                 <thead>
                                     <tr>
@@ -404,6 +408,7 @@
                                     <!-- Filled by JS -->
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </section>
                 </div>

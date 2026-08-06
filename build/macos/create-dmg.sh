@@ -315,13 +315,30 @@ tell application "Terminal"
 
         echo \"\"
         echo \"Downloading beam-node...\"
-        curl -fL -# \"\${GITHUB_BASE}/\${ASSET_BEAM_NODE}\" -o beam-node.zip
-        unzip -o beam-node.zip 2>/dev/null && tar -xf beam-node.tar 2>/dev/null || true
-        rm -f beam-node.zip beam-node.tar
-        if [ -f beam-node ]; then
-            chmod +x beam-node
-            verify_sha256 beam-node \"\$SHA_BEAM_NODE\" || exit 1
-            echo \"beam-node downloaded!\"
+        # Unlike the two above, a failed node download used to be swallowed:
+        # curl without || exit 1, extraction with || true, and the verification
+        # tucked inside an if [ -f ]. Setup then reported success with no node,
+        # and the user discovered it much later when Local Node did nothing.
+        # A missing node is not fatal - the wallet works against public nodes -
+        # but it must be said out loud, not hidden.
+        if curl -fL -# \"\${GITHUB_BASE}/\${ASSET_BEAM_NODE}\" -o beam-node.zip; then
+            unzip -o beam-node.zip 2>/dev/null && tar -xf beam-node.tar 2>/dev/null || true
+            rm -f beam-node.zip beam-node.tar
+            if [ -f beam-node ]; then
+                chmod +x beam-node
+                verify_sha256 beam-node \"\$SHA_BEAM_NODE\" || exit 1
+                echo \"beam-node downloaded!\"
+            else
+                echo \"\"
+                echo \"  WARNING: beam-node archive downloaded but no binary inside.\"
+                echo \"  The wallet will work on public nodes; Local Node will not.\"
+            fi
+        else
+            rm -f beam-node.zip
+            echo \"\"
+            echo \"  WARNING: could not download beam-node.\"
+            echo \"  The wallet will work on public nodes; Local Node will not be\"
+            echo \"  available until you re-run setup with a working connection.\"
         fi
 
         echo \"\"

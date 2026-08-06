@@ -6822,3 +6822,65 @@ tr.skeleton-row {
     outline: 2px solid var(--beam-cyan, #00d4ff);
     outline-offset: 2px;
 }
+
+/* ---------------------------------------------------------------------------
+   Phone header.
+
+   On a 390px screen the title, the network chip and three action buttons do not
+   fit on one line, and the row simply overflowed: "Buy $BEAM" was clipped and
+   the LOCK BUTTON was pushed off-screen entirely. Locking is the one control a
+   user reaches for when something feels wrong, so it cannot be the thing that
+   falls off the edge.
+
+   The title and the network height are the parts that can give way - both are
+   repeated elsewhere on the page - so they shrink and truncate, and the actions
+   keep their space.
+   --------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+    .header {
+        gap: 8px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .header-left {
+        min-width: 0;           /* let it actually shrink inside the flex row */
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+
+    .page-title {
+        font-size: var(--text-base);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Actions never shrink and never wrap off the edge. */
+    .header-right {
+        flex: 0 0 auto;
+        gap: 6px;
+    }
+
+    /* The full "Buy $BEAM" label is the least important thing competing for
+       this row; the icon still reads as an outbound link. */
+    .buy-beam-btn {
+        padding: 6px 10px;
+        font-size: var(--text-xs);
+    }
+}
+
+@media (max-width: 420px) {
+    /* Below this the network chip cannot coexist with the actions. The height
+       is still on the dashboard and in Settings, so nothing is lost. */
+    .header .network-status,
+    .header .network-chip,
+    .header .sync-chip {
+        display: none;
+    }
+    .buy-beam-btn span,
+    .buy-beam-btn {
+        font-size: 11px;
+        padding: 6px 8px;
+    }
+}
