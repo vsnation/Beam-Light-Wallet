@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="/css/welcome.css">
     <link rel="stylesheet" href="/css/fuddle.css">
     <link rel="stylesheet" href="/css/meme_battle.css">
+    <link rel="stylesheet" href="/css/swap-market.css">
 
     <!-- Vendored, not CDN: this origin holds the session token and the JSON-RPC
          proxy that forwards tx_send, so a script here can spend the wallet.
@@ -100,6 +101,13 @@
                 <button type="button" class="nav-item" data-page="dex" data-tooltip="DEX Trading" aria-label="DEX Trading">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+                    </svg>
+                </button>
+                <button type="button" class="nav-item" data-page="swap-market"
+                        data-tooltip="Atomic Swaps" aria-label="Atomic swap market">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M7 10h13M7 10l3-3M7 10l3 3"/>
+                        <path d="M17 14H4M17 14l-3-3M17 14l-3 3"/>
                     </svg>
                 </button>
                 <!-- P2P is disabled in the default build (FEATURE_P2P in app.js).
@@ -691,6 +699,61 @@
                 </div>
 
                 <!-- P2P Marketplace Page -->
+                <!-- Atomic swap market. Replaces the old order-book P2P, which was
+                     an escrow contract with a dead relay. These are real
+                     cross-chain atomic swaps settled by BEAM's own bridges. -->
+                <div class="page" id="page-swap-market">
+                    <div class="swap-market">
+                        <div class="swap-market-head">
+                            <h2>Atomic swap market</h2>
+                            <select id="swap-coin-select" onchange="selectSwapCoin(this.value)"
+                                    aria-label="Trading pair"></select>
+                            <span class="swap-muted" style="font-size:var(--text-xs);">
+                                Trustless cross-chain swaps &mdash; no custodian, no escrow
+                            </span>
+                        </div>
+
+                        <div class="swap-layout">
+                            <div id="swap-market-body"></div>
+
+                            <div class="swap-create">
+                                <h4>New offer</h4>
+                                <div class="swap-sides">
+                                    <label><input type="radio" name="swap-side" value="sell" checked
+                                                  onchange="updateSwapTotal()"><span>Sell BEAM</span></label>
+                                    <label><input type="radio" name="swap-side" value="buy"
+                                                  onchange="updateSwapTotal()"><span>Buy BEAM</span></label>
+                                </div>
+                                <div class="swap-field">
+                                    <label for="swap-beam-amount">Amount (BEAM)</label>
+                                    <input type="text" id="swap-beam-amount" inputmode="decimal"
+                                           placeholder="0.00" oninput="updateSwapTotal()">
+                                </div>
+                                <div class="swap-field">
+                                    <label for="swap-price" id="swap-price-label">Price per BEAM</label>
+                                    <input type="text" id="swap-price" inputmode="decimal"
+                                           placeholder="0.00000000" oninput="updateSwapTotal()">
+                                </div>
+                                <div class="swap-field">
+                                    <label for="swap-expiry">Offer expires after</label>
+                                    <select id="swap-expiry">
+                                        <option value="15">15 minutes</option>
+                                        <option value="30">30 minutes</option>
+                                        <option value="60" selected>1 hour</option>
+                                        <option value="360">6 hours</option>
+                                        <option value="1440">24 hours</option>
+                                    </select>
+                                </div>
+                                <div class="swap-total-line" id="swap-total-line">
+                                    Enter an amount and a price.
+                                </div>
+                                <button class="quick-btn quick-btn-primary" id="swap-create-btn"
+                                        onclick="createSwapOffer()">Publish offer</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="page" id="page-p2p">
                     <!-- src is set on first navigation to the P2P page. Loading it
                          here cost every launch 635 KB (p2p.js 383K + p2p.css 163K +
@@ -2675,6 +2738,7 @@
     <!-- JavaScript -->
     <script src="/js/pages/fuddle.js"></script>
     <script src="/js/pages/meme_battle.js"></script>
+    <script src="/js/pages/swap-market.js"></script>
     <script src="/js/app.js"></script>
 
     <!-- Modal Container -->

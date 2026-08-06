@@ -768,7 +768,7 @@ function isSpendingCall(method, params) {
     return false;
 }
 
-async function apiCall(method, params = {}) {
+async function apiCall(method, params = {}, opts = {}) {
     // Gate spending here rather than at each call site. Only send and swap
     // checked, out of ~45 places that build a transaction - so the airdrop,
     // Fuddle, MemeClash and minter flows all signed happily against a stale
@@ -839,7 +839,14 @@ async function apiCall(method, params = {}) {
         if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
             throw new Error('Cannot connect to wallet API. Make sure wallet-api is running.');
         }
-        console.error('API call failed:', method, e.message);
+        // A caller probing whether a method exists is asking a question, not
+        // reporting a fault; logging it as an error makes a healthy build look
+        // broken in the console.
+        if (opts.quiet) {
+            console.log('API call unavailable:', method, e.message);
+        } else {
+            console.error('API call failed:', method, e.message);
+        }
         throw e;
     }
 }
@@ -1253,6 +1260,7 @@ function showPage(pageId, updateUrl = true) {
         addresses: 'Addresses',
         dex: 'DEX Trading',
         p2p: 'P2P Marketplace',
+        'swap-market': 'Atomic Swaps',
         airdrop: 'Airdrop',
         explorer: 'Explorer',
         appstore: 'App Store',
@@ -1313,6 +1321,8 @@ function showPage(pageId, updateUrl = true) {
         if (typeof initFuddle === 'function') initFuddle();
     } else if (pageId === 'memeclash') {
         if (typeof initMemeClash === 'function') initMemeClash();
+    } else if (pageId === 'swap-market') {
+        if (typeof initSwapMarketPage === 'function') initSwapMarketPage();
     } else if (pageId === 'settings') {
         loadSettings();
     } else if (pageId === 'p2p') {

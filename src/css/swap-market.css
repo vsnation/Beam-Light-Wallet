@@ -1,0 +1,121 @@
+/* Atomic swap market — order book styling.
+   Deliberately close to a centralised exchange's layout, because that is the
+   shape traders already know: asks above, bids below, spread between them. */
+
+.swap-market { max-width: 1100px; margin: 0 auto; }
+
+.swap-market-head {
+    display: flex; align-items: center; gap: var(--space-3);
+    margin-bottom: var(--space-4); flex-wrap: wrap;
+}
+.swap-market-head h2 { margin: 0; font-size: var(--text-xl); }
+#swap-coin-select {
+    background: var(--void-lighter); color: var(--text-primary);
+    border: 1px solid var(--glass-border); border-radius: 8px;
+    padding: 8px 12px; font-family: inherit; font-size: var(--text-sm); cursor: pointer;
+}
+
+.swap-layout { display: grid; grid-template-columns: 1fr 340px; gap: var(--space-4); }
+@media (max-width: 900px) { .swap-layout { grid-template-columns: 1fr; } }
+
+/* ---- book ---- */
+.swap-book {
+    background: var(--void-light); border: 1px solid var(--glass-border);
+    border-radius: 12px; overflow: hidden;
+}
+.swap-book-head, .swap-row, .swap-my-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    padding: 6px 14px; font-family: var(--font-mono, monospace); font-size: var(--text-xs);
+}
+.swap-book-head {
+    color: var(--text-muted); border-bottom: 1px solid var(--glass-border);
+    text-transform: uppercase; letter-spacing: 0.04em;
+}
+.swap-book-head em { font-style: normal; opacity: 0.65; }
+
+.swap-row { position: relative; cursor: pointer; align-items: center; }
+.swap-row:hover { background: var(--glass-hover); }
+.swap-row.mine { cursor: default; opacity: 0.75; }
+.swap-row.mine:hover { background: transparent; }
+
+/* Depth bar sits behind the numbers rather than beside them, so the row stays
+   readable at a glance and the bar is a hint, not a chart. */
+.swap-depth {
+    position: absolute; right: 0; top: 0; bottom: 0; z-index: 0; opacity: 0.13;
+}
+.swap-row.ask .swap-depth { background: var(--error); }
+.swap-row.bid .swap-depth { background: var(--success); }
+.swap-row > span:not(.swap-depth) { position: relative; z-index: 1; }
+.swap-row.ask .swap-price { color: var(--error); }
+.swap-row.bid .swap-price { color: var(--success); }
+.swap-size, .swap-total { color: var(--text-secondary); text-align: right; }
+
+.swap-spread {
+    padding: 10px 14px; text-align: center; font-size: var(--text-xs);
+    color: var(--text-secondary);
+    border-top: 1px solid var(--glass-border); border-bottom: 1px solid var(--glass-border);
+    background: var(--glass);
+}
+.swap-book-empty { padding: 18px 14px; text-align: center; color: var(--text-muted); font-size: var(--text-xs); }
+.swap-muted { color: var(--text-muted); }
+
+/* ---- create offer ---- */
+.swap-create {
+    background: var(--void-light); border: 1px solid var(--glass-border);
+    border-radius: 12px; padding: var(--space-4); height: fit-content;
+}
+.swap-create h4 { margin: 0 0 var(--space-3); font-size: var(--text-base); }
+.swap-sides { display: flex; gap: 8px; margin-bottom: var(--space-3); }
+.swap-sides label {
+    flex: 1; text-align: center; padding: 9px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--glass-border); font-size: var(--text-sm);
+    transition: background .15s ease, border-color .15s ease;
+}
+.swap-sides input { position: absolute; opacity: 0; pointer-events: none; }
+.swap-sides input:checked + span { font-weight: 600; }
+.swap-sides label:has(input[value="sell"]:checked) { border-color: var(--error); color: var(--error); }
+.swap-sides label:has(input[value="buy"]:checked)  { border-color: var(--success); color: var(--success); }
+
+.swap-field { margin-bottom: var(--space-3); }
+.swap-field label { display: block; font-size: var(--text-xs); color: var(--text-muted); margin-bottom: 5px; }
+.swap-field input, .swap-field select {
+    width: 100%; padding: 10px; border-radius: 8px;
+    background: var(--void-lighter); border: 1px solid var(--glass-border);
+    color: var(--text-primary); font-family: var(--font-mono, monospace); font-size: var(--text-sm);
+}
+.swap-total-line {
+    font-size: var(--text-xs); color: var(--text-secondary);
+    padding: 10px; background: var(--glass); border-radius: 8px; margin-bottom: var(--space-3);
+}
+#swap-create-btn { width: 100%; }
+
+/* ---- states ---- */
+.swap-unavailable, .swap-empty-market {
+    background: var(--void-light); border: 1px solid var(--glass-border);
+    border-radius: 12px; padding: var(--space-5); margin-top: var(--space-4);
+}
+.swap-unavailable h3, .swap-empty-market h4 { margin: 0 0 10px; color: var(--warning); }
+.swap-unavailable p, .swap-empty-market p {
+    color: var(--text-secondary); font-size: var(--text-sm); margin: 0 0 8px; max-width: 60ch;
+}
+.swap-note { color: var(--text-muted) !important; font-size: var(--text-xs) !important; }
+.swap-unavailable code {
+    background: var(--void-lighter); padding: 1px 5px; border-radius: 4px;
+    font-family: var(--font-mono, monospace);
+}
+
+.swap-my-offers { margin-top: var(--space-4); }
+.swap-my-offers h4 { font-size: var(--text-base); margin: 0 0 10px; }
+.swap-my-row {
+    grid-template-columns: 60px 1fr 1fr 1fr auto; align-items: center;
+    background: var(--void-light); border: 1px solid var(--glass-border);
+    border-radius: 8px; margin-bottom: 6px; padding: 9px 12px;
+}
+.swap-side-tag { font-weight: 600; font-size: 10px; letter-spacing: 0.05em; }
+.swap-side-tag.bid { color: var(--success); }
+.swap-side-tag.ask { color: var(--error); }
+.swap-cancel {
+    background: transparent; border: 1px solid var(--glass-border); color: var(--text-secondary);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: var(--text-xs);
+}
+.swap-cancel:hover { border-color: var(--error); color: var(--error); }
