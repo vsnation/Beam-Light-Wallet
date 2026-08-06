@@ -89,6 +89,19 @@ WALLETS_DIR = DATA_DIR / "wallets"
 BINARIES_DIR = DATA_DIR / "binaries"
 LOGS_DIR = DATA_DIR / "logs"
 NODE_DATA_DIR = DATA_DIR / "node_data"
+# The P2P handlers wrote to BASE_DIR/p2p_data, which inside a .app bundle is
+# Contents/Resources. Writing there breaks a Developer ID seal on first run and
+# macOS then refuses to launch the app at all - the exact trap that made signing
+# and the old symlink layout mutually exclusive. Everything writable belongs
+# under DATA_DIR.
+P2P_DATA_DIR = DATA_DIR / "p2p_data"
+# Nothing created this directory - the old location happened to exist because it
+# shipped with the app. Under DATA_DIR it has to be made.
+P2P_DATA_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    os.chmod(P2P_DATA_DIR, 0o700)   # order and trade records; same rule as the rest
+except OSError:
+    pass
 
 # Detect platform
 import platform
@@ -2353,7 +2366,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             params = parse_qs(parsed.query)
 
             # Load orders from JSON file
-            orders_file = BASE_DIR / "p2p_data" / "orders.json"
+            orders_file = P2P_DATA_DIR / "orders.json"
             if orders_file.exists():
                 with open(orders_file, "r") as f:
                     data = json.load(f)
@@ -2412,7 +2425,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             }
 
             # Load existing orders
-            orders_file = BASE_DIR / "p2p_data" / "orders.json"
+            orders_file = P2P_DATA_DIR / "orders.json"
             if orders_file.exists():
                 with open(orders_file, "r") as f:
                     data = json.load(f)
@@ -2435,7 +2448,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
     def handle_p2p_get_trades(self):
         """Get P2P trades list"""
         try:
-            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            trades_file = P2P_DATA_DIR / "trades.json"
             if trades_file.exists():
                 with open(trades_file, "r") as f:
                     data = json.load(f)
@@ -2458,7 +2471,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 return
 
             # Load order
-            orders_file = BASE_DIR / "p2p_data" / "orders.json"
+            orders_file = P2P_DATA_DIR / "orders.json"
             if not orders_file.exists():
                 self.send_json({"error": "Order not found"}, 404)
                 return
@@ -2492,7 +2505,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             }
 
             # Load trades
-            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            trades_file = P2P_DATA_DIR / "trades.json"
             if trades_file.exists():
                 with open(trades_file, "r") as f:
                     trades_data = json.load(f)
@@ -2526,7 +2539,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             parts = parsed.path.split("/")
             address = parts[-1] if len(parts) > 4 else None
 
-            rep_file = BASE_DIR / "p2p_data" / "reputation.json"
+            rep_file = P2P_DATA_DIR / "reputation.json"
             if rep_file.exists():
                 with open(rep_file, "r") as f:
                     data = json.load(f)
@@ -2580,7 +2593,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 return
 
             # Load trades to verify the trade exists and is completed
-            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            trades_file = P2P_DATA_DIR / "trades.json"
             if trades_file.exists():
                 with open(trades_file, "r") as f:
                     trades_data = json.load(f)
@@ -2611,7 +2624,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 return
 
             # Load reputation file
-            rep_file = BASE_DIR / "p2p_data" / "reputation.json"
+            rep_file = P2P_DATA_DIR / "reputation.json"
             if rep_file.exists():
                 with open(rep_file, "r") as f:
                     rep_data = json.load(f)
@@ -2693,7 +2706,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             skip = int(query.get("skip", [0])[0])
             limit = int(query.get("limit", [20])[0])
 
-            rep_file = BASE_DIR / "p2p_data" / "reputation.json"
+            rep_file = P2P_DATA_DIR / "reputation.json"
             if rep_file.exists():
                 with open(rep_file, "r") as f:
                     rep_data = json.load(f)
@@ -2738,7 +2751,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             query = parse_qs(parsed.query)
             after_id = int(query.get("after", [0])[0])
 
-            messages_file = BASE_DIR / "p2p_data" / "messages.json"
+            messages_file = P2P_DATA_DIR / "messages.json"
             if messages_file.exists():
                 with open(messages_file, "r") as f:
                     all_messages = json.load(f)
@@ -2778,7 +2791,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "Message text required"}, 400)
                 return
 
-            messages_file = BASE_DIR / "p2p_data" / "messages.json"
+            messages_file = P2P_DATA_DIR / "messages.json"
             if messages_file.exists():
                 with open(messages_file, "r") as f:
                     all_messages = json.load(f)
@@ -2824,7 +2837,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             confirmed_by = data.get("confirmedBy", "")
 
             # Load trades
-            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            trades_file = P2P_DATA_DIR / "trades.json"
             if trades_file.exists():
                 with open(trades_file, "r") as f:
                     trades_data = json.load(f)
@@ -2883,7 +2896,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             opened_by = data.get("openedBy", "")
 
             # Load trades
-            trades_file = BASE_DIR / "p2p_data" / "trades.json"
+            trades_file = P2P_DATA_DIR / "trades.json"
             if trades_file.exists():
                 with open(trades_file, "r") as f:
                     trades_data = json.load(f)
@@ -2933,7 +2946,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
     def _update_trade_reputation(self, trade):
         """Update reputation after trade completion"""
         try:
-            rep_file = BASE_DIR / "p2p_data" / "reputation.json"
+            rep_file = P2P_DATA_DIR / "reputation.json"
             if rep_file.exists():
                 with open(rep_file, "r") as f:
                     rep_data = json.load(f)
