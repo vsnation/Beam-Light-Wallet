@@ -2841,11 +2841,55 @@
                 display: none;
             }
 
+            /* The bottom bar carries 13 destinations. justify-content:
+               space-around with no overflow rule crushed every one of them to
+               23px wide - about half the 44px minimum tap target - while the
+               row still overflowed its container by 137px, so the last few were
+               unreachable as well as untappable.
+               
+               Scroll it instead. Each item keeps a real tap target and the row
+               moves under the thumb, which is what a crowded tab bar does on
+               both iOS and Android. */
+            .sidebar {
+                padding-left: 0;
+                padding-right: 0;
+            }
+
             .sidebar-nav {
                 flex-direction: row;
-                gap: 4px;
-                justify-content: space-around;
+                gap: 2px;
+                justify-content: flex-start;
                 width: 100%;
+                overflow-x: auto;
+                overflow-y: hidden;
+                -webkit-overflow-scrolling: touch;   /* momentum on iOS */
+                scroll-snap-type: x proximity;
+                padding: 0 12px;
+                /* Room for the thumb without a scrollbar stealing height. */
+                scrollbar-width: none;
+            }
+            .sidebar-nav::-webkit-scrollbar { display: none; }
+
+            .sidebar-nav .nav-item {
+                flex: 0 0 auto;          /* never squash to fit */
+                min-width: 44px;
+                min-height: 44px;
+                scroll-snap-align: center;
+            }
+
+            /* The bar is scrollable but nothing says so, and a gradient fade
+               cannot help here: the sidebar background is translucent glass
+               (rgba(255,255,255,0.03)) over whatever scrolls beneath it, so any
+               solid colour used for the fade is wrong by definition - it read as
+               a dark smear rather than a fade.
+               
+               The honest affordance is a partially visible item. With 12px of
+               padding on both sides exactly eight 44px items fit and the row
+               ends flush, which is the worst possible case: it looks complete.
+               An asymmetric trailing pad leaves the ninth icon clipped at the
+               edge, which is what actually tells a thumb there is more. */
+            .sidebar-nav {
+                padding-right: 34px;
             }
 
             .nav-item.active::before {
