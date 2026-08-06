@@ -870,6 +870,28 @@ function errorState(message, retry, opts) {
     return o.colspan ? `<tr><td colspan="${o.colspan}">${body}</td></tr>` : body;
 }
 
+/**
+ * Parse a user-typed amount, or refuse it.
+ *
+ * parseFloat is the wrong tool for money. parseFloat("1,000") is 1 - it stops
+ * at the comma - so someone typing a perfectly natural thousands separator sent
+ * a thousandth of what they meant. parseFloat("5 BEAM") is 5, parseFloat("abc")
+ * is NaN, and all of it happens silently.
+ *
+ * Interpreting the separator is not safe either: "1,234" is 1234 to an American
+ * and 1.234 to a German, and the wallet cannot know which the user is. So
+ * anything that is not an unambiguous plain decimal is REFUSED, with a message
+ * naming the problem. Returns null when it cannot be trusted.
+ */
+function parseUserAmount(raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!text) return null;
+    // Digits, at most one dot, nothing else. No separators, no exponent, no units.
+    if (!/^\d*\.?\d+$/.test(text)) return null;
+    const n = Number(text);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function formatAmount(groth, decimals = 8) {
     if (!groth && groth !== 0) return '0';
     const value = groth / GROTH;
@@ -6254,8 +6276,11 @@ function confirmSend() {
         showToast('Please enter recipient address', 'error');
         return;
     }
-    if (!amount || parseFloat(amount) <= 0) {
-        showToast('Please enter a valid amount', 'error');
+    const amountNum = parseUserAmount(amount);
+    if (amountNum === null) {
+        showToast(/[,\s]/.test(String(amount || ''))
+            ? 'Remove spaces and separators from the amount — type it as a plain number like 1000.5'
+            : 'Please enter a valid amount', 'error');
         return;
     }
 
@@ -6263,7 +6288,7 @@ function confirmSend() {
     const assetInfo = getAssetInfo(currentSendAsset);
     const fee = 0.001; // 0.001 BEAM fee
     const feeGroth = Math.round(fee * GROTH);
-    const amountGrothVal = Math.round(parseFloat(amount) * GROTH);
+    const amountGrothVal = Math.round(amountNum * GROTH);
 
     // Nothing here checked a balance, so overspending - and sending a
     // confidential asset with no BEAM to pay the fee - both walked through the
@@ -6298,8 +6323,8 @@ function confirmSend() {
     // Store pending transaction
     pendingSendTx = {
         address,
-        amount: parseFloat(amount),
-        amountGroth: Math.round(parseFloat(amount) * GROTH),
+        amount: amountNum,
+        amountGroth: amountGrothVal,
         assetId: currentSendAsset,
         assetInfo,
         comment,

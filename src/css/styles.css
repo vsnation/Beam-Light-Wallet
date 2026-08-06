@@ -6915,11 +6915,17 @@ tr.skeleton-row {
 }
 
 @media (max-width: 420px) {
-    /* Below this the network chip cannot coexist with the actions. The height
-       is still on the dashboard and in Settings, so nothing is lost. */
-    .header .network-status,
-    .header .network-chip,
-    .header .sync-chip {
+    /* Below this the network badge cannot coexist with the actions. The height
+       is still on the dashboard and in Settings, so nothing is lost.
+       
+       This rule previously named .network-status, .network-chip and .sync-chip.
+       None of those classes exist anywhere in the markup - I guessed them
+       instead of checking - so it matched nothing, the badge kept its ~104px,
+       and the page title was squeezed to an ellipsis on EVERY page: "Dash…",
+       "Tr…", "Expl…". The bottom nav is icon-only with hover-only tooltips that
+       a touch screen never fires, so that truncated title was the only thing
+       naming the current page. */
+    .header .network-badge {
         display: none;
     }
     .buy-beam-btn span,
