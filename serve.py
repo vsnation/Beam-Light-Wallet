@@ -1043,6 +1043,123 @@ def restore_wallet(wallet_name, password, seed_phrase):
         drop_secret_cfg(cfg)
 
 
+# Coins BEAM can actually settle an atomic swap against. Anything not in this
+# list has no bridge in wallet/transactions/swaps/bridges/ and cannot be
+# connected - see src/js/pages/swap-market.js for why Monero is absent.
+SWAP_COIN_IDS = {"btc", "ltc", "eth", "doge", "dash", "qtum", "bch", "usdt", "dai", "wbtc"}
+
+
+def show_swap_settings(wallet_name, password, coin):
+    """Report whether a swap coin is connected, per beam-wallet."""
+    if coin not in SWAP_COIN_IDS:
+        return {"error": f"Unsupported swap coin: {coin}"}
+    if not WALLET_CLI_BINARY.exists():
+        return {"error": "beam-wallet binary not found"}
+
+    wallet_db = WALLETS_DIR / wallet_name / "wallet.db"
+    if not wallet_db.exists():
+        return {"error": f"Wallet '{wallet_name}' not found"}
+
+    cfg = write_secret_cfg({"pass": password}, tag="swapshow")
+    try:
+        out = subprocess.run(
+            [str(WALLET_CLI_BINARY), "show_swap_settings",
+             f"--swap_coin={coin}", f"--wallet_path={wallet_db}", f"--config_file={cfg}"],
+            capture_output=True, text=True, timeout=90).stdout
+    except subprocess.TimeoutExpired:
+        return {"error": "beam-wallet timed out"}
+    finally:
+        drop_secret_cfg(cfg)
+
+    low = out.lower()
+    if "invalid password" in low or "check your password" in low:
+        return {"error": "Invalid password"}
+
+    # beam-wallet needs the wallet database, and wallet-api holds it open while
+    # the wallet is unlocked. Treating that failure as "connected" would report
+    # a coin as ready when the check never ran - so say what actually happened.
+    if "database is locked" in low or "sqlite error" in low:
+        return {"error": "locked",
+                "message": "The wallet database is in use by the running wallet. "
+                           "Lock the wallet to read or change swap settings."}
+
+    if "not initialized" in low:
+        return {"connected": False, "coin": coin}
+    if f"{coin} settings" in low or "electrum" in low or "connection type" in low:
+        return {"connected": True, "coin": coin, "detail": out.strip()[-600:]}
+
+    # Anything unrecognised is unknown, not connected.
+    return {"connected": None, "coin": coin, "detail": out.strip()[-400:]}
+
+
+def set_swap_settings(wallet_name, password, coin, electrum_seed=None, auto_server=True):
+    """Connect a swap coin through Electrum.
+
+    Electrum rather than a full node, because requiring users to run bitcoind to
+    trade BEAM is the kind of barrier that leaves a market empty.
+
+    The electrum seed is a Bitcoin wallet seed - it controls real funds on the
+    other chain. It goes in the 0600 config file with the password, never on
+    argv, where `ps` would show it to every local process.
+    """
+    if coin not in SWAP_COIN_IDS:
+        return {"error": f"Unsupported swap coin: {coin}"}
+    if not WALLET_CLI_BINARY.exists():
+        return {"error": "beam-wallet binary not found"}
+
+    wallet_db = WALLETS_DIR / wallet_name / "wallet.db"
+    if not wallet_db.exists():
+        return {"error": f"Wallet '{wallet_name}' not found"}
+
+    values = {"pass": password}
+    args = [str(WALLET_CLI_BINARY), "set_swap_settings",
+            f"--swap_coin={coin}", f"--wallet_path={wallet_db}",
+            "--active_connection=electrum"]
+
+    if electrum_seed:
+        values["electrum_seed"] = electrum_seed
+    else:
+        args.append("--generate_electrum_seed")
+    if auto_server:
+        args.append("--select_server_automatically=true")
+
+    cfg = write_secret_cfg(values, tag="swapset")
+    args.append(f"--config_file={cfg}")
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=180)
+        out = (r.stdout or "") + (r.stderr or "")
+    except subprocess.TimeoutExpired:
+        return {"error": "beam-wallet timed out"}
+    finally:
+        drop_secret_cfg(cfg)
+
+    low = out.lower()
+    if "invalid password" in low or "check your password" in low:
+        return {"error": "Invalid password"}
+    if "database is locked" in low or "sqlite error" in low:
+        return {"error": "locked",
+                "message": "The wallet database is in use. Lock the wallet, connect the "
+                           "coin, then unlock again."}
+    if r.returncode != 0 and "error" in low:
+        return {"error": out.strip()[-400:] or "Could not apply swap settings"}
+
+    # The generated seed is printed once and never again. Returning it is the
+    # only chance the user has to write it down; it controls their coins on the
+    # other chain.
+    # beam-wallet prints the seed on a timestamped log line, so a naive split
+    # drags "17:16:21.290 seed = " along with it. Take only the words: a BIP39
+    # phrase is 12 or 24 lowercase words and nothing else, and this one controls
+    # real coins on the other chain.
+    seed = None
+    m = re.search(r"seed\s*[:=]\s*((?:[a-z]+\s+){11,23}[a-z]+)", out, re.IGNORECASE)
+    if m:
+        words = m.group(1).split()
+        if len(words) in (12, 15, 18, 21, 24):
+            seed = " ".join(words)
+    return {"success": True, "coin": coin, "electrum_seed": seed,
+            "note": "Connected through Electrum. Restart the wallet for it to take effect."}
+
+
 def export_owner_key(wallet_name, password):
     """Export owner key for local node"""
     global wallet_api_process, active_wallet
@@ -1770,6 +1887,10 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.handle_unlock()
         elif self.path == "/api/wallet/lock":
             self.handle_lock()
+        elif self.path == "/api/swap/settings":
+            self.handle_swap_settings()
+        elif self.path == "/api/swap/connect":
+            self.handle_swap_connect()
         elif self.path == "/api/wallet/create":
             self.handle_create()
         elif self.path == "/api/wallet/restore":
@@ -2242,6 +2363,45 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": "Git pull timed out"}, 500)
         except Exception as e:
             print(f"[UPDATE] Error: {e}")
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_swap_settings(self):
+        """Report whether a swap coin is connected. Needs the wallet password,
+        because beam-wallet has to open the database to read its settings."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            wallet_name = body.get("wallet") or active_wallet
+            if not self._valid_wallet_name(wallet_name):
+                return
+            password = body.get("password", "")
+            coin = str(body.get("coin", "btc")).lower()
+            if not password:
+                self.send_json({"error": "Password required"}, 400)
+                return
+            self.send_json(show_swap_settings(wallet_name, password, coin))
+        except Exception as e:
+            self.send_json({"error": str(e)}, 500)
+
+    def handle_swap_connect(self):
+        """Connect a swap coin through Electrum."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            wallet_name = body.get("wallet") or active_wallet
+            if not self._valid_wallet_name(wallet_name):
+                return
+            password = body.get("password", "")
+            coin = str(body.get("coin", "btc")).lower()
+            if not password:
+                self.send_json({"error": "Password required"}, 400)
+                return
+            result = set_swap_settings(
+                wallet_name, password, coin,
+                electrum_seed=body.get("electrum_seed") or None,
+                auto_server=bool(body.get("auto_server", True)))
+            self.send_json(result, 400 if result.get("error") else 200)
+        except Exception as e:
             self.send_json({"error": str(e)}, 500)
 
     def handle_export_owner_key(self):
