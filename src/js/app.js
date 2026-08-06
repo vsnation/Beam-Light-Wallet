@@ -623,7 +623,8 @@ const GROTH = 100000000;
  * (gun-manhattan.herokuapp.com) returns 404 — Heroku killed free dynos in 2022 —
  * it writes JSON into the install directory, which is read-only inside a signed
  * app bundle, and it derives trust scores from a file any local process can
- * edit. It is being replaced by a cross-chain DEX; see docs/P2P_REWORK.md.
+ * edit. It is being replaced by the cross-chain atomic swap market on the
+ * Atomic Swaps page (src/js/pages/swap-market.js).
  *
  * Flip to true to bring the existing page back verbatim.
  */

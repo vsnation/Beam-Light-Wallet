@@ -7,7 +7,12 @@ import subprocess
 import sys
 import os
 
-os.chdir("/Users/anastasiasmirnova/Desktop/Beam/LightWallet/tests")
+# Derived from this file, not hardcoded: an absolute path here embedded the
+# developer's real name in a public repository.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
+os.chdir("" + REPO_ROOT + "//tests")
 
 tests = [
     ("Full Trade Flow", "full_trade_flow.py"),

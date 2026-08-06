@@ -7,6 +7,11 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 
+# Derived from this file, not hardcoded: an absolute path here embedded the
+# developer's real name in a public repository.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 BASE_URL = "http://127.0.0.1:9080"
 BUYER_WALLET = "test_2"
 BUYER_PASSWORD = "test_2"
@@ -17,7 +22,7 @@ def connect():
     return webdriver.Chrome(options=options)
 
 def screenshot(driver, name):
-    path = f"/Users/anastasiasmirnova/Desktop/Beam/LightWallet/tests/screenshots/{name}.png"
+    path = f"{REPO_ROOT}/tests/screenshots/{name}.png"
     driver.save_screenshot(path)
     print(f"Screenshot: {path}")
 

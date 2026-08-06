@@ -18,9 +18,13 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
+# Derived, not hardcoded: an absolute path embedded a real name in a public repo.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 # Configuration
 P2P_URL = "http://127.0.0.1:9080/src/p2p/p2p.html"
-SCREENSHOT_DIR = "/Users/anastasiasmirnova/Desktop/Beam/screenshots"
+SCREENSHOT_DIR = _os.path.join(REPO_ROOT, "tests", "screenshots")
 DEBUG_PORT = 9222
 
 class P2PScreenshotTest:

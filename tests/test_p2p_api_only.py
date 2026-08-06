@@ -18,6 +18,11 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
+# Derived from this file, not hardcoded: an absolute path here embedded the
+# developer's real name in a public repository.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 # ============================================
 # CONFIGURATION
 # ============================================
@@ -25,7 +30,7 @@ from datetime import datetime
 BASE_URL = "http://127.0.0.1:9080"
 API_URL = f"{BASE_URL}/api/wallet"
 CONTRACT_ID = "2145205e91c3c0a68b0f439b8afd7a0b4729fb232768dfdf5ab421da864d76f7"
-RESULTS_DIR = "/Users/anastasiasmirnova/Desktop/Beam/LightWallet/tests/screenshots/comprehensive"
+RESULTS_DIR = "" + REPO_ROOT + "//tests/screenshots/comprehensive"
 
 WALLETS = {
     "test_wallet": {"password": os.environ.get('BEAM_TEST_PASSWORD', ''), "role": "seller/manager"},

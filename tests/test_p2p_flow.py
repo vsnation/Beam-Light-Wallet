@@ -15,6 +15,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 
+# Derived from this file, not hardcoded: an absolute path here embedded the
+# developer's real name in a public repository.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 class P2PFlowTest:
     def __init__(self, headless=False):
         options = webdriver.ChromeOptions()
@@ -25,8 +30,8 @@ class P2PFlowTest:
         options.add_argument('--no-sandbox')
 
         self.driver = webdriver.Chrome(options=options)
-        self.base_url = "file:///Users/anastasiasmirnova/Desktop/Beam/LightWallet/src/p2p/p2p.html"
-        self.screenshot_dir = "/Users/anastasiasmirnova/Desktop/Beam/LightWallet/tests/screenshots/p2p_flow"
+        self.base_url = "file://{REPO_ROOT}/src/p2p/p2p.html"
+        self.screenshot_dir = "" + REPO_ROOT + "//tests/screenshots/p2p_flow"
         os.makedirs(self.screenshot_dir, exist_ok=True)
         self.step = 0
 

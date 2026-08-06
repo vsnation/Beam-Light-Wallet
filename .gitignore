@@ -212,3 +212,30 @@ meme_game/
 # deliberately by the maintainer once they generate their own keypair.
 *-release-key.pem
 .beam-release-key.pem
+
+# ---------------------------------------------------------------------------
+# Internal documents. Not secret, but not for other people either - and one of
+# them is actively dangerous to publish.
+#
+# PRODUCTISATION_PLAN.md is a written vulnerability report: "any website can
+# spend the user's funds", "XSS from a received transaction", "DELETE destroys
+# every wallet". All fixed in 1.2.x - but anyone still on 1.0.x is unpatched,
+# so publishing it hands an attacker a step-by-step guide aimed at them.
+#
+# P2P_REWORK.md states that a feature flag is the only thing between ~10,000
+# lines of disabled code and users, which is a map of where to push.
+#
+# The rest are business material and admin runbooks: marketing plans, scheduled
+# promo posts, deployment steps and contract admin keys.
+#
+# NOTE: ignoring a file does not unpublish it. These are already on GitHub and
+# remain in history; this only stops further changes going out.
+# ---------------------------------------------------------------------------
+docs/PRODUCTISATION_PLAN.md
+docs/P2P_REWORK.md
+contracts/DEPLOYMENT.md
+contracts/p2p_escrow/DEPLOYMENT.md
+memeclash/marketing.md
+memeclash/prewarmup_posts.md
+memeclash/memory.md
+memeclash/deploy_tokens.md

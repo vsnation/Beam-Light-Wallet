@@ -12,6 +12,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
+# Derived from this file, not hardcoded: an absolute path here embedded the
+# developer's real name in a public repository.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 # Test configuration
 BUYER_WALLET = "test_2"
 BUYER_PASSWORD = "test_2"
@@ -26,7 +31,7 @@ def connect_to_chrome():
 
 def screenshot(driver, name):
     """Take a screenshot"""
-    path = f"/Users/anastasiasmirnova/Desktop/Beam/LightWallet/tests/screenshots/{name}.png"
+    path = f"{REPO_ROOT}/tests/screenshots/{name}.png"
     driver.save_screenshot(path)
     print(f"Screenshot: {path}")
 

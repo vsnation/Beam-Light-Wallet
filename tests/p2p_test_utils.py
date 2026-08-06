@@ -15,8 +15,13 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.action_chains import ActionChains
 import os
 
+# Derived from this file, not hardcoded: an absolute path here embedded the
+# developer's real name in a public repository.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 BASE_URL = "http://127.0.0.1:9080"
-SCREENSHOT_DIR = "/Users/anastasiasmirnova/Desktop/Beam/LightWallet/tests/screenshots"
+SCREENSHOT_DIR = "" + REPO_ROOT + "//tests/screenshots"
 
 WALLETS = {
     "test_wallet": os.environ.get('BEAM_TEST_PASSWORD', ''),

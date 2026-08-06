@@ -3,7 +3,7 @@
 P2P Exchange Comprehensive Test Suite
 Tests ALL P2P functionality with screenshots
 
-Screenshots saved to: /Users/anastasiasmirnova/Desktop/Beam/screenshots/
+Screenshots saved to: tests/screenshots/
 """
 
 import time
@@ -17,9 +17,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 
+# Derived, not hardcoded: an absolute path embedded a real name in a public repo.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 # Configuration
 P2P_URL = "http://127.0.0.1:9080/src/p2p/p2p.html"
-SCREENSHOT_DIR = "/Users/anastasiasmirnova/Desktop/Beam/screenshots"
+SCREENSHOT_DIR = _os.path.join(REPO_ROOT, "tests", "screenshots")
 DEBUG_PORT = 9222
 
 class P2PTestSuite:

@@ -17,8 +17,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 
+# Derived from this file, not hardcoded: an absolute path here embedded the
+# developer's real name in a public repository.
+import os as _os
+REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+
 # Setup
-SCREENSHOT_DIR = "/Users/anastasiasmirnova/Desktop/Beam/LightWallet/tests/screenshots/p2p_trade_flow"
+SCREENSHOT_DIR = "" + REPO_ROOT + "//tests/screenshots/p2p_trade_flow"
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 def screenshot(driver, name):

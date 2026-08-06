@@ -26,7 +26,7 @@ FAIL=0
 SKIP=0
 
 # Results file
-RESULTS_FILE="/Users/anastasiasmirnova/Desktop/Beam/LightWallet/tests/p2p_api_results.txt"
+RESULTS_FILE="$LIGHTWALLET/tests/p2p_api_results.txt"
 echo "P2P API Test Results - $(date)" > "$RESULTS_FILE"
 echo "Contract: $CONTRACT_ID" >> "$RESULTS_FILE"
 echo "========================================" >> "$RESULTS_FILE"
