@@ -100,6 +100,7 @@
       },
       "architectures": {
         "arm64": {
+          "supported": true,
           "asset_prefix": "mac-arm64",
           "archive_ext": "zip",
           "binaries": {
