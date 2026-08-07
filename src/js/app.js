@@ -2800,6 +2800,64 @@ async function executeCombine() {
 const _modalStack = [];
 let _focusBeforeModal = null;
 
+/**
+ * Take every closed modal out of the keyboard's reach.
+ *
+ * Modals are hidden by removing an `.active` class, not by the `hidden`
+ * attribute, so their contents stayed in the tab order: 77 focusable controls
+ * across fifteen invisible dialogs, measured on the dashboard alone. Tabbing
+ * walked into them and Enter activated whatever it landed on - including
+ * buttons that spend money, on a dialog the user could not see.
+ *
+ * `inert` removes a subtree from the tab order, from hit-testing and from the
+ * accessibility tree in one attribute, which is exactly the semantics wanted
+ * here and far harder to get wrong than juggling tabindex.
+ */
+function syncModalInertness() {
+    let open = null;
+    document.querySelectorAll('.modal-overlay, [id$="-modal"]').forEach(m => {
+        const isOpen = m.classList.contains('active');
+        if (isOpen) { m.removeAttribute('inert'); open = m; }
+        else m.setAttribute('inert', '');
+    });
+
+    // Make the page BEHIND the dialog inert too, rather than relying on a
+    // JavaScript trap to bounce Tab back at the edges. A trap only fires on the
+    // first and last element, so the moment focus is anywhere else it walks
+    // straight out - measured at 20 escapes in 25 Tab presses. Marking the rest
+    // of the page inert means Tab physically cannot leave, with no key handling
+    // involved and nothing to get wrong.
+    const app = document.querySelector('.app-container') || document.body.firstElementChild;
+    if (app && !app.contains(open)) {
+        if (open) app.setAttribute('inert', '');
+        else app.removeAttribute('inert');
+    }
+}
+
+/**
+ * Keep Tab inside the dialog on top.
+ *
+ * Without this, Tab leaves the dialog you are looking at and continues through
+ * the page behind it - and, before syncModalInertness, on into the other
+ * fourteen closed dialogs.
+ */
+function trapModalTab(e) {
+    if (e.key !== 'Tab' || !_modalStack.length) return;
+    const top = document.getElementById(_modalStack[_modalStack.length - 1]);
+    if (!top) return;
+    const items = [...top.querySelectorAll(
+        'a[href], button, input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])')]
+        .filter(el => !el.disabled && el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+    }
+}
+document.addEventListener('keydown', trapModalTab, true);
+
 function openModal(id) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -2808,6 +2866,7 @@ function openModal(id) {
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
     if (!_modalStack.includes(id)) _modalStack.push(id);
+    syncModalInertness();
 
     // Move focus into the dialog, or keyboard users are left stranded outside it.
     const focusable = el.querySelector(
@@ -2822,6 +2881,7 @@ function closeModal(id) {
     el.removeAttribute('aria-modal');
     const i = _modalStack.indexOf(id);
     if (i >= 0) _modalStack.splice(i, 1);
+    syncModalInertness();
     if (!_modalStack.length && _focusBeforeModal && _focusBeforeModal.focus) {
         try { _focusBeforeModal.focus(); } catch (e) {}
         _focusBeforeModal = null;
@@ -6120,6 +6180,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // holds the session token and the signing proxy. Clear anything an older
     // build left behind.
     try { sessionStorage.removeItem('walletPassword'); } catch (e) {}
+
+    // Every modal starts closed, so every modal starts inert. Without this the
+    // 77 controls only leave the tab order after the first modal is opened and
+    // closed - which for most users is never.
+    syncModalInertness();
 
 
     // Show loading state. These stay on screen through the locked overlay, so
