@@ -533,11 +533,15 @@
                                         <span id="dex-receive" class="dex-summary-value dex-summary-value-in">-</span>
                                     </div>
                                     <div class="dex-summary-row">
-                                        <span class="dex-summary-label">Pool Fee (0.3%)</span>
+                                        <!-- Rate filled in from the pool's actual kind. It was hardcoded
+                                             0.3%, but BEAM's main pools are kind 2, which charges 1%. -->
+                                        <span class="dex-summary-label">Pool Fee <span id="dex-fee-rate">—</span></span>
                                         <span id="dex-fee" class="dex-summary-value">-</span>
                                     </div>
                                     <div class="dex-summary-row">
-                                        <span class="dex-summary-label">Min. Received</span>
+                                        <!-- "Min." was a promise nothing kept; the trade sends
+                                             val1_buy=0. This is an estimate, not a floor. -->
+                                        <span class="dex-summary-label">Est. received</span>
                                         <span id="dex-min-receive" class="dex-summary-value">-</span>
                                     </div>
                                 </div>
@@ -2189,7 +2193,7 @@
                     <div id="liq-pool-icons" style="display:flex;"></div>
                     <div>
                         <div id="liq-pool-name" style="font-weight:600;font-size:16px;">-</div>
-                        <div id="liq-pool-fee" style="font-size:12px;color:var(--text-muted);">Fee: 0.3%</div>
+                        <div id="liq-pool-fee" style="font-size:12px;color:var(--text-muted);">Fee: —</div>
                     </div>
                 </div>
 
@@ -2354,7 +2358,7 @@
                     </div>
                     <div style="display: flex; justify-content: space-between;">
                         <span style="color: var(--text-muted);">Pool Fee</span>
-                        <span id="qt-fee">0.3%</span>
+                        <span id="qt-fee">—</span>
                     </div>
                 </div>
 

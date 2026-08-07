@@ -892,6 +892,23 @@ function parseUserAmount(raw) {
     return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * The fee a pool actually charges, as a label.
+ *
+ * The DEX summary, the quick-trade panel and the liquidity panel all printed a
+ * hardcoded "0.3%". The rate depends on the pool kind and the code already knew
+ * that - feeRate at the quote site and feeLabel in the pool list both branch on
+ * it - but the three user-facing labels did not. BEAM's main pools are kind 2,
+ * which charges 1%, so the wallet was quoting a third of the real cost on the
+ * screen where someone decides whether to trade.
+ */
+function poolFeeLabel(kind) {
+    if (kind === 0) return '0.3%';
+    if (kind === 1) return '0.05%';
+    if (kind === 2) return '1%';
+    return '—';
+}
+
 function formatAmount(groth, decimals = 8) {
     if (!groth && groth !== 0) return '0';
     const value = groth / GROTH;
@@ -8846,7 +8863,9 @@ async function getDexQuote() {
         const buyFormatted = buyAmount / GROTH;
         const payFormatted = payAmount / GROTH;
         const feeFormatted = fee / GROTH;
-        const minReceive = buyFormatted * 0.995; // 0.5% slippage
+        // Not a minimum: nothing enforces it. Kept as a rough lower estimate so
+        // the user has a sense of the range, and labelled honestly below.
+        const minReceive = buyFormatted * 0.995;
 
         // Update output amount - always use dot as decimal separator
         toAmountEl.value = formatForInput(buyFormatted, 6);
@@ -8868,6 +8887,11 @@ async function getDexQuote() {
         infoEl.style.display = 'block';
 
         dexQuote = { pool, amountSmall: payAmount, callAid1, callAid2, buyAmount, fee };
+
+        // Name the rate this pool actually charges. The label was hardcoded
+        // 0.3% while BEAM's main pools are kind 2 and charge 1%.
+        const feeRateEl = document.getElementById('dex-fee-rate');
+        if (feeRateEl) feeRateEl.textContent = `(${poolFeeLabel(pool.kind)})`;
         updateSwapButton();
     } catch (e) {
         console.error('Quote error:', e);
@@ -9007,9 +9031,19 @@ function executeSwap() {
                 <span class="confirm-swap-label">Pool Fee</span>
                 <span class="confirm-swap-value">${fee} ${dexToAsset.symbol}</span>
             </div>
+            <!-- There is no slippage tolerance. This row used to claim 0.5%,
+                 but the trade submits val1_buy=0, which tells the pool to give
+                 whatever it gives - the 0.5% figure was computed for display
+                 and never sent anywhere. Promising protection that does not
+                 exist is worse than admitting it is absent. -->
             <div class="confirm-swap-row">
-                <span class="confirm-swap-label">Slippage Tolerance</span>
-                <span class="confirm-swap-value">0.5%</span>
+                <span class="confirm-swap-label">Price protection</span>
+                <span class="confirm-swap-value" style="color: var(--warning);">None</span>
+            </div>
+            <div class="confirm-swap-note" style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5;">
+                The amount above is a quote taken now. If the pool moves before your
+                transaction confirms, you receive whatever it holds at that moment,
+                which may be less.
             </div>
         </div>
 
