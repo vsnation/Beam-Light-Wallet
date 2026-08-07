@@ -109,6 +109,35 @@ PLATFORM = platform.system().lower()
 if PLATFORM == "darwin":
     PLATFORM = "macos"
 
+# Detect CPU architecture.
+#
+# Nothing did this before, and the macOS binaries we publish are arm64 only. On
+# an Intel Mac the installer therefore fetched arm64 binaries that cannot
+# execute at all, and the failure surfaced as the wallet simply not working,
+# with nothing pointing at the cause.
+#
+# platform.machine() reports the interpreter's architecture, not the hardware:
+# a Python running under Rosetta on Apple Silicon says x86_64. sysctl.proc_translated
+# tells us we are translated, so we can report the machine truthfully.
+def detect_arch():
+    m = platform.machine().lower()
+    if m in ("arm64", "aarch64"):
+        return "arm64"
+    if m in ("x86_64", "amd64"):
+        if PLATFORM == "macos":
+            try:
+                out = subprocess.run(["sysctl", "-n", "sysctl.proc_translated"],
+                                     capture_output=True, text=True, timeout=5).stdout.strip()
+                if out == "1":
+                    return "arm64"     # x86_64 Python under Rosetta on Apple Silicon
+            except Exception:
+                pass
+        return "x86_64"
+    return m or "unknown"
+
+
+ARCH = detect_arch()
+
 # Add .exe extension for Windows
 EXE_EXT = ".exe" if PLATFORM == "windows" else ""
 WALLET_CLI_BINARY = BINARIES_DIR / PLATFORM / f"beam-wallet{EXE_EXT}"
@@ -1391,6 +1420,32 @@ def load_binaries_manifest():
 
 BINARIES_MANIFEST = load_binaries_manifest()
 APP_VERSION = BINARIES_MANIFEST.get("app_version", "0.0.0")
+
+
+def arch_support():
+    """What this machine's architecture is, and whether we ship binaries for it.
+
+    macOS entries are keyed by architecture because the published binaries are
+    arm64 only. An Intel Mac previously downloaded them anyway and got a Mach-O
+    it could not execute, which surfaced as the wallet mysteriously not working.
+    Saying so is the difference between a clear message and a support thread.
+    """
+    plat = (BINARIES_MANIFEST.get("platforms") or {}).get(PLATFORM) or {}
+    arches = plat.get("architectures")
+    if not arches:
+        return {"arch": ARCH, "supported": True, "note": None}
+    entry = arches.get(ARCH)
+    if entry is None:
+        return {"arch": ARCH, "supported": False,
+                "note": f"No {PLATFORM} binaries are published for {ARCH}."}
+    return {"arch": ARCH,
+            "supported": entry.get("supported", True),
+            "note": entry.get("note")}
+
+
+ARCH_SUPPORT = arch_support()
+if not ARCH_SUPPORT["supported"]:
+    print(f"[arch] {ARCH} is not supported by this build: {ARCH_SUPPORT['note']}")
 MIN_CONSENSUS_HEIGHT = BINARIES_MANIFEST.get("min_consensus_height", 0)
 
 
@@ -2025,6 +2080,8 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             "version": APP_VERSION,
             "beam_version": platform_binary_info().get("beam_version"),
             "consensus": consensus_warning(),
+            # So the UI can say "no build for your CPU" instead of failing oddly.
+            "arch": ARCH_SUPPORT,
         })
 
     def handle_heartbeat(self):

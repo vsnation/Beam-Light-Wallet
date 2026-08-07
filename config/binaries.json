@@ -97,7 +97,34 @@
           "asset": "mac-arm64-beam-wallet-cli-7.5.14493.zip",
           "sha256": "c694187b4b5e00afb30d2106a2bfd4303462af37f8764afee7c28abfdc1adebb"
         }
-      }
+      },
+      "architectures": {
+        "arm64": {
+          "asset_prefix": "mac-arm64",
+          "archive_ext": "zip",
+          "binaries": {
+            "wallet-api": {
+              "asset": "mac-arm64-wallet-api-7.5.14493.zip",
+              "sha256": "46856bebcef045173fbe39c7c75efc34b74f80fb1e02761fb977b5bf6453c82e"
+            },
+            "beam-node": {
+              "asset": "mac-arm64-beam-node-7.5.14493.zip",
+              "sha256": "d5aadc3f3758f1ff9bd433915c08d0e81c9388b11b84ec94d0f7eade2adb5a57"
+            },
+            "beam-wallet": {
+              "asset": "mac-arm64-beam-wallet-cli-7.5.14493.zip",
+              "sha256": "c694187b4b5e00afb30d2106a2bfd4303462af37f8764afee7c28abfdc1adebb"
+            }
+          },
+          "self_built": true,
+          "release_base_override": "https://github.com/vsnation/Beam-Light-Wallet/releases/download"
+        },
+        "x86_64": {
+          "supported": false,
+          "note": "No Intel build is published yet. The binaries here are built on Apple Silicon and are arm64-only; BeamMW publishes no macOS HF6 build at all, so there is nothing to fall back to. Building x86_64 needs an x86_64 toolchain - see docs/BUILDING_BEAM_MACOS.md."
+        }
+      },
+      "arch_note": "Per-architecture. ARCH is detected at runtime by serve.py."
     }
   }
 }
