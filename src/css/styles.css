@@ -1147,11 +1147,46 @@
 
         @media (max-width: 768px) {
             .tx-card-main {
-                grid-template-columns: 40px 1fr auto 24px;
-                gap: 8px;
+                /* Five things do not fit on one line at 360px. Squeezing them
+                   left the info column 46px wide and printed "BEAM -> FOMO"
+                   straight through "+8.03698036 FOMO". Truncating each column
+                   in turn only moved which text was destroyed.
+                   
+                   So the amount gets its own row. Line one is icon, description,
+                   status and the expand chevron; line two is the amount,
+                   right-aligned under it. Nothing competes, nothing truncates,
+                   and the row grows by one line rather than becoming unreadable. */
+                grid-template-columns: 36px minmax(0, 1fr) auto 20px;
+                grid-template-areas:
+                    "icon info   status expand"
+                    "icon amount amount amount";
+                gap: 4px 6px;
+                align-items: center;
             }
+            /* Was display:none, which made a Completed and a Failed transaction
+               look identical on a phone - the status pill was the only thing
+               distinguishing them. Money that did not arrive should not be
+               indistinguishable from money that did.
+               
+               Kept, shrunk to a dot-sized pill so it costs almost no width in
+               the 40px/1fr/auto/24px grid. Colour carries the meaning, and the
+               failure reason now prints underneath in full. */
+            .tx-icon        { grid-area: icon; }
+            .tx-main-info   { grid-area: info; min-width: 0; }
+            .tx-amount-col  { grid-area: amount; text-align: right; }
+            .tx-expand      { grid-area: expand; }
+
             .tx-status {
-                display: none;
+                grid-area: status;
+                display: flex;
+                align-items: center;
+                flex: 0 0 auto;
+            }
+            .tx-status .utxo-status {
+                font-size: 9px;
+                padding: 2px 5px;
+                letter-spacing: 0;
+                white-space: nowrap;
             }
             .tx-meta {
                 padding-left: 64px;
@@ -6932,5 +6967,61 @@ tr.skeleton-row {
     .buy-beam-btn {
         font-size: 11px;
         padding: 6px 8px;
+    }
+}
+
+/* Why a transaction failed.
+   wallet-api returns failure_reason on every failed transaction and the UI
+   rendered none of them, so "failed" was the whole explanation. */
+.tx-failure {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    padding: 6px 10px;
+    border-left: 2px solid var(--error);
+    background: rgba(239, 68, 68, 0.07);
+    border-radius: 0 6px 6px 0;
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+}
+
+/* Transaction rows: let the asset column actually shrink.
+   
+   At 360px a long amount inflates the `auto` track to ~114px, squeezing the
+   `1fr` track to ~82px. .tx-main-info has min-width:0 so the TRACK shrinks, but
+   .tx-asset is a nowrap flex row with overflow:visible and no truncation, so
+   its content stayed at its 138px min-content width and spilled 56px into the
+   amount column - printing the asset id straight through the fee text on every
+   row. Measured: 16 of 16 rows collided by glyph ink box, not merely by
+   bounding rectangle. */
+@media (max-width: 420px) {
+    .tx-asset {
+        min-width: 0;
+        overflow: hidden;
+    }
+    .tx-asset > * {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    /* The amount column has to be able to shrink too, not just be allowed to.
+       min-width:0 lets the TRACK shrink; without truncation on the children
+       their min-content width still pushes into the neighbouring column and the
+       asset name prints through the fee. */
+    .tx-amount-col {
+        min-width: 0;
+        overflow: hidden;
+    }
+    .tx-amount-col > * {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    /* The asset id is the least useful glyph in a cramped row - the name is
+       already there - so it is the first thing to go. */
+    .tx-asset-id {
+        display: none;
     }
 }

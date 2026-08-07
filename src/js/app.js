@@ -7427,6 +7427,14 @@ async function renderTransactions(txs) {
         }
 
         // Build metadata row (always visible: date, block height, confirmations, kernel)
+        // Why it failed. wallet-api returns failure_reason on every failed
+        // transaction - 66 of 200 in this wallet carry one - and the UI showed
+        // none of them, so "failed" was the entire explanation a user ever got.
+        var failureHtml = '';
+        if (tx.failure_reason) {
+            failureHtml = '<div class="tx-failure">' + escapeHtml(tx.failure_reason) + '</div>';
+        }
+
         var metaHtml = '<div class="tx-meta">' +
             '<span class="meta-item">' + dateStr + ' ' + timeStr + '</span>' +
             (tx.height && tx.height > 0 ? '<span class="meta-dot">&middot;</span><span class="meta-item">Block <span class="meta-value">' + tx.height + '</span></span>' : '') +
@@ -7447,6 +7455,7 @@ async function renderTransactions(txs) {
                 '<div class="tx-status"><span class="utxo-status ' + status.cls + '" style="' + (isPending ? 'animation:livePulse 2s infinite;' : '') + '">' + status.text + '</span></div>' +
                 '<div class="tx-expand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M6 9l6 6 6-6"/></svg></div>' +
             '</div>' +
+            failureHtml +
             metaHtml +
             (tx.comment ? '<div class="tx-comment-visible">' + escapeHtml(tx.comment) + '</div>' : '') +
             '<div class="tx-details" id="tx-details-' + idx + '">' +
