@@ -6278,7 +6278,7 @@ function setMaxAmount() {
 let pendingSendTx = null;
 
 // Send confirmation - shows confirmation modal first
-function confirmSend() {
+async function confirmSend() {
     // A stale wallet signs against a stale tip; the transaction is very
     // unlikely to confirm and the user's coins sit locked meanwhile.
     if (isWalletOutOfSync()) {
@@ -6292,6 +6292,39 @@ function confirmSend() {
     if (!address) {
         showToast('Please enter recipient address', 'error');
         return;
+    }
+
+    // Ask the wallet whether this address is real BEFORE showing a confirmation
+    // dialog. Only emptiness was checked, so a typo or a truncated paste sailed
+    // through the whole review step and failed at the node afterwards - by
+    // which point the user has read the amount, agreed to it, and been told
+    // nothing except that it did not work.
+    const sendBtn = document.querySelector('#send-modal .modal-btn-primary');
+    const sendBtnLabel = sendBtn ? sendBtn.textContent : null;
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Checking address...'; }
+    try {
+        // A length floor, because validate_address alone will not catch a
+        // truncated paste. Measured against this wallet's own address book,
+        // real addresses are 66, 67 or 133 characters - yet the API answers
+        // is_valid=true for a 10-character fragment. A floor rather than an
+        // exact set, so a longer address format we have not seen still passes.
+        if (address.length < 60) {
+            showToast('That address looks incomplete — BEAM addresses are at least 66 '
+                + `characters and this one is ${address.length}. Paste it again.`, 'error');
+            return;
+        }
+
+        const check = await apiCall('validate_address', { address });
+        if (check && check.is_valid === false) {
+            showToast('That is not a valid BEAM address. Check it for a missing or extra character.', 'error');
+            return;
+        }
+    } catch (e) {
+        // A validation call that cannot run is not proof the address is bad, so
+        // do not block on it - the node still refuses a bad address later.
+        console.log('Address validation unavailable:', e && e.message);
+    } finally {
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = sendBtnLabel; }
     }
     const amountNum = parseUserAmount(amount);
     if (amountNum === null) {
