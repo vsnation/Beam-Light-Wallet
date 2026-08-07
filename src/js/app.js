@@ -7687,8 +7687,14 @@ async function loadDexActivity() {
 
         if (status) status.textContent = `${dexActivity.length} recent`;
     } catch (error) {
+        // The binding is `error`; this line said `e.message`, so the handler
+        // itself threw ReferenceError and never wrote anything. The net effect
+        // was that any failure here left the feed spinning forever - an error
+        // path that fails is worse than no error path, because it hides the
+        // original failure too. Mine, from today's retry-state sweep.
         console.error('Failed to load activity:', error);
-        feed.innerHTML = errorState('Could not load activity', 'loadActivityFeed()', { detail: e.message });
+        feed.innerHTML = errorState('Could not load activity', 'loadDexActivity()',
+                                    { detail: error && error.message });
     }
 }
 
@@ -12542,7 +12548,7 @@ async function loadExplorerBlocks(startHeight = null) {
         }
     } catch (e) {
         console.error('Explorer blocks error:', e);
-        container.innerHTML = errorState('Could not load blocks', 'loadBlocks()', { detail: e.message, colspan: selectedCols.length });
+        container.innerHTML = errorState('Could not load blocks', 'loadExplorerBlocks()', { detail: e.message, colspan: selectedCols.length });
     }
 }
 
@@ -13660,10 +13666,10 @@ async function loadExplorerDexPools(force = false) {
     } catch (e) {
         console.error('Explorer DEX error:', e);
         if (poolsContainer) {
-            poolsContainer.innerHTML = errorState('Could not load pools', 'loadExplorerDex()', { detail: e.message, colspan: 9 });
+            poolsContainer.innerHTML = errorState('Could not load pools', 'loadExplorerDexPools()', { detail: e.message, colspan: 9 });
         }
         if (tradesContainer) {
-            tradesContainer.innerHTML = errorState('Could not load trades', 'loadExplorerDex()', { detail: e.message, colspan: 6 });
+            tradesContainer.innerHTML = errorState('Could not load trades', 'loadExplorerDexPools()', { detail: e.message, colspan: 6 });
         }
     }
 }
@@ -14070,10 +14076,10 @@ async function loadExplorerAtomicSwaps() {
     } catch (e) {
         console.error('Explorer Atomic Swaps error:', e);
         if (totalsContainer) {
-            totalsContainer.innerHTML = errorState('Could not load swap data', 'loadExplorerSwaps()', { detail: e.message });
+            totalsContainer.innerHTML = errorState('Could not load swap data', 'loadExplorerAtomicSwaps()', { detail: e.message });
         }
         if (offersContainer) {
-            offersContainer.innerHTML = errorState('Could not load offers', 'loadExplorerSwaps()', { detail: e.message, colspan: 5 });
+            offersContainer.innerHTML = errorState('Could not load offers', 'loadExplorerAtomicSwaps()', { detail: e.message, colspan: 5 });
         }
     }
 }
