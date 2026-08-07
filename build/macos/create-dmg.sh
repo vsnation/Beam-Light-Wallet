@@ -213,16 +213,55 @@ if [ -z "$BEAM_VERSION" ] || [ -z "$RELEASE_BASE" ]; then
     exit 1
 fi
 
-GITHUB_BASE="$RELEASE_BASE/beam-$BEAM_VERSION"
+# GITHUB_BASE is computed after the architecture is known - see below.
 HF6_COMPATIBLE="$(manifest platforms macos hf6_compatible)" || true
 
-ASSET_WALLET_API="$(manifest platforms macos binaries wallet-api asset)" || true
-ASSET_BEAM_WALLET="$(manifest platforms macos binaries beam-wallet asset)" || true
-ASSET_BEAM_NODE="$(manifest platforms macos binaries beam-node asset)" || true
+# Which CPU is this Mac?
+#
+# The published macOS binaries are per-architecture, and this runs on the user's
+# machine at first launch, so it can simply ask. Before this the assets were
+# read from a single arm64 list, and an Intel Mac downloaded a Mach-O it could
+# not execute - failing later, with nothing naming the cause.
+#
+# uname -m under Rosetta reports x86_64 even on Apple Silicon, so check
+# sysctl.proc_translated: if we are translated, the hardware is arm64.
+MAC_ARCH="$(uname -m)"
+if [ "$MAC_ARCH" = "x86_64" ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = "1" ]; then
+    MAC_ARCH="arm64"
+fi
 
-SHA_WALLET_API="$(manifest platforms macos binaries wallet-api sha256)" || true
-SHA_BEAM_WALLET="$(manifest platforms macos binaries beam-wallet sha256)" || true
-SHA_BEAM_NODE="$(manifest platforms macos binaries beam-node sha256)" || true
+ARCH_SUPPORTED="$(manifest platforms macos architectures "$MAC_ARCH" supported)" || true
+if [ "$ARCH_SUPPORTED" = "False" ] || [ "$ARCH_SUPPORTED" = "false" ]; then
+    ARCH_NOTE="$(manifest platforms macos architectures "$MAC_ARCH" note)" || true
+    osascript -e "display dialog \"BEAM Light Wallet has no build for this Mac's processor ($MAC_ARCH).\n\n$ARCH_NOTE\" buttons {\"OK\"} default button 1 with icon stop with title \"BEAM Light Wallet\""
+    exit 1
+fi
+
+ASSET_WALLET_API="$(manifest platforms macos architectures "$MAC_ARCH" binaries wallet-api asset)" || true
+ASSET_BEAM_WALLET="$(manifest platforms macos architectures "$MAC_ARCH" binaries beam-wallet asset)" || true
+ASSET_BEAM_NODE="$(manifest platforms macos architectures "$MAC_ARCH" binaries beam-node asset)" || true
+
+SHA_WALLET_API="$(manifest platforms macos architectures "$MAC_ARCH" binaries wallet-api sha256)" || true
+SHA_BEAM_WALLET="$(manifest platforms macos architectures "$MAC_ARCH" binaries beam-wallet sha256)" || true
+SHA_BEAM_NODE="$(manifest platforms macos architectures "$MAC_ARCH" binaries beam-node sha256)" || true
+
+# Where to fetch from. BeamMW publishes no macOS build we can use, so ours are
+# self-hosted and the architecture entry carries an override. This was never
+# read: the URL was always "$RELEASE_BASE/beam-$BEAM_VERSION", i.e. BeamMW's
+# release, where our mac-* assets do not exist - so the DMG's first-run download
+# 404'd for macOS regardless of architecture.
+ARCH_RELEASE_BASE="$(manifest platforms macos architectures "$MAC_ARCH" release_base_override)" || true
+if [ -n "$ARCH_RELEASE_BASE" ]; then
+    # Self-hosted assets hang off the wallet release tag, not a beam-<version> one.
+    GITHUB_BASE="$ARCH_RELEASE_BASE/v$(manifest app_version)"
+else
+    GITHUB_BASE="$RELEASE_BASE/beam-$BEAM_VERSION"
+fi
+
+if [ -z "$ASSET_WALLET_API" ] || [ -z "$SHA_WALLET_API" ]; then
+    osascript -e "display dialog \"BEAM Light Wallet could not find binaries for this Mac's processor ($MAC_ARCH) in its manifest.\" buttons {\"OK\"} default button 1 with icon stop with title \"BEAM Light Wallet\""
+    exit 1
+fi
 
 # ==========================================
 # Hard fork compatibility warning
