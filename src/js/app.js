@@ -909,6 +909,23 @@ function poolFeeLabel(kind) {
     return '—';
 }
 
+/**
+ * A pool rate that does not round a real price to zero.
+ *
+ * toFixed(4) rendered anything below 0.00005 as "0.0000", so a genuine exchange
+ * rate was displayed as nothing at all - which for a thinly traded pair is
+ * exactly the case someone is trying to look up. Precision follows magnitude.
+ */
+function formatPoolRate(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    if (n === 0) return '0';
+    if (n >= 1)      return n.toFixed(4).replace(/\.?0+$/, '');
+    if (n >= 0.0001) return n.toFixed(6).replace(/\.?0+$/, '');
+    if (n >= 1e-8)   return n.toFixed(10).replace(/\.?0+$/, '');
+    return n.toExponential(4);
+}
+
 function formatAmount(groth, decimals = 8) {
     if (!groth && groth !== 0) return '0';
     const value = groth / GROTH;
@@ -8957,6 +8974,17 @@ async function getDexQuote() {
         );
 
         if (!pool) {
+            // "No pool for this pair" and "the pool list has not arrived yet"
+            // are different states, and treating them alike offered to create a
+            // pool that already exists - then left the prompt up, because
+            // nothing re-evaluated it once the pools loaded.
+            if (!Array.isArray(dexPools) || dexPools.length === 0) {
+                toAmountEl.value = '';
+                dexQuote = null;
+                const btn = document.getElementById('dex-swap-btn');
+                if (btn) { btn.textContent = 'Loading pools...'; btn.disabled = true; }
+                return;
+            }
             toAmountEl.value = 'No pool';
             dexQuote = null;
             pendingPoolCreate = { aid1: dexFromAsset.aid, aid2: dexToAsset.aid };
@@ -13965,7 +13993,7 @@ function renderExplorerDexPools(pools) {
                 </td>
                 <td>
                     <div class="rate-cell">
-                        <span class="rate-value">1 ${info1.symbol} = ${typeof rate12 === 'number' ? rate12.toFixed(4) : rate12} ${info2.symbol}</span>
+                        <span class="rate-value">1 ${info1.symbol} = ${formatPoolRate(rate12)} ${info2.symbol}</span>
                         ${tvlStr ? `<span class="tvl-value">TVL: ${tvlStr}</span>` : ''}
                     </div>
                 </td>
@@ -15634,7 +15662,11 @@ async function loadMyBatches() {
                         <span class="stat-value">${formatAmount(batch.value_per_voucher)} ${info.symbol}</span>
                     </div>
                     <div class="batch-stat">
-                        <span class="stat-label">Total / Claimed</span>
+                        <!-- Label follows the value. It read "Total / Claimed"
+                             while printing redeemed first, so a batch with 1 of
+                             50 claimed looked like 1 voucher existed and 50 were
+                             taken. -->
+                        <span class="stat-label">Claimed / Total</span>
                         <span class="stat-value">${batch.redeemed_count} / ${batch.total_count}</span>
                     </div>
                     <div class="batch-stat">
