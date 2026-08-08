@@ -1,0 +1,74 @@
+/* "Bring crypto to BEAM" — the guided path onto a private chain.
+   Deliberately plain: someone arriving here is being asked to trust a mechanism
+   they have not met, so the screen should read like an explanation, not a
+   marketing page. */
+.onboard { max-width: 780px; margin: 0 auto; }
+.ob-progress { display: flex; gap: 8px; justify-content: center; margin-bottom: var(--space-5); }
+.ob-progress-dot {
+    width: 34px; height: 3px; border-radius: 2px;
+    background: var(--glass-border); transition: background .2s ease;
+}
+.ob-progress-dot.done, .ob-progress-dot.current { background: var(--beam-cyan, #25c2a0); }
+.ob-progress-dot.current { box-shadow: 0 0 8px var(--beam-cyan-glow, rgba(37,194,160,.4)); }
+
+.ob-intro { text-align: center; margin-bottom: var(--space-5); }
+.ob-intro h3 { margin: 0 0 8px; font-size: var(--text-xl); }
+.ob-intro p { color: var(--text-secondary); max-width: 56ch; margin: 0 auto; line-height: 1.6; }
+
+.ob-coins { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.ob-coin {
+    text-align: left; padding: 16px; border-radius: 12px; cursor: pointer;
+    background: var(--void-light); border: 1px solid var(--glass-border);
+    color: var(--text-primary); font-family: inherit;
+    display: flex; flex-direction: column; gap: 4px;
+    transition: border-color .15s ease, transform .15s ease;
+}
+.ob-coin:hover { border-color: var(--beam-cyan, #25c2a0); transform: translateY(-2px); }
+.ob-coin-sym  { font-weight: 700; font-size: var(--text-base); color: var(--beam-cyan, #25c2a0); }
+.ob-coin-name { font-size: var(--text-sm); }
+.ob-coin-note { font-size: var(--text-xs); color: var(--text-muted); line-height: 1.5; }
+
+.ob-steps { display: flex; flex-direction: column; gap: 14px; margin-bottom: var(--space-5); }
+.ob-step { display: flex; gap: 12px; align-items: flex-start; line-height: 1.6; color: var(--text-secondary); }
+.ob-step strong { color: var(--text-primary); display: block; margin-bottom: 2px; }
+.ob-step-n {
+    flex: 0 0 26px; height: 26px; border-radius: 50%;
+    background: var(--beam-cyan-dim, rgba(37,194,160,.15));
+    color: var(--beam-cyan, #25c2a0); font-weight: 700; font-size: var(--text-xs);
+    display: flex; align-items: center; justify-content: center;
+}
+
+.ob-contrast { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: var(--space-5); }
+@media (max-width: 720px) { .ob-contrast { grid-template-columns: 1fr; } }
+.ob-contrast-col { padding: 14px; border-radius: 12px; background: var(--void-light); border: 1px solid var(--glass-border); }
+.ob-contrast-col h4 { margin: 0 0 8px; font-size: var(--text-sm); }
+.ob-contrast-col.bad  h4 { color: var(--error); }
+.ob-contrast-col.good h4 { color: var(--success); }
+.ob-contrast-col ul { margin: 0; padding-left: 18px; }
+.ob-contrast-col li { color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.6; margin-bottom: 6px; }
+
+.ob-connect { background: var(--void-light); border: 1px solid var(--glass-border);
+              border-radius: 12px; padding: var(--space-4); margin-bottom: var(--space-4); }
+.ob-field label { display: block; font-size: var(--text-xs); color: var(--text-muted); margin-bottom: 6px; }
+/* 16px minimum: below it iOS Safari zooms the page on focus and leaves it zoomed. */
+.ob-field input { width: 100%; padding: 11px; border-radius: 8px; font-size: 16px;
+                  background: var(--void-lighter); border: 1px solid var(--glass-border);
+                  color: var(--text-primary); font-family: inherit; }
+.ob-note { font-size: var(--text-xs); color: var(--text-muted); margin: 10px 0 14px; line-height: 1.6; }
+
+.ob-honest { background: var(--warning-dim, rgba(245,158,11,.1));
+             border: 1px solid var(--warning); border-radius: 12px;
+             padding: var(--space-4); margin-bottom: var(--space-4); }
+.ob-honest h4 { margin: 0 0 8px; color: var(--warning); font-size: var(--text-sm); }
+.ob-honest p { color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.6; margin: 0 0 8px; }
+
+.ob-connected { margin-top: 14px; }
+.ob-seed { margin-top: 10px; padding: 12px; border-radius: 8px;
+           background: var(--warning-dim, rgba(245,158,11,.1)); border: 1px solid var(--warning); }
+.ob-seed p { font-size: var(--text-xs); color: var(--text-secondary); margin: 0 0 8px; line-height: 1.6; }
+.ob-seed code { display: block; font-family: var(--font-mono, monospace); font-size: var(--text-sm);
+                color: var(--text-primary); word-spacing: 4px; line-height: 1.8; user-select: all; }
+
+.ob-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.ob-foot { text-align: center; color: var(--text-muted); font-size: var(--text-xs);
+           margin-top: var(--space-4); line-height: 1.6; }

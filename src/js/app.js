@@ -1301,6 +1301,7 @@ function showPage(pageId, updateUrl = true) {
         dex: 'DEX Trading',
         p2p: 'P2P Marketplace',
         'swap-market': 'Atomic Swaps',
+        onboard: 'Bring Crypto to BEAM',
         airdrop: 'Airdrop',
         explorer: 'Explorer',
         appstore: 'App Store',
@@ -1361,6 +1362,8 @@ function showPage(pageId, updateUrl = true) {
         if (typeof initFuddle === 'function') initFuddle();
     } else if (pageId === 'memeclash') {
         if (typeof initMemeClash === 'function') initMemeClash();
+    } else if (pageId === 'onboard') {
+        if (typeof initOnboardPage === 'function') initOnboardPage();
     } else if (pageId === 'swap-market') {
         if (typeof initSwapMarketPage === 'function') initSwapMarketPage();
     } else if (pageId === 'settings') {

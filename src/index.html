@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="/css/fuddle.css">
     <link rel="stylesheet" href="/css/meme_battle.css">
     <link rel="stylesheet" href="/css/swap-market.css">
+    <link rel="stylesheet" href="/css/onboard.css">
 
     <!-- Vendored, not CDN: this origin holds the session token and the JSON-RPC
          proxy that forwards tx_send, so a script here can spend the wallet.
@@ -106,6 +107,13 @@
                 <button type="button" class="nav-item" data-page="dex" data-tooltip="DEX Trading" aria-label="DEX Trading">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+                    </svg>
+                </button>
+                <button type="button" class="nav-item" data-page="onboard"
+                        data-tooltip="Bring crypto to BEAM" aria-label="Bring crypto to BEAM">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 19V5M12 5l-6 6M12 5l6 6"/>
+                        <path d="M4 21h16"/>
                     </svg>
                 </button>
                 <button type="button" class="nav-item" data-page="swap-market"
@@ -717,6 +725,22 @@
                 <!-- Atomic swap market. Replaces the old order-book P2P, which was
                      an escrow contract with a dead relay. These are real
                      cross-chain atomic swaps settled by BEAM's own bridges. -->
+                <!-- Guided path from a public chain onto BEAM. Deliberately built
+                     on atomic swaps rather than a bridge: bridges hold a pot of
+                     custodied funds and are the most exploited component in this
+                     industry, which is exactly the risk this is meant to avoid. -->
+                <div class="page" id="page-onboard">
+                    <div class="onboard">
+                        <div class="ob-progress">
+                            <span class="ob-progress-dot current"></span>
+                            <span class="ob-progress-dot"></span>
+                            <span class="ob-progress-dot"></span>
+                            <span class="ob-progress-dot"></span>
+                        </div>
+                        <div id="onboard-body"></div>
+                    </div>
+                </div>
+
                 <div class="page" id="page-swap-market">
                     <div class="swap-market">
                         <div class="swap-market-head">
@@ -2754,6 +2778,7 @@
     <script src="/js/pages/fuddle.js"></script>
     <script src="/js/pages/meme_battle.js"></script>
     <script src="/js/pages/swap-market.js"></script>
+    <script src="/js/pages/onboard.js"></script>
     <script src="/js/app.js"></script>
 
     <!-- Modal Container -->
