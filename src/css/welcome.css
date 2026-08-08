@@ -274,3 +274,18 @@
     text-align: center;
     margin: var(--space-2, 8px) 0 0;
 }
+
+/* Retry for a failed wallet-list fetch. Hidden until it is needed - the
+   [hidden] rule in base.css makes that stick. */
+.welcome-retry {
+    margin-top: 8px;
+    padding: 7px 16px;
+    border: 1px solid var(--beam-cyan, #25c2a0);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--beam-cyan, #25c2a0);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+.welcome-retry:hover { background: var(--beam-cyan, #25c2a0); color: var(--void, #050a0f); }

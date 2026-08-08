@@ -5121,6 +5121,11 @@ function showLockedOverlay(message) {
                             <select class="welcome-select" id="welcome-wallet-select" onchange="onWelcomeWalletSelect()">
                                 <option value="">Loading wallets...</option>
                             </select>
+                            <!-- Shown only when the wallet list could not be fetched.
+                                 Without it this screen sat on "Loading wallets..."
+                                 indefinitely with no way to try again. -->
+                            <button type="button" class="welcome-retry" id="welcome-wallet-retry"
+                                    onclick="loadWelcomeWallets()" hidden>Retry</button>
                         </div>
                         <div class="welcome-field">
                             <label class="welcome-label">Account password</label>
@@ -5324,13 +5329,25 @@ async function isLocalNodeSynced() {
 async function loadWelcomeWallets() {
     try {
         const response = await fetch('/api/wallets');
-        if (response.ok) {
-            const data = await response.json();
-            welcomeWallets = data.wallets || [];
-            updateWelcomeWalletSelect();
-        }
+        if (!response.ok) throw new Error(`server returned ${response.status}`);
+        const data = await response.json();
+        welcomeWallets = data.wallets || [];
+        updateWelcomeWalletSelect();
     } catch (e) {
+        // Both failure paths used to end here silently - a non-ok response
+        // simply skipped updateWelcomeWalletSelect, and a thrown error only
+        // logged - so the dropdown sat on "Loading wallets..." forever. That is
+        // the first screen anyone sees, and it gave them nothing: no error, no
+        // retry, no indication the wallet was even alive.
         console.error('Failed to load wallets:', e);
+        const select = document.getElementById('welcome-wallet-select');
+        if (select) {
+            select.innerHTML = '<option value="">Could not reach the wallet service</option>';
+        }
+        showWelcomeError('', 'Could not load your wallets — the local wallet service '
+            + 'did not respond. Check it is running, then retry.');
+        const retry = document.getElementById('welcome-wallet-retry');
+        if (retry) retry.hidden = false;
     }
 }
 

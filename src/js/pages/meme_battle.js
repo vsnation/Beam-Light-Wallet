@@ -181,6 +181,15 @@ async function mcLoadState() {
     const res = await mcCall('view', 'manager');
     if (res && res.state) {
         mcState.contractState = res.state;
+        mcState.loadError = null;
+    } else {
+        // Record the failure. The renderer showed a spinner whenever
+        // contractState was falsy, which is also what a failed call leaves
+        // behind - so a contract error became an endless "Loading MemeClash..."
+        // with no error, no retry and no way to tell the two apart.
+        mcState.loadError = (res && res.error)
+            ? String(res.error)
+            : 'The MemeClash contract did not respond.';
     }
     return res;
 }
@@ -254,7 +263,13 @@ function mcRender() {
 
     const s = mcState.contractState;
     if (!s) {
-        root.innerHTML = `
+        // Distinguish "still loading" from "it failed". Only the first deserves
+        // a spinner; the second needs to say so and offer a way out.
+        root.innerHTML = mcState.loadError
+            ? `<div class="mc-container">${errorState(
+                   'Could not load MemeClash', 'mcLoadAll()',
+                   { detail: mcState.loadError })}</div>`
+            : `
             <div class="mc-container">
                 <div class="mc-loading">
                     <div class="mc-loading-spinner"></div>
