@@ -7025,3 +7025,37 @@ tr.skeleton-row {
         display: none;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Touch targets and the iOS zoom threshold.
+
+   Safari on iOS zooms the page whenever a focused field's text is under 16px,
+   and it does not zoom back out afterwards - so one tap on the amount box left
+   someone stranded at 1.3x with the send button off-screen. 21 visible fields
+   were under that threshold and 23 were shorter than the 44px Apple asks for.
+
+   Applied on coarse pointers and on narrow screens, so a mouse on a desktop
+   keeps the compact layout. Padding goes on the field itself rather than a
+   wrapper, so the whole box is tappable rather than a strip through the middle.
+   --------------------------------------------------------------------------- */
+@media (pointer: coarse), (max-width: 768px) {
+    input, select, textarea,
+    .search-input, .form-input, .amount-input {
+        font-size: 16px;
+        min-height: 44px;
+        padding: 10px 14px;
+    }
+
+    textarea {
+        /* A textarea sizes by rows; a min-height would fight a taller one. */
+        min-height: 66px;
+    }
+
+    input[type="range"], input[type="checkbox"], input[type="radio"] {
+        /* Sized by the control itself, not by text - the 16px rule does not
+           apply and a 44px min-height would distort a slider. */
+        min-height: 0;
+        font-size: inherit;
+        padding: 0;
+    }
+}

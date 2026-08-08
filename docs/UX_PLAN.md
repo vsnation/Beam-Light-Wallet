@@ -36,7 +36,7 @@ fails, which is the first screen a new user sees.
 **Fix:** route all three through `errorState()` with a working retry, as the DEX
 and explorer panels now do. Never render a zero that was not measured.
 
-## 3. Things the wallet asserts without checking
+## 3. Things the wallet asserts without checking — DONE
 
 The DEX offers to "Create Pool" for a pool that already exists, and stays wrong
 after the pools load. 72 of 400 transactions are labelled "Mint Tokens" purely
@@ -47,7 +47,7 @@ charged. Liquidity rates round to "1 : 0.0000", showing a real price as zero.
 **Fix:** each is a claim made without the check behind it. Derive from state, or
 say nothing.
 
-## 4. Money confirmations that omit the cost
+## 4. Money confirmations that omit the cost — DONE
 
 The swap confirmation never states the BEAM network fee the swap actually costs
 (~0.011 BEAM — measured, not the 0.001 of a transfer). Airdrop batch creation

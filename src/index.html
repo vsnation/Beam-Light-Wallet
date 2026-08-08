@@ -1882,7 +1882,7 @@
                                     </span>
                                 </div>
                                 <input type="password" id="telegram-bot-token" class="search-input" placeholder="123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-                                    style="width: 100%; font-family: var(--font-mono); font-size: 12px;">
+                                    style="width: 100%; font-family: var(--font-mono); ">
                             </div>
 
                             <!-- User ID -->
@@ -1903,7 +1903,7 @@
                                     </span>
                                 </div>
                                 <input type="text" id="telegram-user-id" class="search-input" placeholder="123456789"
-                                    style="width: 100%; font-family: var(--font-mono); font-size: 14px;">
+                                    style="width: 100%; font-family: var(--font-mono); ">
                             </div>
 
                             <!-- Notification Types -->
@@ -2012,7 +2012,7 @@
                     <!-- Expiration -->
                     <div style="flex: 1; min-width: 140px;">
                         <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Expiration</label>
-                        <select id="address-expiration" onchange="regenerateAddress()" style="width: 100%; padding: 8px 12px; background: var(--void); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px;">
+                        <select id="address-expiration" onchange="regenerateAddress()" style="width: 100%; padding: 8px 12px; background: var(--void); border: 1px solid var(--border); border-radius: 6px; color: var(--text); ">
                             <option value="auto" selected>Auto (61 days)</option>
                             <option value="24h">24 hours</option>
                             <option value="never">Never expires</option>
@@ -2021,7 +2021,7 @@
                     <!-- Offline Payments (only for offline type) -->
                     <div id="offline-payments-option" style="flex: 1; min-width: 140px; display: none;">
                         <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Offline Payments</label>
-                        <select id="offline-payments-count" onchange="regenerateAddress()" style="width: 100%; padding: 8px 12px; background: var(--void); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px;">
+                        <select id="offline-payments-count" onchange="regenerateAddress()" style="width: 100%; padding: 8px 12px; background: var(--void); border: 1px solid var(--border); border-radius: 6px; color: var(--text); ">
                             <option value="1" selected>1 payment</option>
                             <option value="10">10 payments</option>
                             <option value="50">50 payments</option>
@@ -2033,7 +2033,7 @@
                 <!-- Comment -->
                 <div style="margin-bottom: 16px;">
                     <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Comment (optional)</label>
-                    <input type="text" id="address-comment" placeholder="e.g., Payment from John" onchange="regenerateAddress()" style="width: 100%; padding: 8px 12px; background: var(--void); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; box-sizing: border-box;">
+                    <input type="text" id="address-comment" placeholder="e.g., Payment from John" onchange="regenerateAddress()" style="width: 100%; padding: 8px 12px; background: var(--void); border: 1px solid var(--border); border-radius: 6px; color: var(--text); box-sizing: border-box;">
                 </div>
 
                 <!-- QR Code -->
@@ -2471,19 +2471,19 @@
                 <div style="margin-bottom: 20px;">
                     <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Token Name *</div>
                     <input type="text" id="ct-name" placeholder="e.g., My Awesome Token" maxlength="64"
-                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); ">
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
                     <div>
                         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Symbol *</div>
                         <input type="text" id="ct-symbol" placeholder="e.g., MAT" maxlength="8"
-                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; text-transform: uppercase;">
+                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-transform: uppercase;">
                     </div>
                     <div>
                         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Short Name</div>
                         <input type="text" id="ct-short-name" placeholder="e.g., MAT" maxlength="16"
-                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); ">
                     </div>
                 </div>
 
@@ -2491,11 +2491,11 @@
                     <div>
                         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Max Supply *</div>
                         <input type="number" id="ct-supply" placeholder="e.g., 1000000" min="1"
-                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                               style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); ">
                     </div>
                     <div>
                         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Decimals</div>
-                        <select id="ct-decimals" style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                        <select id="ct-decimals" style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); ">
                             <option value="8" selected>8 (like BEAM)</option>
                             <option value="6">6 (like USDC)</option>
                             <option value="2">2 (cents)</option>
@@ -2507,26 +2507,26 @@
                 <div style="margin-bottom: 20px;">
                     <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Smallest Unit Name</div>
                     <input type="text" id="ct-unit-name" placeholder="e.g., groth (optional)" maxlength="16"
-                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); ">
                 </div>
 
                 <div style="margin-bottom: 20px;">
                     <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Logo URL</div>
                     <input type="url" id="ct-logo-url" placeholder="https://example.com/logo.png (optional)"
-                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); ">
                     <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Direct link to token logo image (PNG, SVG, or ICO recommended)</div>
                 </div>
 
                 <div style="margin-bottom: 20px;">
                     <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Short Description</div>
                     <input type="text" id="ct-short-desc" placeholder="Brief description (max 128 chars)" maxlength="128"
-                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;">
+                           style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); ">
                 </div>
 
                 <div style="margin-bottom: 20px;">
                     <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">Long Description</div>
                     <textarea id="ct-long-desc" placeholder="Detailed description (optional, max 1024 chars)" maxlength="1024" rows="3"
-                              style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; resize: vertical;"></textarea>
+                              style="width: 100%; padding: 12px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); resize: vertical;"></textarea>
                 </div>
 
                 <div style="margin-bottom: 24px;">
@@ -2534,7 +2534,7 @@
                     <div style="display: flex; align-items: center; gap: 12px;">
                         <input type="color" id="ct-color" value="#25c2a0" style="width: 50px; height: 40px; border: none; border-radius: 8px; cursor: pointer;">
                         <input type="text" id="ct-color-hex" value="#25c2a0" maxlength="7" placeholder="#RRGGBB"
-                               style="width: 100px; padding: 10px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; font-family: 'JetBrains Mono', monospace;"
+                               style="width: 100px; padding: 10px; background: var(--void); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'JetBrains Mono', monospace;"
                                oninput="syncColorFromHex()">
                         <div id="ct-color-preview" style="flex: 1; height: 40px; border-radius: 8px; background: #25c2a0;"></div>
                     </div>

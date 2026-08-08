@@ -293,7 +293,7 @@ async function fuddleShowLegacyContracts() {
             </p>
             <div style="margin-bottom:16px;">
                 <label style="color:var(--text-secondary);font-size:12px;margin-bottom:4px;display:block;">Contract Version</label>
-                <select id="legacy-cid-select" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:8px;font-size:14px;font-family:var(--fuddle-font-game);">
+                <select id="legacy-cid-select" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:8px;font-family:var(--fuddle-font-game);">
                     ${FUDDLE_LEGACY_CIDS.map(c => `<option value="${c.cid}">${c.label} — ${c.cid.slice(0,8)}...</option>`).join('')}
                 </select>
             </div>
@@ -362,11 +362,11 @@ async function fuddleScanLegacy() {
                 <div style="display:flex;gap:8px;margin-top:12px;align-items:end;">
                     <div style="flex:1;">
                         <label style="color:var(--text-secondary);font-size:11px;display:block;margin-bottom:4px;">Amount</label>
-                        <input type="text" id="legacy-manual-amount" placeholder="e.g. 1.5" style="width:100%;padding:8px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:13px;">
+                        <input type="text" id="legacy-manual-amount" placeholder="e.g. 1.5" style="width:100%;padding:8px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
                     </div>
                     <div style="flex:1;">
                         <label style="color:var(--text-secondary);font-size:11px;display:block;margin-bottom:4px;">Asset</label>
-                        <select id="legacy-manual-asset" style="width:100%;padding:8px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:13px;">
+                        <select id="legacy-manual-asset" style="width:100%;padding:8px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
                             <option value="0">BEAM</option>
                             <option value="174">FOMO</option>
                             <option value="7">BEAMX</option>
@@ -408,10 +408,10 @@ async function fuddleScanLegacy() {
             <div style="color:var(--text-muted);font-size:12px;margin-bottom:8px;">Manual withdraw (if amount differs):</div>
             <div style="display:flex;gap:8px;align-items:end;">
                 <div style="flex:1;">
-                    <input type="text" id="legacy-manual-amount" placeholder="Amount" style="width:100%;padding:8px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:13px;">
+                    <input type="text" id="legacy-manual-amount" placeholder="Amount" style="width:100%;padding:8px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
                 </div>
                 <div style="flex:1;">
-                    <select id="legacy-manual-asset" style="width:100%;padding:8px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:13px;">
+                    <select id="legacy-manual-asset" style="width:100%;padding:8px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
                         <option value="0">BEAM</option>
                         <option value="174">FOMO</option>
                         <option value="7">BEAMX</option>
@@ -2955,7 +2955,7 @@ lootbox_small_price=GROTH,lootbox_large_price=GROTH,tournament_duration=BLOCKS" 
                     <option value="5">5-letter words (${len5} existing)</option>
                     <option value="6">6-letter words (${len6} existing)</option>
                 </select>
-                <textarea id="admin-words-input" rows="6" placeholder="WORD&#10;GAME&#10;PLAY&#10;..." style="font-family:var(--font-mono);font-size:13px;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px;resize:vertical;"></textarea>
+                <textarea id="admin-words-input" rows="6" placeholder="WORD&#10;GAME&#10;PLAY&#10;..." style="font-family:var(--font-mono);background:var(--bg-tertiary);color:var(--text-primary);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px;resize:vertical;"></textarea>
                 <button class="btn btn-accent" onclick="fuddleAdminAddWords()" style="padding:11px 22px;">Add Words</button>
             </div>
         </div>
