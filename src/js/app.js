@@ -7699,6 +7699,7 @@ async function loadAddresses() {
             return;
         }
 
+        _allAddresses = addrs;
         renderAddresses(addrs);
     } catch (e) {
         console.error('Load addresses error:', e);
@@ -7706,15 +7707,49 @@ async function loadAddresses() {
     }
 }
 
+/**
+ * Expired addresses are history, not choices.
+ *
+ * A regular address expires after 61 days, and they accumulate: this wallet had
+ * 1,326 expired against a handful of live ones. Rendering them all put 22,813
+ * DOM nodes and 3.26 MB of markup on one page - 86% of every node in the
+ * document - and buried the addresses someone can actually use under a thousand
+ * dead ones. They are still reachable, behind a count, because an expired
+ * address is worth looking up when reconciling an old payment.
+ */
+let _allAddresses = [];
+let _showExpiredAddresses = false;
+
+function toggleExpiredAddresses() {
+    _showExpiredAddresses = !_showExpiredAddresses;
+    renderAddresses(_allAddresses);
+}
+
 function renderAddresses(addrs) {
     const container = document.getElementById('addresses-list');
     const now = Math.floor(Date.now() / 1000);
     const isWideScreen = window.innerWidth > 768;
 
-    // Map type to user-friendly names
+    const isExpired = a => !!(a.expired || (a.expire && a.expire < now));
+    const expiredCount = addrs.filter(isExpired).length;
+    if (!_showExpiredAddresses && expiredCount) addrs = addrs.filter(a => !isExpired(a));
+
+    const expiredBanner = expiredCount ? `
+        <div class="expired-addr-toggle" style="padding:10px 14px;margin-bottom:10px;border:1px solid var(--glass-border);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <span style="color:var(--text-secondary);font-size:var(--text-sm);">
+                ${expiredCount.toLocaleString()} expired address${expiredCount === 1 ? '' : 'es'}
+                &mdash; kept for looking up old payments, and not usable for new ones.
+            </span>
+            <button class="quick-btn" onclick="toggleExpiredAddresses()">
+                ${_showExpiredAddresses ? 'Hide expired' : 'Show expired'}
+            </button>
+        </div>` : '';
+
+    // Map type to user-friendly names. "SBBS" is the name of the protocol these
+    // addresses use, which tells someone nothing about when to use one.
     const typeNames = {
-        'regular': 'SBBS',
-        'regular_new': 'SBBS',
+        'regular': 'Standard',
+        'regular_new': 'Standard',
         'offline': 'Offline',
         'max_privacy': 'Max Privacy',
         'public_offline': 'Donation',
@@ -7723,7 +7758,7 @@ function renderAddresses(addrs) {
 
     if (isWideScreen) {
         // Desktop: Table layout with full info
-        container.innerHTML = `
+        container.innerHTML = expiredBanner + `
             <table class="balances-table" style="width:100%;">
                 <thead>
                     <tr>
@@ -7771,7 +7806,7 @@ function renderAddresses(addrs) {
         `;
     } else {
         // Mobile: Card layout
-        container.innerHTML = addrs.map(a => {
+        container.innerHTML = expiredBanner + addrs.map(a => {
             const expired = a.expired || (a.expire && a.expire < now);
             const addrShort = a.address.substring(0, 12) + '...' + a.address.substring(a.address.length - 8);
             const typeName = typeNames[a.type] || a.type || 'SBBS';
