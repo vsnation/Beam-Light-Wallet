@@ -7049,6 +7049,21 @@ async function renderTransactions(txs) {
         const config = getAssetInfo(aid);
         const amount = formatAmount(tx.value || 0);
         const fee = tx.fee ? formatAmount(tx.fee) : '0';
+
+        // A transaction that never reached a block never paid its fee.
+        //
+        // Measured on a real wallet: all 309 completed transactions carry a
+        // block height and not one of the 91 failed, expired or cancelled ones
+        // does - yet the fee was printed identically for both, claiming 8.55
+        // BEAM of spending that never happened. Pending transactions are left
+        // alone: they have no height yet either, but theirs will be charged if
+        // they confirm.
+        const txSettled = !!(tx.height && tx.height > 0);
+        const txGaveUp = [2, 4].includes(tx.status) ||
+            ['failed', 'cancelled', 'canceled', 'expired'].includes(tx.status_string || '');
+        const feeHtml = (!txSettled && txGaveUp)
+            ? '<div class="tx-fee tx-fee-unspent">Fee: ' + fee + ' BEAM \u2014 not charged</div>'
+            : '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
         const txId = tx.txId || tx.tx_id || '-';
         const kernel = tx.kernel || '-';
         const sender = tx.sender || '-';
@@ -7138,10 +7153,22 @@ async function renderTransactions(txs) {
             }
         }
 
-        // Detect asset creation, minting, and burning
-        const isAssetCreate = commentLower.includes('creating asset') || commentLower.includes('create asset');
-        const isAssetMint = commentLower.includes('minting asset') || commentLower.includes('mint asset') || commentLower.includes('withdraw');
-        const isAssetBurn = commentLower.includes('blackhole') || commentLower.includes('burn') ||
+        // Asset creation, minting and burning, taken from what the transaction IS
+        // rather than from what its comment happens to say.
+        //
+        // These used to be substring tests over the comment, and 'withdraw' was
+        // one of them - so "Emergency withdraw from Fuddle" and "Withdraw Fuddle
+        // FOMO fees" were both reported as "Mint Tokens". Measured against 400
+        // real transactions: 72 were labelled a mint and not one of them was;
+        // the wallet had never issued an asset at all. tx_type_string is set by
+        // wallet-api from the transaction's actual kind, so it cannot be fooled
+        // by a comment.
+        const txKind = tx.tx_type_string || '';
+        const isAssetCreate = txKind === 'asset_reg';
+        const isAssetMint = txKind === 'asset_issue';
+        // A contract burn is a real check too: the funds went to BlackHole's
+        // contract id. The word "burn" appearing in a comment is not.
+        const isAssetBurn = txKind === 'asset_consume' ||
             (tx.invoke_data && tx.invoke_data.some(d => d.contract_id === '5ab408982b148210e88f180114f10222a2235eafeede0a3a224fda0e523e17b7'));
 
         // P2P Escrow Contract detection (auto-derived PK version - deployed 2026-01-28)
@@ -7307,7 +7334,7 @@ async function renderTransactions(txs) {
             '</div>';
             amountHtml = '<div class="tx-amount" style="color:var(--warning);font-size:12px;">-' + feeDisplay + ' BEAM</div>' +
                 '<div style="font-size:10px;opacity:0.7;">Creation Fee</div>' +
-                '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                feeHtml;
         } else if (isAssetMint && tx.invoke_data && tx.invoke_data.length > 0) {
             const amounts = tx.invoke_data[0].amounts || [];
             const mintedAsset = amounts.find(a => a.asset_id !== 0 && a.amount < 0);
@@ -7326,10 +7353,10 @@ async function renderTransactions(txs) {
                 '</div>';
                 amountHtml = '<div class="tx-amount" style="color:var(--success);font-size:12px;">+' + mintAmount + ' ' + mintInfo.symbol + '</div>' +
                     '<div style="font-size:10px;opacity:0.7;">' + (mintInfo.name || 'Asset #' + Math.abs(mintedAsset.asset_id)) + '</div>' +
-                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                    feeHtml;
             } else {
                 detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);">Minting tokens</div>';
-                amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                amountHtml = feeHtml;
             }
         } else if (isAssetBurn && tx.invoke_data && tx.invoke_data.length > 0) {
             // Burn transaction - tokens sent to BlackHole
@@ -7350,10 +7377,10 @@ async function renderTransactions(txs) {
                 '</div>';
                 amountHtml = '<div class="tx-amount" style="color:#ef4444;font-size:12px;">-' + burnAmount + ' ' + burnInfo.symbol + '</div>' +
                     '<div style="font-size:10px;opacity:0.7;">' + (burnInfo.name || 'Sent to BlackHole') + '</div>' +
-                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                    feeHtml;
             } else {
                 detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:#ef4444;">🔥 Burning tokens</div>';
-                amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                amountHtml = feeHtml;
             }
         } else if (isP2PContract && tx.invoke_data && tx.invoke_data.length > 0) {
             // P2P Escrow transaction details
@@ -7375,7 +7402,7 @@ async function renderTransactions(txs) {
                 '</div>';
                 amountHtml = '<div class="tx-amount" style="color:var(--warning);font-size:12px;">-' + lockedAmt + ' ' + assetInfo.symbol + '</div>' +
                     '<div style="font-size:10px;opacity:0.7;">Locked in escrow</div>' +
-                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                    feeHtml;
             } else if (isP2PCancelOrder && p2pAsset) {
                 // Cancel order: refunded amount
                 const assetInfo = getAssetInfo(p2pAsset.asset_id);
@@ -7391,7 +7418,7 @@ async function renderTransactions(txs) {
                 '</div>';
                 amountHtml = '<div class="tx-amount" style="color:' + (isRefund ? 'var(--success)' : 'var(--warning)') + ';font-size:12px;">' + (isRefund ? '+' : '-') + refundAmt + ' ' + assetInfo.symbol + '</div>' +
                     '<div style="font-size:10px;opacity:0.7;">' + (isRefund ? 'Refunded from escrow' : 'Released') + '</div>' +
-                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                    feeHtml;
             } else if ((isP2PAcceptOrder || isP2PConfirmPayment) && p2pAsset) {
                 // Accept/Confirm: trade completed
                 const assetInfo = getAssetInfo(p2pAsset.asset_id);
@@ -7407,7 +7434,7 @@ async function renderTransactions(txs) {
                 '</div>';
                 amountHtml = '<div class="tx-amount" style="color:' + (isReceiving ? 'var(--success)' : 'var(--warning)') + ';font-size:12px;">' + (isReceiving ? '+' : '-') + tradeAmt + ' ' + assetInfo.symbol + '</div>' +
                     '<div style="font-size:10px;opacity:0.7;">' + (isReceiving ? 'Received' : 'Deposit locked') + '</div>' +
-                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                    feeHtml;
             } else if (isP2PStake && p2pAsset) {
                 // Stake escrow
                 const assetInfo = getAssetInfo(p2pAsset.asset_id);
@@ -7422,7 +7449,7 @@ async function renderTransactions(txs) {
                 '</div>';
                 amountHtml = '<div class="tx-amount" style="color:var(--warning);font-size:12px;">-' + stakeAmt + ' ' + assetInfo.symbol + '</div>' +
                     '<div style="font-size:10px;opacity:0.7;">Locked as escrow stake</div>' +
-                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                    feeHtml;
             } else if (isP2PUnstake && p2pAsset) {
                 // Unstake
                 const assetInfo = getAssetInfo(p2pAsset.asset_id);
@@ -7437,7 +7464,7 @@ async function renderTransactions(txs) {
                 '</div>';
                 amountHtml = '<div class="tx-amount" style="color:var(--success);font-size:12px;">+' + unstakeAmt + ' ' + assetInfo.symbol + '</div>' +
                     '<div style="font-size:10px;opacity:0.7;">Stake + rewards returned</div>' +
-                    '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                    feeHtml;
             } else {
                 // Generic P2P transaction
                 const p2pActionText = isP2PPaymentSent ? 'Payment marked as sent' :
@@ -7452,9 +7479,9 @@ async function renderTransactions(txs) {
                     const isP2PReceive = p2pAsset.amount < 0;
                     amountHtml = '<div class="tx-amount" style="color:' + (isP2PReceive ? 'var(--success)' : 'var(--warning)') + ';font-size:12px;">' +
                         (isP2PReceive ? '+' : '-') + p2pAmt + ' ' + assetInfo.symbol + '</div>' +
-                        '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                        feeHtml;
                 } else {
-                    amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                    amountHtml = feeHtml;
                 }
             }
         } else if (liquidityDetails) {
@@ -7508,10 +7535,10 @@ async function renderTransactions(txs) {
                 }).join('');
 
                 detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);">' + contractLabel + '</div>';
-                amountHtml = amountLines + '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                amountHtml = amountLines + feeHtml;
             } else {
                 detailHtml = '<div class="tx-swap-detail" style="font-size:12px;color:var(--text-secondary);">' + contractLabel + '</div>';
-                amountHtml = '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                amountHtml = feeHtml;
             }
         } else {
             // Regular transfer - show asset icon and amount
@@ -7525,7 +7552,7 @@ async function renderTransactions(txs) {
             '</div>';
             amountHtml = '<div class="tx-amount" style="color:' + (isReceive ? 'var(--success)' : 'var(--warning)') + '">' + (isReceive ? '+' : '-') + amount + '</div>' +
                 (txUsdDisplay ? '<div style="font-size:10px;opacity:0.5;">' + txUsdDisplay + '</div>' : '') +
-                '<div class="tx-fee">Fee: ' + fee + ' BEAM</div>';
+                feeHtml;
         }
 
         // Build metadata row (always visible: date, block height, confirmations, kernel)
