@@ -57,7 +57,7 @@ is accepted, rounds to zero, and the confirmation still shows the typed figure.
 **Fix:** every screen that commits funds states the total cost including the
 network fee, and nothing irreversible happens without a confirmation.
 
-## 5. Touch and zoom (21 inputs, measured today)
+## 5. Touch and zoom (21 inputs, measured today) — DONE
 
 21 visible inputs are under 16px, which makes iOS Safari zoom the page on focus
 and leaves it zoomed. The Explorer search box responds to taps on only the
@@ -67,7 +67,7 @@ against a 44px minimum.
 **Fix:** 16px minimum on inputs (the threshold at which iOS stops zooming),
 padding moved from the wrapper onto the field so the whole box is the target.
 
-## 6. Names and contrast (29 + 4, measured today)
+## 6. Names and contrast (29 + 4, measured today) — DONE
 
 29 icon-only controls have no accessible name; 4 inputs have no programmatic
 label. Explorer's Search button computes 2.04:1 — caused by an **undefined CSS

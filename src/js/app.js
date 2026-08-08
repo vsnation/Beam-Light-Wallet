@@ -1668,8 +1668,13 @@ function renderAssetCards() {
                 <div class="asset-name">
                     ${displayName}
                     ${asset.locked > 0 ? `<span class="annotation" style="margin-left:8px;">+${formatAmount(asset.locked)} locked</span>` : ''}
-                    <button class="asset-dropdown" onclick="event.stopPropagation(); openAssetMenu(${asset.id})">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                    <!-- One of these per asset row, and the chevron is the whole
+                         button - so a screen reader announced twelve identical
+                         nameless buttons. Naming the asset is the point: "Options
+                         for FOMO" is useful, twelve "Options" is not. -->
+                    <button class="asset-dropdown" aria-label="Options for ${escapeHtml(displayName)}"
+                            onclick="event.stopPropagation(); openAssetMenu(${asset.id})">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true">
                             <path d="M6 9l6 6 6-6"/>
                         </svg>
                     </button>

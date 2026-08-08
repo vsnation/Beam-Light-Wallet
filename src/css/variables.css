@@ -94,4 +94,27 @@
     --z-modal: 1000;
     --z-toast: 2000;
     --z-overlay: 5000;
+
+    /* -----------------------------------------------------------------------
+       Names that were used but never defined.
+
+       A var() with no definition and no fallback makes the whole declaration
+       invalid at computed-value time, so the property silently falls back to
+       whatever is inherited. That is how a button ends up nearly the colour of
+       its own background: nothing errors, the colour just never arrives. These
+       eleven were referenced 107 times across the CSS, index.html and the JS
+       that builds markup - so they are aliases of the real palette, not new
+       colours.
+       ----------------------------------------------------------------------- */
+    --bg-primary: var(--void);
+    --bg-secondary: var(--void-light);
+    --bg-tertiary: var(--void-lighter);
+    --bg-dark: var(--void);
+    --text: var(--text-primary);
+    --border: var(--glass-border);
+    --accent-primary: var(--beam-cyan);
+    --beam-green: var(--beam-cyan);
+    --info-dim: rgba(59, 130, 246, 0.15);
+    --font-primary: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
