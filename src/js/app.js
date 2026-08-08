@@ -889,7 +889,13 @@ function parseUserAmount(raw) {
     // Digits, at most one dot, nothing else. No separators, no exponent, no units.
     if (!/^\d*\.?\d+$/.test(text)) return null;
     const n = Number(text);
-    return Number.isFinite(n) && n > 0 ? n : null;
+    if (!Number.isFinite(n) || n <= 0) return null;
+    // Below one groth there is nothing to send. 0.000000001 parses fine, then
+    // rounds to zero on the way to groth, and the wallet would broadcast a
+    // zero-value transaction that still costs a fee - while the confirmation
+    // went on showing the figure that was typed.
+    if (n < 1 / GROTH) return null;
+    return n;
 }
 
 /**
@@ -3712,6 +3718,55 @@ async function chooseNodeMode(type) {
 let localNodeCostResolve = null;
 
 /** Resolves true only if the user accepts the download after seeing its size. */
+/**
+ * A yes/no gate for anything that commits funds.
+ *
+ * Modelled on confirmLocalNodeCost, which already does this properly for the
+ * local node. rows is a list of [label, value] pairs; the last one should be
+ * the total, because the total is the number people actually read.
+ */
+let spendConfirmResolve = null;
+function confirmSpend({ title, rows, warning, cancelText, confirmText }) {
+    return new Promise(resolve => {
+        if (document.getElementById('spend-confirm-modal')) { resolve(false); return; }
+        spendConfirmResolve = resolve;
+        const modal = document.createElement('div');
+        modal.id = 'spend-confirm-modal';
+        modal.className = 'modal-overlay active';
+        modal.innerHTML = `
+            <div class="modal" style="max-width: 460px;">
+                <div class="modal-header">
+                    <h2 class="modal-title">${escapeHtml(title)}</h2>
+                    <button class="modal-close" onclick="closeSpendConfirm(false)">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="confirm-swap-details">
+                        ${rows.map(([k, v], i) => `
+                            <div class="confirm-swap-row"${i === rows.length - 1 ? ' style="font-weight:600;"' : ''}>
+                                <span class="confirm-swap-label">${escapeHtml(k)}</span>
+                                <span class="confirm-swap-value">${escapeHtml(v)}</span>
+                            </div>`).join('')}
+                    </div>
+                    ${warning ? `<p style="margin:var(--space-4) 0 0 0;color:var(--warning);font-size:var(--text-xs);line-height:var(--leading-normal);">${escapeHtml(warning)}</p>` : ''}
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn modal-btn-secondary" onclick="closeSpendConfirm(false)">${escapeHtml(cancelText || 'Cancel')}</button>
+                    <button class="modal-btn modal-btn-primary" onclick="closeSpendConfirm(true)">${escapeHtml(confirmText || 'Confirm')}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        if (typeof syncModalInertness === 'function') syncModalInertness();
+    });
+}
+
+function closeSpendConfirm(accepted) {
+    const m = document.getElementById('spend-confirm-modal');
+    if (m) m.remove();
+    if (typeof syncModalInertness === 'function') syncModalInertness();
+    const r = spendConfirmResolve; spendConfirmResolve = null;
+    if (r) r(!!accepted);
+}
+
 function confirmLocalNodeCost() {
     return new Promise(resolve => {
         if (document.getElementById('local-node-cost-modal')) { resolve(false); return; }
@@ -8622,8 +8677,15 @@ function addLiquidity() {
     if (!currentLiqPool) return;
 
     const pool = currentLiqPool;
-    const amt1 = parseFloat(document.getElementById('liq-amount1').value) || 0;
-    const amt2 = parseFloat(document.getElementById('liq-amount2').value) || 0;
+    // parseFloat reads "1,000" as 1 and "1.2.3" as 1.2, so a mistyped figure was
+    // committed as a different, smaller one without a word. These paths spend
+    // real funds; a figure that cannot be read exactly is not a figure to spend.
+    const amt1 = parseUserAmount(document.getElementById('liq-amount1').value);
+    const amt2 = parseUserAmount(document.getElementById('liq-amount2').value);
+    if (amt1 === null || amt2 === null) {
+        showToast('Enter both amounts as plain numbers, e.g. 1000.5', 'error');
+        return;
+    }
 
     if (amt1 <= 0 || amt2 <= 0) {
         showToast('Enter valid amounts', 'error');
@@ -8777,7 +8839,11 @@ function removeLiquidity() {
     if (!currentLiqPool) return;
 
     const pool = currentLiqPool;
-    const amt = parseFloat(document.getElementById('liq-remove-amount').value) || 0;
+    const amt = parseUserAmount(document.getElementById('liq-remove-amount').value);
+    if (amt === null) {
+        showToast('Enter the amount as a plain number, e.g. 1000.5', 'error');
+        return;
+    }
 
     if (amt <= 0) {
         showToast('Enter valid amount', 'error');
@@ -9218,6 +9284,15 @@ function executeSwap() {
             <div class="confirm-swap-row">
                 <span class="confirm-swap-label">Pool Fee</span>
                 <span class="confirm-swap-value">${fee} ${dexToAsset.symbol}</span>
+            </div>
+            <!-- The pool fee is taken in the asset you receive, so on its own it
+                 reads as though the swap costs nothing in BEAM. It does: a swap
+                 is a contract call, and all three completed swaps in a real
+                 wallet paid 0.011 BEAM. It is charged in BEAM whichever pair you
+                 trade, which is the part people are surprised by. -->
+            <div class="confirm-swap-row">
+                <span class="confirm-swap-label">Network Fee</span>
+                <span class="confirm-swap-value">${formatAmount(CONTRACT_CALL_FEE_GROTH)} BEAM</span>
             </div>
             <!-- There is no slippage tolerance. This row used to claim 0.5%,
                  but the trade submits val1_buy=0, which tells the pool to give
@@ -9679,8 +9754,12 @@ function proceedToCreatePool() {
 async function createPool() {
     if (!pendingPoolCreate) return;
 
-    const amt1 = parseFloat(document.getElementById('pool-amount-1').value) || 0;
-    const amt2 = parseFloat(document.getElementById('pool-amount-2').value) || 0;
+    const amt1 = parseUserAmount(document.getElementById('pool-amount-1').value);
+    const amt2 = parseUserAmount(document.getElementById('pool-amount-2').value);
+    if (amt1 === null || amt2 === null) {
+        showToast('Enter both amounts as plain numbers, e.g. 1000.5', 'error');
+        return;
+    }
     const kind = document.getElementById('pool-fee-model').value;
 
     if (amt1 <= 0 || amt2 <= 0) {
@@ -10205,8 +10284,12 @@ function updateLiquidityPreview(amtA, amtB) {
 function showAddLiquidityConfirmation() {
     if (!selectedLiqPool) return;
 
-    const amtA = parseFloat(document.getElementById('liq-amount-a').value) || 0;
-    const amtB = parseFloat(document.getElementById('liq-amount-b').value) || 0;
+    const amtA = parseUserAmount(document.getElementById('liq-amount-a').value);
+    const amtB = parseUserAmount(document.getElementById('liq-amount-b').value);
+    if (amtA === null || amtB === null) {
+        showToast('Enter both amounts as plain numbers, e.g. 1000.5', 'error');
+        return;
+    }
 
     if (amtA <= 0 || amtB <= 0) {
         showToast('Please enter amounts for both tokens', 'error');
@@ -10283,8 +10366,13 @@ async function executeAddLiquidity() {
 
     closeModal('liquidity-confirm-modal');
 
-    const amtA = parseFloat(document.getElementById('liq-amount-a').value) || 0;
-    const amtB = parseFloat(document.getElementById('liq-amount-b').value) || 0;
+    const amtA = parseUserAmount(document.getElementById('liq-amount-a').value);
+    const amtB = parseUserAmount(document.getElementById('liq-amount-b').value);
+    if (amtA === null || amtB === null) {
+        addLiqInProgress = false;
+        showToast('Enter both amounts as plain numbers, e.g. 1000.5', 'error');
+        return;
+    }
 
     if (amtA <= 0 || amtB <= 0) {
         showToast('Please enter amounts for both tokens', 'error');
@@ -15285,8 +15373,9 @@ async function createAirdropBatch() {
     const valueStr = document.getElementById('airdrop-value').value;
     const count = parseInt(document.getElementById('airdrop-count').value);
 
-    if (!valueStr || parseFloat(valueStr) <= 0) {
-        showToast('Enter a valid value per voucher', 'error');
+    const valueNum = parseUserAmount(valueStr);
+    if (valueNum === null) {
+        showToast('Enter the value per voucher as a plain number, e.g. 10.5', 'error');
         return;
     }
     if (!count || count < 1 || count > 100) {
@@ -15294,11 +15383,7 @@ async function createAirdropBatch() {
         return;
     }
 
-    const valueGroth = Math.round(parseFloat(valueStr) * GROTH);
-    if (valueGroth <= 0) {
-        showToast('Value too small', 'error');
-        return;
-    }
+    const valueGroth = Math.round(valueNum * GROTH);
 
     // Check wallet balance for selected asset (including 1% fee)
     const totalCostGroth = valueGroth * count;
@@ -15343,6 +15428,29 @@ async function createAirdropBatch() {
         }
     } catch (e) {
         // Proceed anyway if balance check fails - contract will reject
+    }
+
+    // Creating a batch locks the whole amount on-chain, and the only way back to
+    // it is the codes - which exist nowhere but this browser's storage. That is
+    // not something to do on a single click with no statement of the total.
+    {
+        const info = getAirdropAssetInfo(assetId);
+        const ok = await confirmSpend({
+            title: 'Lock these funds for the airdrop?',
+            rows: [
+                ['Vouchers', `${count} \u00d7 ${formatAmount(valueGroth)} ${info.symbol}`],
+                ['Contract fee (1%)', `${formatAmount(feeGroth)} ${info.symbol}`],
+                ['Network fee', `${formatAmount(CONTRACT_CALL_FEE_GROTH)} BEAM`],
+                ['Total locked', `${formatAmount(totalWithFeeGroth)} ${info.symbol}`
+                    + (assetId === 0 ? '' : ` + ${formatAmount(CONTRACT_CALL_FEE_GROTH)} BEAM`)],
+            ],
+            warning: 'The codes are stored only in this browser. Save them as soon as '
+                   + 'they appear \u2014 lose them and the locked funds cannot be claimed '
+                   + 'by anyone, including you.',
+            cancelText: 'Cancel',
+            confirmText: 'Lock and create',
+        });
+        if (!ok) { _airdropTxInFlight = false; return; }
     }
 
     const btn = document.getElementById('btn-create-batch');
