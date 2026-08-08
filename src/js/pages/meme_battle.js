@@ -405,7 +405,7 @@ function mcRenderBattleVisual(r) {
         <div class="mc-battle">
             <div class="mc-team-card chad ${r && r.winner === 0 ? 'winner' : ''}">
                 <div class="mc-team-avatar chad">
-                    <img src="https://ipfs.io/ipfs/QmYMksnyN1Cb32jMFkQcjxao3i7XSPL1dWJuHrGXcTr5cx" alt="CHAD">
+                    <img src="/images/assets/chad.png" alt="CHAD">
                 </div>
                 <div class="mc-team-name chad">$CHAD</div>
                 <div class="mc-team-treasury">
@@ -428,7 +428,7 @@ function mcRenderBattleVisual(r) {
 
             <div class="mc-team-card giga ${r && r.winner === 1 ? 'winner' : ''}">
                 <div class="mc-team-avatar giga">
-                    <img src="https://ipfs.io/ipfs/QmZrekbbMSqYNjbkyKM9Ar3k7f6RUW2zUmNv9cxGz8DZvJ" alt="GIGA">
+                    <img src="/images/assets/giga.png" alt="GIGA">
                 </div>
                 <div class="mc-team-name giga">$GIGA</div>
                 <div class="mc-team-treasury">

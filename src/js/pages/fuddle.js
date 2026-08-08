@@ -926,7 +926,20 @@ function initFuddle() {
     }
 
     renderFuddleLoading();
-    loadFuddleData().then(() => renderFuddleLobby());
+    // No .catch() here meant a rejected load never reached renderFuddleLobby,
+    // so the screen stayed on "Loading tournament data..." forever - no error,
+    // no retry, and nothing to distinguish it from a slow network.
+    loadFuddleData()
+        .then(() => renderFuddleLobby())
+        .catch(err => {
+            console.error('Fuddle load failed:', err);
+            const root = document.getElementById('fuddle-root') ||
+                         document.querySelector('.fuddle-container');
+            if (root) {
+                root.innerHTML = errorState('Could not load Fuddle', 'initFuddle()',
+                                            { detail: err && err.message });
+            }
+        });
 }
 
 async function loadFuddleData() {
