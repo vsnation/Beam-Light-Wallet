@@ -170,8 +170,13 @@ def find_pid_by_name(name):
                     if len(parts) >= 2:
                         return int(parts[1].strip('"'))
         else:
+            # -x, not -f. -f matches the whole command line, so `pgrep -f
+            # wallet-api` also finds a tail of wallet-api.log, a grep, an editor
+            # with the file open, or the shell that typed the name. See
+            # get_beam_node_pid below, which was already fixed for this, and the
+            # lsof note in CLAUDE.md about killing beam-node for the same reason.
             result = subprocess.run(
-                ["pgrep", "-f", name], capture_output=True, text=True
+                ["pgrep", "-x", name], capture_output=True, text=True
             )
             if result.returncode == 0 and result.stdout.strip():
                 return int(result.stdout.strip().split()[0])
@@ -205,8 +210,12 @@ def kill_by_name(name):
                 capture_output=True, timeout=5
             )
         else:
+            # -x for the same reason as find_pid_by_name, and it matters more
+            # here: this one SIGTERMs whatever it finds. `pkill -f beam-node`
+            # during shutdown would kill the user's `tail -f logs/beam-node.log`
+            # along with the node.
             subprocess.run(
-                ["pkill", "-f", name], capture_output=True
+                ["pkill", "-x", name], capture_output=True
             )
     except Exception:
         pass
