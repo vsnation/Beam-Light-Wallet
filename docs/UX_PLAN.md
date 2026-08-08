@@ -1,4 +1,4 @@
-# UX plan — what is left, in the order it will be done
+# UX plan — all seven items done
 
 Built from an audit where every finding was reproduced independently against a
 running wallet before it was written down. 23 defects survived verification; two
@@ -8,9 +8,19 @@ reflects the code as it stands, not as the audit found it.
 Ordered by how many people hit it multiplied by how badly it hurts — not by how
 easy it is to fix.
 
+**Status: 1–7 complete.** Three of the original counts turned out to be wrong
+once measured with the right instrument, and the corrections are recorded in
+each section rather than quietly dropped:
+
+| Claim in the audit | What measurement showed |
+|---|---|
+| 4 inputs with no programmatic label | 0 — a placeholder *is* an accessible name; the real gap was 12 buttons |
+| Explorer Search at 2.04:1 | Real, and caused by an undefined variable; 8.63:1 once defined |
+| Several labels 3.4:1–4.4:1 | None — reading `rgba()` backgrounds as opaque had invented them |
+
 ---
 
-## 1. Keyboard and focus (77 controls, measured today)
+## 1. Keyboard and focus (77 controls, measured today) — DONE
 
 **77 focusable controls sit inside closed modals.** Tabbing through the wallet
 walks into fifteen invisible dialogs, and Enter activates whatever it lands on —
@@ -25,7 +35,7 @@ the tab order and from hit-testing in one attribute; a focus trap on the active
 one; restore focus to the invoking element on close. `_modalStack` already
 exists and knows which dialog is on top.
 
-## 2. Panels that spin forever
+## 2. Panels that spin forever — DONE
 
 Meme Clash shows a permanent spinner when its contract call fails — no error, no
 retry, no way back. Fuddle renders fabricated zeros on failure with **Play Now
@@ -77,7 +87,7 @@ variable**, so the colour silently falls back. Several labels sit between
 **Fix:** `aria-label` on every icon-only control, `for`/`id` on every input, and
 the undefined variable defined. Contrast measured after, not assumed.
 
-## 7. Language for people who are not BEAM developers
+## 7. Language for people who are not BEAM developers — DONE
 
 "groth", "kernel", "shielded", "MaxPrivacy", "UTXO", "LP token" appear with no
 explanation. 1,326 addresses show as "Expired" and typed "SBBS" with no hint of
