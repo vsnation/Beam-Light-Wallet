@@ -7098,3 +7098,19 @@ tr.skeleton-row {
     /* Same 44px target rule as the form fields. */
     .asset-menu-item { min-height: 44px; font-size: 16px; }
 }
+
+/* Locally drawn coin badge for the atomic-swap totals. Replaces remote logos
+   that the wallet's own CSP blocks — see swapCoinBadge(). */
+.swap-coin-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #fff;
+    font-family: var(--font-primary);
+    font-weight: var(--weight-bold);
+    letter-spacing: -0.02em;
+    line-height: 1;
+}

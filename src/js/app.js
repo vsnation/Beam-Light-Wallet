@@ -453,7 +453,7 @@ function closeUpdateModal() {
 function copyUpdateCommand(cmd) {
     navigator.clipboard.writeText(cmd).then(() => {
         showToast('Command copied to clipboard!', 'success');
-    });
+    }).catch(e => showErrorToast(e, 'Could not copy to the clipboard'));
 }
 
 // ============================================
@@ -3175,7 +3175,7 @@ function copyAddress(elementId) {
     const text = document.getElementById(elementId).textContent;
     navigator.clipboard.writeText(text).then(() => {
         showToast('Copied to clipboard!', 'success');
-    });
+    }).catch(e => showErrorToast(e, 'Could not copy to the clipboard'));
 }
 
 function copyAllAndClose() {
@@ -4776,7 +4776,7 @@ function copyOwnerKey() {
     if (ownerKey) {
         navigator.clipboard.writeText(ownerKey).then(() => {
             showToast('Owner key copied to clipboard', 'success');
-        });
+        }).catch(e => showErrorToast(e, 'Could not copy to the clipboard'));
     }
 }
 
@@ -9524,6 +9524,30 @@ function executeSwap() {
 
 // Actually execute the swap after confirmation
 let dexSwapInProgress = false;
+
+/**
+ * A coin badge that does not leave the machine.
+ *
+ * These nine icons were <img> tags pointing at cryptologos.cc. The wallet's own
+ * Content-Security-Policy blocks remote images - correctly, since a privacy
+ * wallet fetching an image per coin tells a third party which page you are on -
+ * so every one of them was blocked and the row rendered with an empty circle.
+ * Drawn locally instead: the ticker on the coin's brand colour, no request.
+ */
+const SWAP_COIN_COLORS = {
+    BTC: '#f7931a', ETH: '#627eea', LTC: '#345d9d', DOGE: '#c2a633',
+    DASH: '#008ce7', USDT: '#26a17b', DAI: '#f5ac37', WBTC: '#f09242',
+    QTUM: '#2e9ad0', BEAM: '#25c2a0',
+};
+
+function swapCoinBadge(symbol) {
+    const sym = String(symbol || '?').toUpperCase();
+    const bg = SWAP_COIN_COLORS[sym] || '#64748b';
+    // Long tickers need a smaller face to stay inside the circle.
+    const size = sym.length >= 4 ? 11 : 14;
+    return `<span class="swap-coin-badge" style="background:${bg};font-size:${size}px;"
+                  aria-hidden="true">${escapeHtml(sym.slice(0, 4))}</span>`;
+}
 
 async function confirmAndExecuteSwap() {
     closeModal('swap-confirm-modal');
@@ -14514,15 +14538,15 @@ async function loadExplorerAtomicSwaps() {
         if (totals && totalsContainer) {
             const swapAssets = [
                 { name: 'Total Swaps', value: totals.total_swaps_count || 0, icon: null },
-                { name: 'Bitcoin', symbol: 'BTC', value: totals.bitcoin_offered || '0', icon: 'https://cryptologos.cc/logos/bitcoin-btc-logo.svg' },
-                { name: 'Ethereum', symbol: 'ETH', value: totals.ethereum_offered || '0', icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.svg' },
-                { name: 'Litecoin', symbol: 'LTC', value: totals.litecoin_offered || '0', icon: 'https://cryptologos.cc/logos/litecoin-ltc-logo.svg' },
-                { name: 'Dogecoin', symbol: 'DOGE', value: totals.dogecoin_offered || '0', icon: 'https://cryptologos.cc/logos/dogecoin-doge-logo.svg' },
-                { name: 'Dash', symbol: 'DASH', value: totals.dash_offered || '0', icon: 'https://cryptologos.cc/logos/dash-dash-logo.svg' },
-                { name: 'USDT', symbol: 'USDT', value: totals.usdt_offered || '0', icon: 'https://cryptologos.cc/logos/tether-usdt-logo.svg' },
-                { name: 'DAI', symbol: 'DAI', value: totals.dai_offered || '0', icon: 'https://cryptologos.cc/logos/multi-collateral-dai-dai-logo.svg' },
-                { name: 'WBTC', symbol: 'WBTC', value: totals.wbtc_offered || '0', icon: 'https://cryptologos.cc/logos/wrapped-bitcoin-wbtc-logo.svg' },
-                { name: 'QTUM', symbol: 'QTUM', value: totals.qtum_offered || '0', icon: 'https://cryptologos.cc/logos/qtum-qtum-logo.svg' },
+                { name: 'Bitcoin', symbol: 'BTC', value: totals.bitcoin_offered || '0' },
+                { name: 'Ethereum', symbol: 'ETH', value: totals.ethereum_offered || '0' },
+                { name: 'Litecoin', symbol: 'LTC', value: totals.litecoin_offered || '0' },
+                { name: 'Dogecoin', symbol: 'DOGE', value: totals.dogecoin_offered || '0' },
+                { name: 'Dash', symbol: 'DASH', value: totals.dash_offered || '0' },
+                { name: 'USDT', symbol: 'USDT', value: totals.usdt_offered || '0' },
+                { name: 'DAI', symbol: 'DAI', value: totals.dai_offered || '0' },
+                { name: 'WBTC', symbol: 'WBTC', value: totals.wbtc_offered || '0' },
+                { name: 'QTUM', symbol: 'QTUM', value: totals.qtum_offered || '0' },
                 { name: 'BEAM Offered', symbol: 'BEAM', value: totals.beams_offered || '0', icon: BEAM_LOGO }
             ];
 
@@ -14535,7 +14559,7 @@ async function loadExplorerAtomicSwaps() {
                     ${swapAssets.slice(1).map(asset => `
                         <div class="swap-asset-card">
                             <div class="swap-asset-icon">
-                                ${asset.icon ? `<img src="${asset.icon}" alt="${asset.symbol}" onerror="this.style.display='none'">` : ''}
+                                ${swapCoinBadge(asset.symbol)}
                             </div>
                             <div class="swap-asset-info">
                                 <div class="swap-asset-value">${asset.value}</div>
@@ -15923,7 +15947,7 @@ function copyAirdropContract() {
             }, 1500);
         }
         showToast('Contract ID copied', 'success');
-    });
+    }).catch(e => showErrorToast(e, 'Could not copy to the clipboard'));
 }
 
 // Update selected asset balance display
@@ -15958,7 +15982,7 @@ function copyCode(code, btn) {
         const orig = btn.innerHTML;
         btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" width="14" height="14"><path d="M20 6L9 17l-5-5"/></svg>';
         setTimeout(() => { btn.innerHTML = orig; }, 1500);
-    });
+    }).catch(e => showErrorToast(e, 'Could not copy to the clipboard'));
 }
 
 // Copy all codes
@@ -15975,7 +15999,7 @@ function copyAllCodes() {
 
     navigator.clipboard.writeText(text).then(() => {
         showToast('All codes copied to clipboard', 'success');
-    });
+    }).catch(e => showErrorToast(e, 'Could not copy to the clipboard'));
 }
 
 // Export codes as CSV
@@ -16353,7 +16377,7 @@ function copySavedBatchCodes(batchKey) {
     ).join('\n');
     navigator.clipboard.writeText(text).then(() => {
         showToast('All codes copied to clipboard', 'success');
-    });
+    }).catch(e => showErrorToast(e, 'Could not copy to the clipboard'));
 }
 
 // Export saved batch codes as CSV
