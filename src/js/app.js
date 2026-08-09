@@ -3657,6 +3657,18 @@ async function loadSettings() {
                     stopNodeSyncMonitoring();
                     renderNodeSync(null);
                 }
+
+                // A local node syncing while the wallet is still on the public
+                // one survives a page reload, so pick the watch back up. Without
+                // this, reloading during a sync left the node running with
+                // nothing waiting to hand over to it, and no sign on screen that
+                // anything was in progress.
+                if (serverStatus.node_pending_local && currentNodeType !== 'local') {
+                    startNodeSyncChecker();
+                }
+                if (serverStatus.node_pending_error) {
+                    updateNodeSyncBanner(true, 0, false, serverStatus.node_pending_error);
+                }
             }
 
             // Check DEX support
@@ -3881,13 +3893,16 @@ async function selectNodeType(type, triggerChange = false) {
         return;
     }
 
-    currentNodeType = type;
-    applyNodeModeUI(type);
+    // The mode is NOT committed here. It used to be - the buttons flipped to
+    // Local the instant you clicked, before anything was attempted - so a
+    // switch that failed (or that you cancelled at the password prompt) left
+    // the wallet showing Local Node as the active, disabled, current mode while
+    // it was still talking to the public one. The UI stated a fact it had not
+    // established. It is committed below, only once the switch reports success.
+    const previousType = currentNodeType;
 
     const selector = document.getElementById('node-selector');
     const newValue = type === 'local' ? '127.0.0.1:10005' : 'eu-node01.mainnet.beam.mw:8100';
-
-    // Update selector value and currentNode to match current state
     selector.value = newValue;
 
     // Only trigger change if explicitly requested (e.g., from button click)
@@ -3896,26 +3911,99 @@ async function selectNodeType(type, triggerChange = false) {
         publicBtn.disabled = true;
         localBtn.disabled = true;
 
+        let switched = false;
         try {
             // Check if local node is already running (fast switch — no full restart needed)
             if (type === 'local') {
                 const serverStatus = await checkServerStatus();
                 if (serverStatus?.node_running) {
-                    await switchNodeWithoutPassword(newValue, 'local');
+                    switched = await switchNodeWithoutPassword(newValue, 'local');
                     return;
                 }
             }
             // The cost was already confirmed by chooseNodeMode, so changeNode
             // must not ask a second time.
-            await changeNode(true);
+            switched = await changeNode(true);
         } finally {
-            // Re-enable the non-active button after switch completes
+            currentNodeType = switched ? type : previousType;
+            applyNodeModeUI(currentNodeType);
+            if (!switched) selector.value = currentNode;
             publicBtn.disabled = (currentNodeType === 'public');
             localBtn.disabled = (currentNodeType === 'local');
         }
     } else {
+        currentNodeType = type;
+        applyNodeModeUI(type);
         currentNode = newValue;
     }
+}
+
+/**
+ * The wallet password, asking for it if this session no longer holds it.
+ *
+ * storedWalletPassword only exists from the moment someone types it into the
+ * unlock screen. Reload the page - or open it while wallet-api is already
+ * running - and it is null, while the wallet itself is perfectly unlocked and
+ * working. Four features need it (switching node, both node-change paths, and
+ * rescan) and all four used to stop at a toast reading "Session expired, unlock
+ * the wallet again", which is both untrue and a dead end: nothing on screen
+ * offers to unlock, and locking the wallet to unlock it again is a strange
+ * thing to ask of someone who is already in.
+ *
+ * Returns the password, or null if the person cancels. Never stores it anywhere
+ * but the same in-memory variable the unlock screen uses.
+ */
+let walletPasswordResolve = null;
+
+function getWalletPassword(reason) {
+    if (storedWalletPassword) return Promise.resolve(storedWalletPassword);
+    return new Promise(resolve => {
+        if (document.getElementById('wallet-password-modal')) { resolve(null); return; }
+        walletPasswordResolve = resolve;
+        const modal = document.createElement('div');
+        modal.id = 'wallet-password-modal';
+        modal.className = 'modal-overlay active';
+        modal.innerHTML = `
+            <div class="modal" style="max-width: 420px;">
+                <div class="modal-header">
+                    <h2 class="modal-title">Confirm it is you</h2>
+                    <button class="modal-close" onclick="closeWalletPassword(null)">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p style="margin:0 0 var(--space-4) 0;color:var(--text-secondary);font-size:var(--text-sm);line-height:var(--leading-normal);">
+                        ${escapeHtml(reason || 'This needs your wallet password.')}
+                    </p>
+                    <input type="password" id="wallet-password-input" class="search-input"
+                           style="width:100%;" autocomplete="current-password"
+                           placeholder="Wallet password"
+                           onkeydown="if(event.key==='Enter'){event.preventDefault();closeWalletPassword(this.value);}">
+                    <p style="margin:var(--space-3) 0 0 0;color:var(--text-muted);font-size:var(--text-xs);line-height:var(--leading-normal);">
+                        It stays on this machine. Your wallet is not locked by this &mdash;
+                        the password is needed to read the key the node runs with.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn modal-btn-secondary" onclick="closeWalletPassword(null)">Cancel</button>
+                    <button class="modal-btn modal-btn-primary"
+                            onclick="closeWalletPassword(document.getElementById('wallet-password-input').value)">Continue</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        if (typeof syncModalInertness === 'function') syncModalInertness();
+        setTimeout(() => { const i = document.getElementById('wallet-password-input'); if (i) i.focus(); }, 40);
+    });
+}
+
+function closeWalletPassword(value) {
+    const m = document.getElementById('wallet-password-modal');
+    if (m) m.remove();
+    if (typeof syncModalInertness === 'function') syncModalInertness();
+    const r = walletPasswordResolve; walletPasswordResolve = null;
+    if (!r) return;
+    const pw = (value == null || value === '') ? null : value;
+    // Hold it for the rest of the session, exactly as unlocking would.
+    if (pw) storedWalletPassword = pw;
+    r(pw);
 }
 
 // Switch node when local node is already running (no password needed)
@@ -3923,14 +4011,9 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
     showToastAdvanced('Switching Node', `Connecting to ${mode} node...`, 'pending');
 
     try {
-        const password = storedWalletPassword;
-        if (!password) {
-            // Every other caller checks this; this one silently sent undefined.
-            showToast({ title: 'Session expired',
-                        message: 'The wallet password is no longer held in this session.',
-                        hint: 'Unlock the wallet again to continue.' }, 'error');
-            return;
-        }
+        const password = await getWalletPassword(
+            'Switching which node the wallet talks to needs your password.');
+        if (!password) return false;
         const response = await fetch('/api/node/switch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3956,6 +4039,7 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
                 startNodeSyncChecker();
             }
             setTimeout(() => loadWalletData(), 1000);
+            return true;
         } else {
             throw new Error(result.error || 'Failed to switch node');
         }
@@ -3964,6 +4048,7 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
         // Reset dropdown to current node
         document.getElementById('node-selector').value = currentNode;
     }
+    return false;
 }
 
 // Change node - actually restarts wallet-api with new node
@@ -3974,13 +4059,13 @@ async function changeNode(costConfirmed = false) {
     const newNode = selector.value;
     const isLocal = newNode.includes('127.0.0.1') || newNode.includes('localhost');
 
-    if (newNode === currentNode) return;
+    if (newNode === currentNode) return false;
     // A second change event arriving mid-switch would stack a second cost
     // prompt and a second /api/node/switch on top of the first.
-    if (nodeSwitchInFlight) return;
+    if (nodeSwitchInFlight) return false;
     nodeSwitchInFlight = true;
     try {
-        await performNodeChange(selector, newNode, isLocal, costConfirmed);
+        return await performNodeChange(selector, newNode, isLocal, costConfirmed);
     } finally {
         nodeSwitchInFlight = false;
     }
@@ -3993,17 +4078,13 @@ async function performNodeChange(selector, newNode, isLocal, costConfirmed) {
         const serverStatus = await checkServerStatus();
         if (!serverStatus?.node_running && !(await confirmLocalNodeCost())) {
             selector.value = currentNode;
-            return;
+            return false;
         }
     }
 
-    // Use stored password - no prompting
-    const password = storedWalletPassword;
-    if (!password) {
-        showToast({ title: 'Session expired', message: 'The wallet password is no longer held in this session.', hint: 'Unlock the wallet again to continue.' }, 'error');
-        selector.value = currentNode;
-        return;
-    }
+    const password = await getWalletPassword(
+        'Changing node restarts the wallet service, which needs your password.');
+    if (!password) { selector.value = currentNode; return false; }
 
     showToastAdvanced('Switching Node', `Connecting to ${isLocal ? 'local' : 'public'} node...`, 'pending');
 
@@ -4021,6 +4102,16 @@ async function performNodeChange(selector, newNode, isLocal, costConfirmed) {
 
         const result = await response.json();
 
+        if (result.success && result.pending) {
+            // The local node is syncing; the wallet has not moved. Say so, and
+            // leave the mode where it really is.
+            showToastAdvanced('Local node started',
+                'It is syncing now. Your wallet keeps using the public node and moves '
+                + 'across on its own once the local one is ready.', 'success');
+            selector.value = currentNode;
+            startNodeSyncMonitoring();
+            return false;
+        }
         if (result.success) {
             currentNode = newNode;
             currentNodeType = isLocal ? 'local' : 'public';
@@ -4042,6 +4133,7 @@ async function performNodeChange(selector, newNode, isLocal, costConfirmed) {
 
             // Refresh wallet status
             setTimeout(() => loadWalletData(), 1000);
+            return true;
         } else {
             throw new Error(result.error || 'Failed to switch node');
         }
@@ -4050,6 +4142,7 @@ async function performNodeChange(selector, newNode, isLocal, costConfirmed) {
         // Reset dropdown to current node
         selector.value = currentNode;
     }
+    return false;
 }
 
 // Reconnect to node
@@ -4160,11 +4253,9 @@ function closeRescanWarningModal() {
 
 // Switch to local node and perform rescan
 async function switchToLocalAndRescan() {
-    const password = storedWalletPassword;
-    if (!password) {
-        showToast({ title: 'Session expired', message: 'The wallet password is no longer held in this session, and switching to a local node needs it.', hint: 'Unlock the wallet again, then retry.' }, 'error');
-        return;
-    }
+    const password = await getWalletPassword(
+        'Starting a local node needs your password, to read the viewing key the node runs with.');
+    if (!password) return;
 
     showToast('Starting local node...', 'info');
 
@@ -4179,10 +4270,18 @@ async function switchToLocalAndRescan() {
         const result = await response.json();
 
         if (result.success) {
-            showToastAdvanced('Local Node Started', 'Rescan will begin automatically as node syncs', 'success');
-            // Update UI
-            currentNodeType = 'local';
-            selectNodeType('local');
+            // result.pending means the node is up but the wallet is still on
+            // the public one, which is the normal outcome now. Claiming "local"
+            // here would put the UI back to naming a mode it is not in.
+            if (result.pending) {
+                showToastAdvanced('Local node started',
+                    'It is syncing now. Your wallet keeps using the public node and '
+                    + 'moves across on its own once the local one is ready.', 'success');
+            } else {
+                showToastAdvanced('Local Node Started', 'Now using your own node', 'success');
+                currentNodeType = 'local';
+                selectNodeType('local');
+            }
             // Start monitoring sync progress
             startNodeSyncMonitoring();
         } else {
@@ -4240,11 +4339,9 @@ async function performQuickRescan() {
 
 // Full rescan with local node
 async function performRescan() {
-    const password = storedWalletPassword;
-    if (!password) {
-        showToast({ title: 'Rescan failed', message: 'The wallet password is no longer held in this session, and a rescan needs it.', hint: 'Unlock the wallet again, then retry the rescan.' }, 'error');
-        return;
-    }
+    const password = await getWalletPassword(
+        'Rescanning the chain needs your password.');
+    if (!password) return;
 
     const btn = document.getElementById('rescan-btn');
     if (!btn) return;
@@ -5628,17 +5725,19 @@ function startNodeSyncChecker() {
 }
 
 async function seamlessSwitchToLocalNode() {
-    const password = storedWalletPassword;
-    if (!password) {
-        console.log('No stored password, cannot switch');
-        return;
-    }
+    const password = await getWalletPassword(
+        'Moving the wallet onto your synced local node needs your password.');
+    if (!password) return;
 
     try {
         const response = await fetch('/api/node/switch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'local', password: password, wallet: welcomeSelectedWallet })
+            // force: this is the handover, and it is only reached after the
+            // node's height has been corroborated against an independent
+            // explorer tip. The server otherwise refuses to move the wallet onto
+            // a node that is still syncing.
+            body: JSON.stringify({ mode: 'local', password, force: true })
         });
 
         const result = await response.json();

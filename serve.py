@@ -613,12 +613,24 @@ def get_node_sync_status():
         current_height = 0
         target_height = 0
         progress = 0
+        progress_found = False
         synced = False
 
+        # Newest line first, and keep going until BOTH the progress and the
+        # height have been found.
+        #
+        # This used to break the moment it saw an "Updating node:" line. That is
+        # almost always the newest line in the log, so the scan stopped before
+        # reaching any "My Tip:" and the height came back 0 every time. The
+        # frontend only hands the wallet over to a local node once its height is
+        # corroborated against an explorer tip, and it requires height > 0 - so a
+        # permanent 0 meant a fully synced local node would never be adopted. It
+        # sat at "almost ready - confirming against the network" indefinitely.
         for line in reversed(lines):
             # Look for "Updating node: X% (current/total)" format
             match = re.search(r'Updating node:\s*(\d+)%\s*\((\d+)/(\d+)\)', line)
-            if match:
+            if match and not progress_found:
+                progress_found = True
                 progress = int(match.group(1))
                 # Those two numbers count fast-sync work units, NOT block
                 # heights. Reporting the first as a height produced "217637"
@@ -628,7 +640,9 @@ def get_node_sync_status():
                 target_height = int(match.group(3))
                 if progress == 100:
                     synced = True
-                break
+                if current_height:
+                    break
+                continue
 
             # "My Tip" is the node's own height. It says nothing about whether
             # that height is the network's height — a node wedged on a dead
@@ -640,6 +654,8 @@ def get_node_sync_status():
                 match = re.search(r'My Tip:\s*(\d+)', line)
                 if match:
                     current_height = int(match.group(1))
+                    if progress_found:
+                        break
 
             # Look for "Initial Tip" which shows starting state
             if current_height == 0 and "Initial Tip:" in line:
@@ -672,7 +688,10 @@ def get_node_sync_status():
 
 def stop_beam_node():
     """Stop running beam-node process (cross-platform)"""
-    global beam_beam_node_process, node_mode
+    global beam_beam_node_process, node_mode, pending_local_switch
+
+    # There is nothing left to hand over to.
+    pending_local_switch = None
 
     pid = get_beam_node_pid()
     if pid:
@@ -756,9 +775,11 @@ def start_beam_node(owner_key=None, password=None):
         # Wait a moment and check if started
         time.sleep(3)
         if is_node_running():
-            node_mode = "local"
+            # Starting a node is not the same as using it. node_mode names what
+            # wallet-api is actually talking to, and until the handover that is
+            # still the public node - claiming "local" here is what made the UI
+            # report a mode the wallet was not in.
             (STATE_DIR / ".node.pid").write_text(str(beam_beam_node_process.pid))
-            (STATE_DIR / ".node_mode").write_text("local")
             print(f"Started beam-node (PID: {beam_beam_node_process.pid})")
             return {"success": True, "pid": beam_beam_node_process.pid}
         else:
@@ -788,9 +809,8 @@ def start_beam_node(owner_key=None, password=None):
                         )
                     time.sleep(3)
                     if is_node_running():
-                        node_mode = "local"
+                        # See above: running != in use.
                         (STATE_DIR / ".node.pid").write_text(str(beam_beam_node_process.pid))
-                        (STATE_DIR / ".node_mode").write_text("local")
                         print(f"Started beam-node after recovery (PID: {beam_beam_node_process.pid})")
                         return {"success": True, "pid": beam_beam_node_process.pid, "recovered": True}
                 except Exception as re:
@@ -818,7 +838,7 @@ def switch_to_local_node(password, wallet_name=None):
     global node_mode
 
     # Use provided wallet_name or fall back to active_wallet
-    target_wallet = wallet_name or active_wallet
+    target_wallet = wallet_name or current_wallet()
     if not target_wallet:
         return {"error": "No wallet specified and no active wallet"}
 
@@ -860,30 +880,95 @@ def switch_to_local_node(password, wallet_name=None):
     time.sleep(3)
     print(f"[switch_to_local_node] Node running after wait? {is_node_running()}")
 
-    # Step 5: Start wallet-api with local node
-    print(f"[switch_to_local_node] === STEP 5: Starting wallet-api with {LOCAL_NODE_ADDR} ===")
-    result = start_wallet_api(target_wallet, password, LOCAL_NODE_ADDR)
-    print(f"[switch_to_local_node] start_wallet_api result: {result}")
-    print(f"[switch_to_local_node] Node running after wallet-api start? {is_node_running()}")
+    # Step 5: do NOT move wallet-api yet.
+    #
+    # This used to restart wallet-api against LOCAL_NODE_ADDR right here. A node
+    # that has just started holds almost none of the chain, so the wallet was
+    # pointed at a peer that cannot answer it: balances froze, sending was
+    # refused, and wallet-api sat logging "last known blockchain tip is not up to
+    # date" for the hours the sync took. Clicking "Local Node" therefore looked
+    # exactly like breaking the wallet, which is what it did.
+    #
+    # The node syncs in the background while the wallet keeps using the public
+    # one, and the handover happens by itself once the local node can actually
+    # serve. Nothing the user does stops working in the meantime.
+    print(f"[switch_to_local_node] === STEP 5: node syncing; wallet stays on the public node ===")
+    begin_pending_local_switch(target_wallet, password)
+    return {
+        "success": True,
+        "pending": True,
+        "wallet": target_wallet,
+        "message": "Local node started. Still using the public node until the local one has synced.",
+    }
 
-    if result.get("success"):
-        node_mode = "local"
-        (STATE_DIR / ".node_mode").write_text("local")
-        print(f"[switch_to_local_node] === SUCCESS: Switched to local node! ===")
-    else:
-        print(f"[switch_to_local_node] === FAILED: {result} ===")
 
-    return result
+# --- deferred handover to the local node ---------------------------------
+#
+# node_mode stays "public" for as long as the wallet is really talking to a
+# public node. Anything that reports mode must not claim "local" before the
+# handover, or the UI is back to stating something it has not established.
+pending_local_switch = None
 
 
-def fast_switch_node(mode, node_addr=None):
+def begin_pending_local_switch(wallet_name, password):
+    """Record that a local node is syncing while the wallet stays on public.
+
+    Deliberately no watcher thread here. The frontend already polls
+    /api/node/status and hands over via seamlessSwitchToLocalNode, and it does
+    the stronger check: it refuses to switch on the node's own claim of being
+    synced until an independent explorer tip corroborates the height. A
+    server-side switcher would race that, using the weaker signal, and this
+    repository has already been bitten once by trusting a node's opinion of
+    itself - an HF6-stalled node reports a perfectly plausible tip forever.
+
+    So this is state, not machinery: /api/status reports it so the UI can say a
+    node is preparing, and fast_switch_node / stop_beam_node clear it.
+    """
+    global pending_local_switch
+    pending_local_switch = {"wallet": wallet_name, "started": time.time(), "error": None}
+    (STATE_DIR / ".node_mode").write_text("public")
+
+
+def current_wallet():
+    """The wallet this session is working with.
+
+    active_wallet is only populated by an unlock performed in THIS process.
+    Restart serve.py while wallet-api is still running and the global is None
+    although the wallet is perfectly unlocked - so every node switch and rescan
+    answered "No active wallet" while /api/status, which reads the state file,
+    went on displaying the wallet as active. Two sources of truth for the same
+    fact, disagreeing.
+
+    The state file is written on unlock and is the durable one; prefer the
+    in-memory value and fall back to it.
+    """
+    global active_wallet
+    if active_wallet:
+        return active_wallet
+    try:
+        name = (STATE_DIR / ".active_wallet").read_text().strip()
+    except Exception:
+        return None
+    if name and is_wallet_api_running():
+        active_wallet = name
+        return name
+    return None
+
+
+def fast_switch_node(mode, node_addr=None, force=False):
     """Fast node switch — just restart wallet-api with different node address.
     Local node must already be running for 'local' mode.
     Uses stored password so no client password needed."""
-    global node_mode, active_password
+    global node_mode, active_password, pending_local_switch
+
+    # Going back to public cancels a handover that has not happened yet -
+    # otherwise the watcher would drag the wallet onto the local node later,
+    # undoing a choice the user just made.
+    if mode == "public":
+        pending_local_switch = None
 
     # Save wallet name before start_wallet_api clears it via stop_wallet_api
-    wallet_name = active_wallet
+    wallet_name = current_wallet()
     if not wallet_name:
         return {"error": "No active wallet"}
     if not active_password:
@@ -892,6 +977,25 @@ def fast_switch_node(mode, node_addr=None):
     if mode == "local":
         if not is_node_running():
             return {"error": "Local node is not running"}
+        # Running is not the same as usable. A node part-way through its initial
+        # sync answers, but not with the current chain, so pointing wallet-api at
+        # it freezes balances and refuses sends until the sync finishes - hours.
+        # That is the same failure switch_to_local_node was changed to avoid, and
+        # this path reached it whenever a node happened to already be up.
+        #
+        # force=True is how the frontend performs the real handover once it has
+        # corroborated the node's height against an independent explorer tip.
+        if not force:
+            st = get_node_sync_status()
+            if not st.get("synced"):
+                begin_pending_local_switch(wallet_name, active_password)
+                return {
+                    "success": True,
+                    "pending": True,
+                    "wallet": wallet_name,
+                    "progress": st.get("progress", 0),
+                    "message": "Local node is still syncing. Staying on the public node until it is ready.",
+                }
         target_node = LOCAL_NODE_ADDR
     else:
         target_node = node_addr or DEFAULT_NODE
@@ -2085,6 +2189,12 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             "node_synced": node_status.get("synced", False),
             "node_progress": node_status.get("progress", 0),
             "node_height": node_status.get("height", 0),
+            # A local node that is syncing while the wallet still uses the
+            # public one. Distinct from node_mode, which reports what the wallet
+            # is ACTUALLY talking to - saying "local" here before the handover
+            # would be the same lie the UI used to tell.
+            "node_pending_local": bool(pending_local_switch),
+            "node_pending_error": (pending_local_switch or {}).get("error"),
             "install_type": install_type,
             "version": APP_VERSION,
             "beam_version": platform_binary_info().get("beam_version"),
@@ -2198,7 +2308,23 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             body = self.get_json_body()
             mode = body.get("mode", "public")
             password = body.get("password") or active_password
-            wallet_name = body.get("wallet")
+            # Default to the wallet that is already unlocked.
+            #
+            # This endpoint began requiring a "wallet" field when name
+            # validation was added across the API, but three of its four
+            # callers never sent one - both Settings node switches and the
+            # rescan - so _valid_wallet_name(None) rejected them and switching
+            # to a local node became impossible from the UI. Only the unlock
+            # screen passed a name, which is why it was never noticed there.
+            #
+            # Requiring it was wrong anyway: a node switch restarts wallet-api
+            # for the session's own wallet, and naming a different one is not a
+            # thing anyone means. Take the active wallet, and keep validating
+            # whatever we end up with so the path component is still checked.
+            wallet_name = body.get("wallet") or current_wallet()
+            if not wallet_name:
+                self.send_json({"error": "No wallet is unlocked."}, 400)
+                return
             if not self._valid_wallet_name(wallet_name):
                 return
             node_addr = body.get("node")
@@ -2212,8 +2338,9 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 active_password = body["password"]
 
             if mode == "local" and is_node_running():
-                # Fast path: local node already running, just restart wallet-api
-                result = fast_switch_node("local")
+                # Fast path: local node already running, just restart wallet-api.
+                # force comes from the frontend's corroborated handover only.
+                result = fast_switch_node("local", force=bool(body.get("force")))
             elif mode == "public":
                 # Fast path: just restart wallet-api with public node
                 result = fast_switch_node("public", node_addr)
@@ -2349,7 +2476,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         """Trigger wallet rescan to restore balances"""
         try:
             body = self.get_json_body()
-            wallet_name = body.get("wallet") or active_wallet
+            wallet_name = body.get("wallet") or current_wallet()
             if not self._valid_wallet_name(wallet_name):
                 return
             password = body.get("password")
@@ -2478,7 +2605,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
-            wallet_name = body.get("wallet") or active_wallet
+            wallet_name = body.get("wallet") or current_wallet()
             if not self._valid_wallet_name(wallet_name):
                 return
             password = body.get("password", "")
@@ -2495,7 +2622,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
-            wallet_name = body.get("wallet") or active_wallet
+            wallet_name = body.get("wallet") or current_wallet()
             if not self._valid_wallet_name(wallet_name):
                 return
             password = body.get("password", "")
