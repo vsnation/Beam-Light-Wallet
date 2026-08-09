@@ -10338,8 +10338,14 @@ function findPoolsForPair() {
                 <br><small>You can create one by selecting a fee tier</small>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px;width:100%;">
-                <button class="quick-btn" onclick="createPoolWithFee(1)" style="flex:1;font-size:11px;">Create 0.1% Pool</button>
-                <button class="quick-btn" onclick="createPoolWithFee(2)" style="flex:1;font-size:11px;">Create 0.3% Pool</button>
+                <!-- These said 0.1% and 0.3%, which are not the rates those pool
+                     kinds charge - poolFeeLabel has known the real ones all
+                     along, and kind 2 (labelled 0.3% here) actually charges 1%.
+                     Labelling a fee at a third of its real value on the button
+                     that commits to it is the same defect as the hardcoded
+                     "0.3%" fixed earlier in the quote panel. -->
+                <button class="quick-btn" onclick="createPoolWithFee(1)" style="flex:1;font-size:11px;">Create ${poolFeeLabel(1)} pool</button>
+                <button class="quick-btn" onclick="createPoolWithFee(2)" style="flex:1;font-size:11px;">Create ${poolFeeLabel(2)} pool</button>
             </div>
         `;
         selectedLiqPool = null;
@@ -10436,9 +10442,24 @@ function updateLiqButton() {
     }
 }
 
-// Create new pool with specified fee (placeholder for future)
+/**
+ * Open the create-pool flow for a given fee tier.
+ *
+ * This was a stub answering "Pool creation coming soon" while
+ * openCreatePoolModal, renderCreatePoolModal and createPool were all present
+ * and working - reachable from the DEX panel but not from the two buttons the
+ * liquidity page puts in front of someone who has just been told no pool
+ * exists. That is the moment they want one.
+ */
 function createPoolWithFee(kind) {
-    showToast('Pool creation coming soon', 'info');
+    if (!liqAssetA || !liqAssetB) {
+        showToast('Pick both tokens first', 'error');
+        return;
+    }
+    pendingPoolCreate = { aid1: liqAssetA.aid, aid2: liqAssetB.aid };
+    openCreatePoolModal();
+    const sel = document.getElementById('pool-fee-model');
+    if (sel) sel.value = String(kind);
 }
 
 function calcLiquidityB() {
@@ -14657,22 +14678,43 @@ function searchExplorerMain() {
 // Search for block by hash
 async function searchBlockByHash(hash) {
     try {
+        // The block list only carries hashes when they were among the columns
+        // requested, so plenty of cached rows have none. Those became '' via the
+        // fallback below and '' === '' matched, meaning an empty search opened
+        // an unrelated block and presented it as the result.
+        const needle = String(hash || '').trim().toLowerCase();
+        if (needle.length < 8) {
+            showToast('Enter a full block hash, or a block height.', 'warning');
+            return;
+        }
         showToast('Searching for block...', 'info');
 
         // Try to find block in recent blocks first
         if (explorerData.blocks && explorerData.blocks.length > 0) {
-            const block = explorerData.blocks.find(b =>
-                (b.Hash || b.hash || '').toLowerCase() === hash.toLowerCase()
-            );
+            const block = explorerData.blocks.find(b => {
+                const h = (b.Hash || b.hash || '').toLowerCase();
+                return h && h === needle;
+            });
             if (block) {
                 showBlockDetail(block.Height || block.height);
                 return;
             }
         }
 
-        // If not found locally, we'd need an API endpoint to search by hash
-        // For now, show a message
-        showToast('Block hash search requires checking the blockchain. Try searching by height.', 'warning');
+        // The explorer does support this - /block?hash=<hash> answers with the
+        // same shape as /block?height=. The advice to "try searching by height"
+        // was telling people to look up the number they were searching for.
+        const resp = await fetch(`${EXPLORER_API}/block?hash=${encodeURIComponent(needle)}`,
+                                 { signal: AbortSignal.timeout(12000) });
+        if (resp.ok) {
+            const blk = await resp.json();
+            const h = blk && (blk.h ?? blk.height);
+            if (blk && blk.found !== false && h) {
+                showBlockDetail(h);
+                return;
+            }
+        }
+        showToast('No block on this chain has that hash.', 'warning');
     } catch (e) {
         console.error('Error searching block by hash:', e);
         showToast('Failed to search for block', 'error');
@@ -14682,14 +14724,17 @@ async function searchBlockByHash(hash) {
 // Search for kernel by ID
 async function searchKernel(kernelId) {
     try {
-        showToast('Searching for kernel...', 'info');
 
-        // Kernel search would require an API endpoint
-        // For now, show informative message
-        showToast('Kernel search: ' + kernelId.substring(0, 16) + '...', 'info');
-
-        // TODO: Implement kernel search when API endpoint is available
-        // The explorer API may have a /kernel?id={kernelId} endpoint
+        // The explorer has no kernel endpoint - /kernel?id= returns nothing -
+        // so this cannot be looked up here. It used to announce "Searching for
+        // kernel..." and then echo the id back, which reads as a search that
+        // found something. Say plainly that it is not supported, and point at
+        // the place that can answer it.
+        showToast({
+            title: 'Kernel lookup is not available',
+            message: 'This explorer has no kernel endpoint, so a kernel ID cannot be resolved here.',
+            hint: 'A kernel ID appears on its own transaction — open it from Transactions instead.',
+        }, 'warning');
     } catch (e) {
         console.error('Error searching kernel:', e);
         showToast('Failed to search for kernel', 'error');
