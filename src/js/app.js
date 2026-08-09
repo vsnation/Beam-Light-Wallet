@@ -1673,6 +1673,7 @@ function renderAssetCards() {
                          nameless buttons. Naming the asset is the point: "Options
                          for FOMO" is useful, twelve "Options" is not. -->
                     <button class="asset-dropdown" aria-label="Options for ${escapeHtml(displayName)}"
+                            data-asset="${asset.id}" aria-haspopup="menu"
                             onclick="event.stopPropagation(); openAssetMenu(${asset.id})">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true">
                             <path d="M6 9l6 6 6-6"/>
@@ -1685,10 +1686,67 @@ function renderAssetCards() {
 }
 
 // Asset dropdown menu
+/**
+ * The per-asset menu, which until now was a stub.
+ *
+ * Every asset row carries a chevron button, and there are twelve of them on a
+ * dashboard with twelve assets. Pressing one showed a toast reading
+ * "BEAM: Send, Receive, or Trade" and did nothing - it named three actions
+ * without offering any of them, so the only way to act on a specific asset was
+ * to open Send and change the asset again inside it. All four actions below
+ * already existed; nothing was wired to them.
+ */
 function openAssetMenu(assetId) {
-    const config = ASSET_CONFIG[assetId] || { name: `Asset #${assetId}`, symbol: 'CA' };
-    // For now, just show toast with options
-    showToast(`${config.symbol}: Send, Receive, or Trade`, 'info');
+    closeAssetMenu();
+    const info = getAssetInfo(assetId);
+    const btn = document.querySelector(`.asset-dropdown[data-asset="${assetId}"]`);
+    const hidden = hiddenAssets.has(assetId);
+
+    const menu = document.createElement('div');
+    menu.id = 'asset-menu';
+    menu.className = 'asset-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `Actions for ${info.symbol}`);
+    menu.innerHTML = [
+        ['Send', `openSendModal(${assetId})`],
+        ['Receive', 'openReceiveModal()'],
+        ['Trade', `openQuickTradeModal(${assetId})`],
+        [hidden ? 'Unhide' : 'Hide from this list', `toggleHideAsset(${assetId})`],
+    ].map(([label, call]) => `
+        <button role="menuitem" class="asset-menu-item"
+                onclick="closeAssetMenu(); ${call};">${escapeHtml(label)}</button>`).join('');
+
+    document.body.appendChild(menu);
+
+    // Anchor to the button that opened it, and keep it on screen.
+    if (btn) {
+        const r = btn.getBoundingClientRect();
+        const w = menu.offsetWidth || 180, h = menu.offsetHeight || 160;
+        menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+        menu.style.top = (r.bottom + h > window.innerHeight ? Math.max(8, r.top - h) : r.bottom + 4) + 'px';
+    }
+
+    const first = menu.querySelector('button');
+    if (first) first.focus();
+    setTimeout(() => {
+        document.addEventListener('click', closeAssetMenuOnOutsideClick);
+        document.addEventListener('keydown', closeAssetMenuOnEscape);
+    }, 0);
+}
+
+function closeAssetMenu() {
+    const m = document.getElementById('asset-menu');
+    if (m) m.remove();
+    document.removeEventListener('click', closeAssetMenuOnOutsideClick);
+    document.removeEventListener('keydown', closeAssetMenuOnEscape);
+}
+
+function closeAssetMenuOnOutsideClick(e) {
+    if (!e.target.closest('#asset-menu')) closeAssetMenu();
+}
+
+function closeAssetMenuOnEscape(e) {
+    if (e.key === 'Escape') closeAssetMenu();
 }
 
 // Render balances table
@@ -3361,16 +3419,21 @@ function errorToMessage(e) {
             'err_connection', 'connection reset', 'socket hang up')) {
         return {
             title: 'Cannot reach the wallet service',
-            message: 'The local wallet service is not responding, so nothing was sent.',
+            message: 'The local wallet service is not responding.',
             hint: 'It may have stopped. Lock and unlock the wallet, or restart the app, then try again.'
         };
     }
 
     if (has('aborterror', 'timed out', 'timeout', 'etimedout')) {
+        // This function is reached from explorer calls and node checks too, and
+        // it cannot see which. It used to name the wallet service and tell
+        // people to check Transactions - so a failed explorer ping, which sends
+        // nothing and touches no funds, reported that a transaction might have
+        // gone through. Say what is actually known: no answer came back.
         return {
             title: 'That took too long',
-            message: 'The wallet service did not answer in time, so the outcome is unknown.',
-            hint: 'Check Transactions before retrying — the request may still have gone through.'
+            message: 'No answer came back in time, so the outcome is unknown.',
+            hint: 'If that was a transaction, check Transactions before retrying — it may still have gone through.'
         };
     }
 
