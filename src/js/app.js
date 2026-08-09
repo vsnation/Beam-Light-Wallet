@@ -3732,6 +3732,7 @@ async function loadSettings() {
                 if (serverStatus.node_pending_error) {
                     updateNodeSyncBanner(true, 0, false, serverStatus.node_pending_error);
                 }
+
             }
 
             // Check DEX support
@@ -4821,6 +4822,13 @@ async function checkServerStatus() {
             lastServerStatus = status; // Store for sync status display
             updateConsensusBanner(status.consensus);
             applyServerVersion(status);
+            // Here, not in the wallet-status branch further down. That branch
+            // only runs once wallet-api has answered - and when the wallet is
+            // pointed at a local node that is not running, it never answers.
+            // The banner was therefore unreachable in precisely the situation
+            // it exists for.
+            if (status.node_orphaned) showOrphanedNodeBanner();
+            else hideOrphanedNodeBanner();
             return status;
         }
         return null;
@@ -5692,6 +5700,58 @@ async function startBackgroundNodeSync() {
     // one — serve.py injects the shader and public nodes serve contract state —
     // so this used to impose a ~9 GB download on every unlock for nothing.
     // The local node is now an explicit choice in Settings → Node.
+}
+
+/**
+ * "Your local node is not running and the wallet is still pointed at it."
+ *
+ * This happens after a crash, a force-quit, or a reboot: beam-node is gone,
+ * wallet-api is still addressing 127.0.0.1:10005, and every call sits there
+ * until it times out. Nothing else on screen distinguishes that from the app
+ * being slow, so it gets a banner with the way out rather than a toast.
+ */
+function showOrphanedNodeBanner() {
+    if (document.getElementById('orphaned-node-banner')) return;
+    const bar = document.createElement('div');
+    bar.id = 'orphaned-node-banner';
+    bar.className = 'orphaned-node-banner';
+    bar.setAttribute('role', 'alert');
+    bar.innerHTML = `
+        <span>Your local node is not running, and the wallet is still pointed at it &mdash;
+              so nothing will load. Switch back to a public node to keep working.</span>
+        <button class="quick-btn quick-btn-primary" onclick="recoverFromOrphanedNode()">
+            Use a public node</button>`;
+    document.body.insertBefore(bar, document.body.firstChild);
+}
+
+function hideOrphanedNodeBanner() {
+    const b = document.getElementById('orphaned-node-banner');
+    if (b) b.remove();
+}
+
+async function recoverFromOrphanedNode() {
+    const btn = document.querySelector('#orphaned-node-banner button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Switching...'; }
+    try {
+        const password = await getWalletPassword(
+            'Moving the wallet back to a public node restarts the wallet service, which needs your password.');
+        if (!password) return;
+        const r = await fetch('/api/node/switch', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'public', password, node: 'eu-node01.mainnet.beam.mw:8100' }),
+        }).then(x => x.json());
+        if (!r.success) throw new Error(r.error || 'Could not switch back.');
+        hideOrphanedNodeBanner();
+        currentNodeType = 'public';
+        currentNode = 'eu-node01.mainnet.beam.mw:8100';
+        applyNodeModeUI('public');
+        showToastAdvanced('Back on a public node', 'The wallet is working again.', 'success');
+        setTimeout(() => loadWalletData(), 1200);
+    } catch (e) {
+        showErrorToast(e, 'Could not switch back to a public node');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Use a public node'; }
+    }
 }
 
 function updateNodeSyncBanner(show, progress, synced, label) {

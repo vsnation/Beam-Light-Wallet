@@ -18,11 +18,12 @@ import signal
 import subprocess
 import time
 import re
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
 import urllib.request
 import urllib.error
 import urllib.parse
 import tempfile
+import functools
 import threading
 from pathlib import Path
 
@@ -927,6 +928,27 @@ def begin_pending_local_switch(wallet_name, password):
     global pending_local_switch
     pending_local_switch = {"wallet": wallet_name, "started": time.time(), "error": None}
     (STATE_DIR / ".node_mode").write_text("public")
+
+
+# Serialises the handlers that start, stop or repoint processes.
+#
+# Requests run on their own threads now, so two wallet-lifecycle operations can
+# genuinely overlap - an unlock landing while a node switch is halfway through
+# stopping wallet-api, say. Each reads a global, spawns or kills a process, then
+# writes the global back, which is exactly the shape that interleaves badly.
+#
+# Read-only endpoints are deliberately NOT held here: keeping status and the
+# JSON-RPC proxy off this lock is the entire point of threading the server.
+lifecycle_lock = threading.RLock()
+
+
+def serialised(fn):
+    """Run a handler under lifecycle_lock."""
+    @functools.wraps(fn)
+    def wrapper(self, *a, **kw):
+        with lifecycle_lock:
+            return fn(self, *a, **kw)
+    return wrapper
 
 
 def current_wallet():
@@ -2195,6 +2217,15 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             # would be the same lie the UI used to tell.
             "node_pending_local": bool(pending_local_switch),
             "node_pending_error": (pending_local_switch or {}).get("error"),
+            # The wallet is pointed at a local node that is not there. Survives
+            # a crash or a kill -9, and every call then times out with nothing
+            # on screen explaining it. The UI turns this into one visible
+            # sentence and a button back to a public node.
+            "node_orphaned": bool(
+                node_mode == "local"
+                and running
+                and not node_status.get("running", False)
+            ),
             "install_type": install_type,
             "version": APP_VERSION,
             "beam_version": platform_binary_info().get("beam_version"),
@@ -2282,6 +2313,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         self.send_json({"error": "Invalid wallet name"}, 400)
         return False
 
+    @serialised
     def handle_node_start(self):
         """Start local beam-node"""
         try:
@@ -2293,6 +2325,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, 500)
 
+    @serialised
     def handle_node_stop(self):
         """Stop local beam-node"""
         try:
@@ -2301,6 +2334,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, 500)
 
+    @serialised
     def handle_node_switch(self):
         """Switch between public and local node"""
         try:
@@ -2358,6 +2392,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
             "active": active_wallet
         })
 
+    @serialised
     def handle_unlock(self):
         try:
             global node_mode, active_password, active_owner_key
@@ -2395,6 +2430,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, 500)
 
+    @serialised
     def handle_lock(self):
         global active_password, active_owner_key
         stop_wallet_api()
@@ -2403,6 +2439,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         active_owner_key = None
         self.send_json({"success": True, "message": "Wallet locked"})
 
+    @serialised
     def handle_create(self):
         try:
             body = self.get_json_body()
@@ -2429,6 +2466,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, 500)
 
+    @serialised
     def handle_restore(self):
         try:
             body = self.get_json_body()
@@ -2472,6 +2510,7 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, 500)
 
+    @serialised
     def handle_rescan(self):
         """Trigger wallet rescan to restore balances"""
         try:
@@ -3538,11 +3577,40 @@ def main():
 ╚══════════════════════════════════════════════════════════════════╝
 """)
 
-    # Allow socket reuse to avoid "Address already in use" errors
-    class ReusableHTTPServer(HTTPServer):
+    # Threaded, and not by preference - a single-threaded HTTPServer serves one
+    # request at a time, so any slow request froze the entire wallet.
+    #
+    # That is not hypothetical here. The proxy forwards to wallet-api, and a
+    # wallet_status against a node that is still syncing, or a tx_list over 400
+    # transactions, or a contract call, can each sit for many seconds. While one
+    # was in flight nothing else was served: not the CSS, not another API call,
+    # not the status poll. The UI simply stopped, and it looked like the wallet
+    # had crashed. The Selenium suite hit it as ERR_CONNECTION_TIMED_OUT on four
+    # consecutive tests.
+    #
+    # daemon_threads so a hung request cannot keep the process alive at exit.
+    class ReusableHTTPServer(ThreadingHTTPServer):
         allow_reuse_address = True
+        daemon_threads = True
 
     server = ReusableHTTPServer(("127.0.0.1", PORT), WalletProxyHandler)
+
+    # Ctrl-C ran shutdown_all; a SIGTERM did not, and that asymmetry left the
+    # wallet broken. beam-node is a child of this process and dies with it,
+    # while wallet-api is detached and survives - still pointed at
+    # 127.0.0.1:10005 with nothing listening there. Every wallet call then hung
+    # for its full timeout and nothing on screen said why. Same cleanup either
+    # way, so the pair goes down together.
+    def _terminate(signum, _frame):
+        print(f"\nReceived signal {signum}, stopping services...")
+        shutdown_all()
+        os._exit(0)
+
+    for _sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            signal.signal(_sig, _terminate)
+        except (ValueError, AttributeError, OSError):
+            pass  # not available on this platform, or not the main thread
 
     try:
         server.serve_forever()
