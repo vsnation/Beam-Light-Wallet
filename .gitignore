@@ -153,6 +153,7 @@ data/fuddle/
 # un-ignore a file inside an excluded directory.
 scripts/*
 # ...except the release verification tooling, which users must be able to fetch.
+!scripts/check_dapp_packages.sh
 !scripts/release-sign.sh
 !scripts/verify-release.sh
 
