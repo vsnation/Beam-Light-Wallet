@@ -2833,7 +2833,18 @@ function fuddlePollForResult() {
             fuddleState.isConfirming = false;
             fuddleState.confirmStartTime = null;
             fuddleStopConfirmTimer();
-            showFuddleToast('Block confirmation timed out. Your guess may still be processing. Go back to lobby and reopen the game to check.', 'warning');
+            // Clear the typed word. It used to be left on the board with Submit
+            // live again, so the obvious next move - press Submit - re-sent the
+            // identical guess for another fee, and if the first one landed the
+            // player had spent two of their six attempts on one word. The guess
+            // is probably still in flight; retyping it should be a decision, not
+            // the path of least resistance.
+            fuddleState.currentGuess = [];
+            showFuddleToast({
+                title: 'Still waiting on the network',
+                message: 'Your guess was sent and is most likely still confirming. It has not been lost.',
+                hint: 'Go back to the lobby and reopen this game to see the result. Do not re-enter the same word — that would cost a second fee and a second attempt.',
+            }, 'warning');
             renderFuddleGame();
             return;
         }
