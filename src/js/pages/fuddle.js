@@ -40,6 +40,29 @@ function fuddleCopyText(text, okMessage) {
         .catch(() => showFuddleToast('Could not copy to the clipboard', 'error'));
 }
 
+/**
+ * Stop everything this page started.
+ *
+ * app.js calls cleanupFuddle() on every page change, behind a typeof guard - and
+ * nothing ever defined it, so the guard silently swallowed the call and all five
+ * of Fuddle's timers kept running after the player navigated away: the round
+ * countdown, the game poller, the guess-confirmation poller, the transaction
+ * table refresh, and the progress-bar ticker. Each one holds a contract call
+ * that ships a 27 KB shader, from a page nobody is looking at.
+ */
+function cleanupFuddle() {
+    ['countdownTimer', 'pollTimer', '_confirmTimer', 'txPollTimer'].forEach(k => {
+        if (fuddleState && fuddleState[k]) {
+            clearInterval(fuddleState[k]);
+            fuddleState[k] = null;
+        }
+    });
+    if (typeof _fuddleTxProgressTimer !== 'undefined' && _fuddleTxProgressTimer) {
+        clearInterval(_fuddleTxProgressTimer);
+        _fuddleTxProgressTimer = null;
+    }
+}
+
 function fuddleKeyActivate(e) {
     if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
     e.preventDefault();
@@ -2088,7 +2111,15 @@ async function fuddleDonateToPool(cTier) {
 
     // Donations don't have a simple poll condition — wait ~30s
     await new Promise(r => setTimeout(r, 30000));
-    fuddleTxProgressSuccess(`Donated ${beamAmount} ${tierAsset.name}!`);
+    // `tierAsset` was never declared in this function - the name exists only in
+    // other functions - so this threw a ReferenceError every single time, after
+    // the 30-second wait and after the money had already been committed. The
+    // function is async and its onclick does not await it, so the throw became a
+    // silent unhandled rejection: the progress bar froze mid-way with a spinner,
+    // and the reload that would have shown the larger prize pool never ran.
+    // Donations are BEAM-only (the button is rendered only for tier 0), so the
+    // token never needed looking up.
+    fuddleTxProgressSuccess(`Donated ${beamAmount} BEAM!`);
     setTimeout(async () => {
         await loadAllTournaments();
         fuddleUpdateTierNames();
@@ -2220,6 +2251,10 @@ async function fuddleCreateGame(difficulty, cTier) {
         'Sending transaction...'
     );
 
+    // Everything open BEFORE we pay, so the new game can be told apart from it.
+    await loadFuddleGames();
+    const gamesBefore = new Set(getMyFuddleGames().map(g => g.id));
+
     const result = await fuddleTx('create_game', 'user', `difficulty=${difficulty},tier=${cTier}`, `New ${difficulty}-letter ${tierName} game`);
     if (!result || result.error) {
         fuddleTxProgressError('Failed to create game: ' + (result?.error || 'Unknown error'));
@@ -2229,7 +2264,14 @@ async function fuddleCreateGame(difficulty, cTier) {
     fuddleUpdateTxProgress('Waiting for confirmation...', 15);
     fuddleStartTxProgressTimer();
 
-    // Poll for the game to appear, also check for tx failure
+    // Poll for a game that was not there before.
+    //
+    // This used to ask "do I have any open game at this difficulty?", which on
+    // the very first poll - three seconds in, before the transaction could
+    // possibly have confirmed - matched a game the player already had. It then
+    // announced "Game created!" and dropped them into that older game, while the
+    // one they had just paid for was never opened. Anyone with an unfinished
+    // 5-letter game paid the entry fee again and was handed back the same board.
     let found = false;
     for (let i = 0; i < 20; i++) {
         await new Promise(r => setTimeout(r, 3000));
@@ -2244,12 +2286,15 @@ async function fuddleCreateGame(difficulty, cTier) {
         }
 
         await loadFuddleGames();
-        const myGames = getMyFuddleGames().filter(g => g.difficulty === difficulty);
-        if (myGames.length > 0) {
-            const latestGame = myGames[myGames.length - 1];
+        const fresh = getMyFuddleGames()
+            .filter(g => g.difficulty === difficulty && !gamesBefore.has(g.id));
+        if (fresh.length > 0) {
+            // Highest id, not last in the array - order is whatever the shader
+            // enumerated and nothing guarantees the newest is last.
+            const newGame = fresh.reduce((a, b) => (b.id > a.id ? b : a));
             fuddleTxProgressSuccess('Game created!');
             found = true;
-            setTimeout(() => fuddleEnterGame(latestGame.id, difficulty, cTier), 2100);
+            setTimeout(() => fuddleEnterGame(newGame.id, difficulty, cTier), 2100);
             break;
         }
     }
@@ -3516,7 +3561,14 @@ async function fuddleCheckTxFailed() {
         if (data.result && Array.isArray(data.result)) {
             for (const tx of data.result) {
                 // status 4 = Failed, status 5 = Cancelled
-                if (tx.status === 4 || tx.status === 5) {
+                // 4 is Failed. 5 is Registering - a transaction still on its
+                // way in - and this file says so itself thirty lines below,
+                // where `tx.status >= 5` counts as PENDING. Treating it as a
+                // failure meant every funded flow could abort about twelve
+                // seconds after the money was committed, tell the player their
+                // transaction had failed while it was busy succeeding, and
+                // invite them to pay for it a second time. (Cancelled is 2.)
+                if (tx.status === 4) {
                     const age = Date.now() / 1000 - tx.create_time;
                     if (age < 120) { // Created within last 2 minutes
                         return tx.failure_reason || 'Transaction failed on-chain';
