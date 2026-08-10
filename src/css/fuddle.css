@@ -3283,3 +3283,18 @@
 @keyframes fuddleSpinLoader {
     to { transform: rotate(360deg); }
 }
+
+/* One line telling a first-time player what this is, before anything else.
+   Sits between the title and the on-chain verification row. */
+.fuddle-tagline {
+    max-width: 46ch;
+    margin: 6px auto 14px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+@media (max-width: 768px) {
+    .fuddle-tagline { font-size: 14px; padding: 0 14px; }
+}

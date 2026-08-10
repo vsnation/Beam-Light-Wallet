@@ -13,6 +13,65 @@
 // Contract ID - set after deployment
 const FUDDLE_CID = 'd08237dd9491a42383f7d01e07bf2f61be9e3e0a8a9cfc7c98a50914343644c0';
 
+/**
+ * Make a non-button clickable behave like a button for the keyboard.
+ *
+ * Six controls here were <div onclick> or <span onclick> with no role, no
+ * tabindex and no key handling - including "Continue" on an unfinished game and
+ * the three that SPEND money (buy a letter, buy either lootbox). A keyboard or
+ * screen-reader user could not resume their own game, and the shop was simply
+ * unreachable. Space is preventDefault-ed so it activates rather than scrolls.
+ */
+/**
+ * Copy, and say so when it fails.
+ *
+ * This was navigator.clipboard.writeText(...) followed unconditionally by a
+ * "copied" toast. If the browser refuses the write - no permission, or not a
+ * secure context - the rejection went unhandled and the toast still claimed
+ * success, so the player believed they had the transaction ID and did not.
+ */
+function fuddleCopyText(text, okMessage) {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        showFuddleToast('Copying is not available in this browser', 'error');
+        return;
+    }
+    navigator.clipboard.writeText(text)
+        .then(() => showFuddleToast(okMessage || 'Copied', 'success'))
+        .catch(() => showFuddleToast('Could not copy to the clipboard', 'error'));
+}
+
+function fuddleKeyActivate(e) {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    e.preventDefault();
+    e.currentTarget.click();
+}
+
+
+/**
+ * What a game actually costs, measured on-chain rather than assumed.
+ *
+ * The UI said "1 BEAM per game". It is not. A Fuddle call is not an ordinary
+ * BVM call at 0.011 BEAM - it swaps on the DEX via CallFar, and the charge is
+ * far higher. Taken from this wallet's own completed transactions:
+ *
+ *     Create Fuddle game    0.121 BEAM   (n=8, every one identical)
+ *     Submit Fuddle guess   0.181 BEAM   (n=6, every one identical)
+ *
+ * A game allows MAX_ATTEMPTS = 6 guesses (contracts/fuddle/contract.h:61), so
+ * one full game costs 1 + 0.121 + 6 x 0.181 = 2.207 BEAM against an advertised
+ * 1 BEAM. Understated by 2.2x, and the per-guess charge appeared nowhere at all -
+ * a player found out by watching their balance fall while they played.
+ */
+const FUDDLE_CREATE_FEE_GROTH = 12100000;   // 0.121 BEAM
+const FUDDLE_GUESS_FEE_GROTH  = 18100000;   // 0.181 BEAM
+const FUDDLE_MAX_ATTEMPTS     = 6;
+
+/** Worst case for one game: entry + creation + every guess. */
+function fuddleWorstCaseCost(entryGroth) {
+    return entryGroth + FUDDLE_CREATE_FEE_GROTH + FUDDLE_GUESS_FEE_GROTH * FUDDLE_MAX_ATTEMPTS;
+}
+
+
 // Legacy contract versions (for withdrawing stuck payout balances)
 const FUDDLE_LEGACY_CIDS = [
     { cid: 'd08237dd9491a42383f7d01e07bf2f61be9e3e0a8a9cfc7c98a50914343644c0', label: 'v8 (carryover fix)', version: 8 },
@@ -1066,7 +1125,9 @@ function renderFuddleLobby() {
         // v7: Entry always in BEAM (auto-swapped via DEX for non-BEAM tiers)
         const effectiveEntryCost = fuddleGetEffectiveEntryCost(cTier);
         const entryCostText = fuddleFormatBeam(effectiveEntryCost);
-        const entryLabel = `${entryCostText} BEAM per game`;
+        // "1 BEAM per game" was the entry fee alone. Network fees on top are
+        // larger than a rounding error here - see FUDDLE_CREATE_FEE_GROTH.
+        const entryLabel = `${entryCostText} BEAM entry + fees`;
 
         // USD for prize pool using tournament's actual asset
         let poolUsdHtml = '';
@@ -1152,10 +1213,22 @@ function renderFuddleLobby() {
             <button class="fuddle-help-btn" onclick="fuddleShowHowToPlay()">? How to Play</button>
         </div>
 
-        <div class="fuddle-cid-display" onclick="fuddleCopyCid()">
-            <span class="cid-label">Contract:</span>
+        <!-- A first-time player used to meet the word FUDDLE and then a
+             contract hash - the second thing on the screen, and meaningless to
+             anyone who is not a BEAM developer. Nothing said what the game was
+             or what to do. One line does that job; the contract moves below it
+             and says what it is FOR, which is the only reason a player would
+             want it. -->
+        <p class="fuddle-tagline">
+            Guess the hidden word in six tries. Everyone who plays adds to the
+            prize pool, and the best scores share it when the round ends.
+        </p>
+
+        <div class="fuddle-cid-display" role="button" tabindex="0" onkeydown="fuddleKeyActivate(event)" onclick="fuddleCopyCid()"
+             title="Every game, score and payout is recorded on the BEAM blockchain by this contract. Click to copy its address.">
+            <span class="cid-label">Runs on-chain &middot; verify:</span>
             <span class="cid-value">${fuddleShortenCid(FUDDLE_CID)}</span>
-            <span class="cid-copy" title="Copy CID">&#9112;</span>
+            <span class="cid-copy" aria-hidden="true">&#9112;</span>
         </div>
 
         ${stats ? `<div class="fuddle-lobby-section">${statsHtml}</div>` : ''}
@@ -1191,7 +1264,7 @@ function renderFuddleLobby() {
                     const tierName = TIER_NAMES[cTier] || 'BEAM';
                     const tierClass = TIER_CSS[cTier] || 'tier-beam';
                     return `
-                    <div class="fuddle-active-game ${tierClass}" onclick="fuddleEnterGame(${g.id}, ${diff}, ${cTier})" style="cursor:pointer;">
+                    <div class="fuddle-active-game ${tierClass}" role="button" tabindex="0" onkeydown="fuddleKeyActivate(event)" onclick="fuddleEnterGame(${g.id}, ${diff}, ${cTier})" style="cursor:pointer;">
                         <span class="fuddle-tournament-tier-badge" style="font-size:11px;padding:2px 8px;">${tierName}</span>
                         <span style="color:var(--text-primary);font-family:var(--fuddle-font-game);font-size:13px;">Game #${g.id}</span>
                         <span style="color:var(--text-muted);font-size:12px;">${diff}-letter</span>
@@ -1587,7 +1660,7 @@ function fuddleShowShop() {
     for (let i = 0; i < 26; i++) {
         const count = fuddleState.letters[i] || 0;
         gridHtml += `
-            <div class="fuddle-shop-letter" onclick="fuddleBuyLetter(${i})">
+            <div class="fuddle-shop-letter" role="button" tabindex="0" onkeydown="fuddleKeyActivate(event)" onclick="fuddleBuyLetter(${i})">
                 <span class="letter">${FUDDLE_LETTERS[i]}</span>
                 <span class="owned">${count}</span>
             </div>
@@ -1604,13 +1677,13 @@ function fuddleShowShop() {
         <div class="fuddle-lobby-section">
             <h3>Loot Boxes</h3>
             <div class="fuddle-lootbox-cards">
-                <div class="fuddle-lootbox" onclick="fuddleBuyLootbox(0)">
+                <div class="fuddle-lootbox" role="button" tabindex="0" onkeydown="fuddleKeyActivate(event)" onclick="fuddleBuyLootbox(0)">
                     <div class="fuddle-lootbox-emoji">&#128230;</div>
                     <div class="fuddle-lootbox-name">Small Box</div>
                     <div class="fuddle-lootbox-desc">24 unique random letters</div>
                     <div class="fuddle-lootbox-price">${lbSmallPrice} BEAM</div>
                 </div>
-                <div class="fuddle-lootbox" onclick="fuddleBuyLootbox(1)">
+                <div class="fuddle-lootbox" role="button" tabindex="0" onkeydown="fuddleKeyActivate(event)" onclick="fuddleBuyLootbox(1)">
                     <div class="fuddle-lootbox-emoji">&#127873;</div>
                     <div class="fuddle-lootbox-name">Large Box</div>
                     <div class="fuddle-lootbox-desc">48 varied letters</div>
@@ -2096,7 +2169,14 @@ function fuddleShowDiffPicker(cTier) {
     overlay.innerHTML = `
         <div class="fuddle-result-modal" style="max-width:380px;">
             <h2 style="color:var(--fuddle-accent);margin:0 0 4px;font-family:var(--fuddle-font-display);font-size:20px;letter-spacing:2px;">${tierName} TOURNAMENT</h2>
-            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 20px;">Entry: ${fuddleFormatBeam(entryCost)} BEAM &middot; Choose word length</p>
+            <p style="color:var(--text-secondary);font-size:13px;margin:0 0 8px;">Choose your word length</p>
+            <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px 12px;margin:0 0 18px;text-align:left;font-size:12px;line-height:1.6;color:var(--text-secondary);">
+                <div style="display:flex;justify-content:space-between;"><span>Entry</span><strong style="color:var(--text-primary);">${fuddleFormatBeam(entryCost)} BEAM</strong></div>
+                <div style="display:flex;justify-content:space-between;"><span>Network fee to start</span><span>${fuddleFormatBeam(FUDDLE_CREATE_FEE_GROTH)} BEAM</span></div>
+                <div style="display:flex;justify-content:space-between;"><span>Each guess costs</span><span>${fuddleFormatBeam(FUDDLE_GUESS_FEE_GROTH)} BEAM</span></div>
+                <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.08);margin-top:6px;padding-top:6px;">
+                    <span>Most you can spend</span><strong style="color:var(--text-primary);">${fuddleFormatBeam(fuddleWorstCaseCost(entryCost))} BEAM</strong></div>
+            </div>
 
             <div class="fuddle-diff-picker">
                 <button class="fuddle-diff-btn" onclick="this.closest('.fuddle-result-overlay').remove(); fuddleCreateGame(4, ${cTier})">
@@ -3254,7 +3334,7 @@ async function fuddleLoadTxTable() {
                 <div class="fuddle-tx-right">
                     <span class="fuddle-tx-badge ${status.css}">${statusText}</span>
                     <span class="fuddle-tx-fee">Fee: ${fee} BEAM</span>
-                    ${txId ? `<span class="fuddle-tx-id" title="${txId}" onclick="navigator.clipboard.writeText('${txId}');showFuddleToast('TX ID copied','success')">${txId.slice(0, 8)}...</span>` : ''}
+                    ${txId ? `<span class="fuddle-tx-id" title="${txId}" role="button" tabindex="0" onkeydown="fuddleKeyActivate(event)" onclick="fuddleCopyText('${txId}', 'TX ID copied')">${txId.slice(0, 8)}...</span>` : ''}
                 </div>
             `;
             container.appendChild(row);
