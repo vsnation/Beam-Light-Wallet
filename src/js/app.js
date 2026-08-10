@@ -628,6 +628,13 @@ const GROTH = 100000000;
  *
  * Flip to true to bring the existing page back verbatim.
  */
+// Off, and it should stay off. The escrow contract behind this is an unfinished
+// prototype: 13 of its 21 methods authorise a caller-supplied public key without
+// Env::AddSig - including add_manager, whose only check is that the key you NAME
+// belongs to an owner, while owner keys are published in contract state - the
+// three timeouts are stored and never compared to anything, a trade can never
+// reach Cancelled because nothing assigns it, and juror selection is a TODO.
+// See docs/P2P_ESCROW_ASSESSMENT.md. Do not flip this to true.
 const FEATURE_P2P = false;
 
 const activeIntervals = {};
