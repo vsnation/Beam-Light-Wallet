@@ -918,12 +918,35 @@ async function fuddleGetWalletBalance(assetId) {
     }
 }
 
-async function fuddleCheckBalance(assetId, amount, assetName) {
-    const balance = await fuddleGetWalletBalance(assetId);
-    if (balance >= amount) return true;
-
-    fuddleShowInsufficientBalanceModal(assetId, amount, balance, assetName);
-    return false;
+/**
+ * Can this actually be paid for - including the network fee?
+ *
+ * Every caller used to pass the action's own price and nothing else, so a player
+ * holding exactly 1 BEAM was told they could afford a 1 BEAM entry that really
+ * costs 1.121. The check passed, the transaction failed, and the explanation
+ * came from the node rather than from the screen that had just said yes.
+ *
+ * feeGroth is the measured cost of that particular call, not a guess: Fuddle
+ * calls swap on the DEX and cost far more than an ordinary 0.011 BEAM call.
+ */
+async function fuddleCheckBalance(assetId, amount, assetName, feeGroth) {
+    const fee = (typeof feeGroth === 'number') ? feeGroth : FUDDLE_CREATE_FEE_GROTH;
+    // The fee is always BEAM. Paying in another asset still needs BEAM alongside
+    // it, so the two are checked separately rather than added together.
+    const needBeam = (assetId === 0) ? amount + fee : fee;
+    const beam = await fuddleGetWalletBalance(0);
+    if (beam < needBeam) {
+        fuddleShowInsufficientBalanceModal(0, needBeam, beam, 'BEAM');
+        return false;
+    }
+    if (assetId !== 0) {
+        const balance = await fuddleGetWalletBalance(assetId);
+        if (balance < amount) {
+            fuddleShowInsufficientBalanceModal(assetId, amount, balance, assetName);
+            return false;
+        }
+    }
+    return true;
 }
 
 function fuddleShowInsufficientBalanceModal(assetId, required, available, assetName) {
@@ -2095,7 +2118,7 @@ async function fuddleDonateToPool(cTier) {
     }
     const groth = Math.round(beamAmount * 100000000);
 
-    const hasBalance = await fuddleCheckBalance(0, groth, 'BEAM');
+    const hasBalance = await fuddleCheckBalance(0, groth, 'BEAM', FUDDLE_CREATE_FEE_GROTH);
     if (!hasBalance) return;
 
     fuddleShowTxProgress(`Donating ${beamAmount} BEAM`, `${tierName} Prize Pool`, 'Sending transaction...');
@@ -2208,6 +2231,16 @@ function fuddleShowDiffPicker(cTier) {
                 <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.08);margin-top:6px;padding-top:6px;">
                     <span>Most you can spend</span><strong style="color:var(--text-primary);">${fuddleFormatBeam(fuddleWorstCaseCost(entryCost))} BEAM</strong></div>
             </div>
+            <!-- Guesses also spend letters from your inventory, and nothing said
+                 so until you were already on the board having paid. Someone with
+                 no letters bought a game they could not type a word into without
+                 spending again. -->
+            ${fuddleTotalLetters() < 12 ? `
+            <p style="margin:-8px 0 16px;padding:9px 12px;background:rgba(245,158,11,0.12);border-radius:8px;font-size:12px;line-height:1.5;color:var(--warning);text-align:left;">
+                Guesses also spend letters, and you hold ${fuddleTotalLetters()}.
+                You can buy more from the Letter Shop at any time &mdash; but with
+                none, a new board cannot be played yet.
+            </p>` : ''}
 
             <div class="fuddle-diff-picker">
                 <button class="fuddle-diff-btn" onclick="this.closest('.fuddle-result-overlay').remove(); fuddleCreateGame(4, ${cTier})">
@@ -2241,7 +2274,7 @@ async function fuddleCreateGame(difficulty, cTier) {
 
     // v7: Always check BEAM balance (all tiers charge BEAM)
     if (entryCost > 0) {
-        const hasBalance = await fuddleCheckBalance(0, entryCost, 'BEAM');
+        const hasBalance = await fuddleCheckBalance(0, entryCost, 'BEAM', FUDDLE_CREATE_FEE_GROTH);
         if (!hasBalance) return;
     }
 
@@ -2361,7 +2394,7 @@ async function fuddleBuyLetterExecute(charId) {
 
     // v5: Pre-transaction balance check (letters always cost BEAM)
     if (letterPrice > 0) {
-        const hasBalance = await fuddleCheckBalance(0, letterPrice, 'BEAM');
+        const hasBalance = await fuddleCheckBalance(0, letterPrice, 'BEAM', FUDDLE_CREATE_FEE_GROTH);
         if (!hasBalance) return;
     }
 
@@ -2413,7 +2446,7 @@ async function fuddleBuyLootboxExecute(size) {
 
     // v5: Pre-transaction balance check (lootboxes always cost BEAM)
     if (lootPrice > 0) {
-        const hasBalance = await fuddleCheckBalance(0, lootPrice, 'BEAM');
+        const hasBalance = await fuddleCheckBalance(0, lootPrice, 'BEAM', FUDDLE_CREATE_FEE_GROTH);
         if (!hasBalance) return;
     }
 
@@ -2615,7 +2648,7 @@ async function fuddleBuyFromModal(charId) {
 
     // v5: Pre-transaction balance check (letters always cost BEAM)
     if (totalCost > 0) {
-        const hasBalance = await fuddleCheckBalance(0, totalCost, 'BEAM');
+        const hasBalance = await fuddleCheckBalance(0, totalCost, 'BEAM', FUDDLE_CREATE_FEE_GROTH);
         if (!hasBalance) return;
     }
 
