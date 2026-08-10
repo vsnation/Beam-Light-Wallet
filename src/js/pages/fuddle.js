@@ -63,6 +63,32 @@ function cleanupFuddle() {
     }
 }
 
+/**
+ * Turn whatever the shader or wallet returned into a sentence.
+ *
+ * Fourteen sites did `'Failed: ' + fuddleErrorText(result?.error)`. When the
+ * error is an object - which is what a shader error and a JSON-RPC rejection
+ * both are - string concatenation renders it as "[object Object]", so a player
+ * whose transaction was rejected was told "Failed: [object Object]" and had
+ * nothing to act on.
+ */
+function fuddleErrorText(err) {
+    if (err === null || err === undefined) return 'Unknown error';
+    if (typeof err === 'string') return err;
+    if (typeof err !== 'object') return String(err);
+    const bits = [];
+    if (typeof err.message === 'string') bits.push(err.message);
+    else if (err.error && typeof err.error.message === 'string') bits.push(err.error.message);
+    if (typeof err.data === 'string') bits.push(err.data);
+    const text = bits.filter(Boolean).join(' - ').trim();
+    if (text) return text;
+    const code = (typeof err.code === 'number') ? err.code
+               : (err.error && typeof err.error.code === 'number') ? err.error.code : null;
+    // -32021 is the wallet's "user rejected", which deserves plain words.
+    if (code === -32021) return 'You cancelled this in your wallet.';
+    return code !== null ? `The wallet reported error ${code}.` : 'Unknown error';
+}
+
 function fuddleKeyActivate(e) {
     if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
     e.preventDefault();
@@ -518,7 +544,7 @@ async function fuddleLegacyWithdraw(cid, amount, assetId, assetName) {
 
     const result = await fuddleTxCid(cid, 'withdraw', 'user', `amount=${amount},asset_id=${assetId}`, `Withdraw ${assetName} from ${label}`);
     if (!result || result.error) {
-        fuddleTxProgressError('Withdraw failed: ' + (result?.error || 'Unknown error'));
+        fuddleTxProgressError('Withdraw failed: ' + fuddleErrorText(result?.error));
         return;
     }
 
@@ -1161,7 +1187,18 @@ function renderFuddleLobby() {
 
         let actionBtn = '';
         if (isEnded && myScore > 0 && !myClaimed) {
-            actionBtn = `<button class="fuddle-tournament-claim" onclick="fuddleClaimTournamentReward(${cTier}, ${round})">Claim ~${fuddleFormatBeam(estReward)} ${tierAsset.name}</button>`;
+            // Claiming is a contract call and costs BEAM. When the estimate is
+            // zero - or smaller than the fee - pressing this loses money, and it
+            // used to say "Claim ~0 BEAM" with no hint of that. Say what it
+            // costs, and stop offering a claim that cannot pay for itself.
+            const claimWorthIt = estReward > 0 &&
+                (tierAsset.id !== 0 || estReward > FUDDLE_CREATE_FEE_GROTH);
+            actionBtn = claimWorthIt
+                ? `<button class="fuddle-tournament-claim" onclick="fuddleClaimTournamentReward(${cTier}, ${round})">Claim ~${fuddleFormatBeam(estReward)} ${tierAsset.name}
+                     <span style="display:block;font-size:10px;opacity:0.75;font-weight:400;">costs ${fuddleFormatBeam(FUDDLE_CREATE_FEE_GROTH)} BEAM to claim</span></button>`
+                : `<div class="fuddle-tournament-nothing" style="padding:10px;text-align:center;font-size:12px;color:var(--text-muted);line-height:1.5;">
+                     Nothing to claim from this round &mdash; your score did not place.
+                   </div>`;
         } else {
             actionBtn = `<button class="fuddle-tournament-play" onclick="fuddleShowDiffPicker(${cTier})">Play Now</button>`;
         }
@@ -2125,7 +2162,7 @@ async function fuddleDonateToPool(cTier) {
 
     const result = await fuddleTx('donate_to_pool', 'user', `tier=${cTier},amount=${groth}`, `Donate ${beamAmount} BEAM`);
     if (!result || result.error) {
-        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        fuddleTxProgressError('Failed: ' + fuddleErrorText(result?.error));
         return;
     }
 
@@ -2290,7 +2327,7 @@ async function fuddleCreateGame(difficulty, cTier) {
 
     const result = await fuddleTx('create_game', 'user', `difficulty=${difficulty},tier=${cTier}`, `New ${difficulty}-letter ${tierName} game`);
     if (!result || result.error) {
-        fuddleTxProgressError('Failed to create game: ' + (result?.error || 'Unknown error'));
+        fuddleTxProgressError('Failed to create game: ' + fuddleErrorText(result?.error));
         return;
     }
 
@@ -2402,7 +2439,7 @@ async function fuddleBuyLetterExecute(charId) {
 
     const result = await fuddleTx('buy_letters', 'user', `char_id=${charId},count=1`, `Buy letter ${letter}`);
     if (!result || result.error) {
-        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        fuddleTxProgressError('Failed: ' + fuddleErrorText(result?.error));
         return;
     }
 
@@ -2454,7 +2491,7 @@ async function fuddleBuyLootboxExecute(size) {
 
     const result = await fuddleTx('buy_lootbox', 'user', `size=${size}`, `Buy ${name} Loot Box`);
     if (!result || result.error) {
-        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        fuddleTxProgressError('Failed: ' + fuddleErrorText(result?.error));
         return;
     }
 
@@ -2486,7 +2523,7 @@ async function fuddleClaimTournamentReward(cTier, round) {
 
     const result = await fuddleTx('claim_tournament_reward', 'user', `tier=${cTier},round=${round}`, `Claim ${tierName} reward`);
     if (!result || result.error) {
-        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        fuddleTxProgressError('Failed: ' + fuddleErrorText(result?.error));
         return;
     }
 
@@ -2662,7 +2699,7 @@ async function fuddleBuyFromModal(charId) {
 
     const result = await fuddleTx('buy_letters', 'user', `char_id=${charId},count=${count}`, `Buy ${count}x ${letter}`);
     if (!result || result.error) {
-        fuddleTxProgressError('Failed: ' + (result?.error || 'Unknown error'));
+        fuddleTxProgressError('Failed: ' + fuddleErrorText(result?.error));
         return;
     }
 
@@ -3135,7 +3172,7 @@ async function fuddleAdminWithdrawFees() {
         showFuddleToast(`Withdrew ${beamAmount} BEAM in fees!`, 'success');
         setTimeout(() => fuddleShowAdmin(), 3000);
     } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+        showFuddleToast('Failed: ' + fuddleErrorText(result?.error), 'error');
     }
 }
 
@@ -3154,7 +3191,7 @@ async function fuddleAdminWithdrawFomoFees() {
         showFuddleToast(`Withdrew ${fomoAmount} FOMO in buyback fees!`, 'success');
         setTimeout(() => fuddleShowAdmin(), 3000);
     } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+        showFuddleToast('Failed: ' + fuddleErrorText(result?.error), 'error');
     }
 }
 
@@ -3196,7 +3233,7 @@ async function fuddleAdminUpdateSettings() {
         showFuddleToast('Settings updated!', 'success');
         setTimeout(() => fuddleShowAdmin(), 3000);
     } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+        showFuddleToast('Failed: ' + fuddleErrorText(result?.error), 'error');
     }
 }
 
@@ -3217,7 +3254,7 @@ async function fuddleAdminMint() {
             fuddleShowAdmin();
         }, 3000);
     } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+        showFuddleToast('Failed: ' + fuddleErrorText(result?.error), 'error');
     }
 }
 
@@ -3245,7 +3282,7 @@ async function fuddleAdminForceFinalize() {
         showFuddleToast(`${tierName} Round ${t.round} finalized!`, 'success');
         setTimeout(() => fuddleShowAdmin(), 3000);
     } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+        showFuddleToast('Failed: ' + fuddleErrorText(result?.error), 'error');
     }
 }
 
@@ -3271,7 +3308,7 @@ async function fuddleAdminEmergencyWithdraw() {
         showFuddleToast(`Withdrew ${amount} ${assetName}!`, 'success');
         setTimeout(() => fuddleShowAdmin(), 3000);
     } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+        showFuddleToast('Failed: ' + fuddleErrorText(result?.error), 'error');
     }
 }
 
@@ -3318,7 +3355,7 @@ async function fuddleAdminAddWords() {
             fuddleShowAdmin();
         }, 3000);
     } else {
-        showFuddleToast('Failed: ' + (result?.error || 'Unknown error'), 'error');
+        showFuddleToast('Failed: ' + fuddleErrorText(result?.error), 'error');
     }
 }
 
