@@ -1106,7 +1106,12 @@
     opacity: 0.6;
 }
 
-.fuddle-key.absent .key-count { color: rgba(255, 255, 255, 0.15); }
+/* The key is already dimmed by its own opacity:0.6, so a further 0.15 alpha on
+   the count put it at 1.6:1 against its background - not dim, unreadable. The
+   count is the player's inventory of that letter and stays useful after the
+   letter is eliminated from this word, so it has to be legible. 0.55 gives
+   5.8:1 while the key still plainly reads as eliminated. */
+.fuddle-key.absent .key-count { color: rgba(255, 255, 255, 0.55); }
 
 /* === Submit Guess Button === */
 

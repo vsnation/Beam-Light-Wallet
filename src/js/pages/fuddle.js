@@ -1644,7 +1644,23 @@ function renderFuddleGame() {
     const cTier = fuddleState.currentTier;
     const tierAsset = TIER_ASSETS[cTier] || TIER_ASSETS[0];
     const t = fuddleState.tournaments[cTier];
-    const tournamentInfo = t ? `${TIER_NAMES[cTier]} Round ${t.round || '?'} | Pool: ${fuddleFormatBeam(t.prize_pool)} ${tierAsset.name}` : '';
+    let tournamentInfo = t ? `${TIER_NAMES[cTier]} Round ${t.round || '?'} | Pool: ${fuddleFormatBeam(t.prize_pool)} ${tierAsset.name}` : '';
+
+    // A game expires 1440 blocks (~24h) after it is created, and the board said
+    // nothing about that. The lobby hides expired games, but nothing stops one
+    // expiring while it is open in front of you - and Submit stayed live, so
+    // every further guess cost 0.181 BEAM against a game that can no longer be
+    // won. Both the deadline and the expiry now appear where the game is played.
+    const myGame = (fuddleState.allGames || []).find(g => g.id === fuddleState.currentGameId);
+    const gameExpiresAt = myGame && myGame.expires_at;
+    const height = fuddleState.currentHeight;
+    const gameExpired = !!(gameExpiresAt && height && gameExpiresAt <= height);
+    if (gameExpiresAt && height && !gameExpired) {
+        const mins = Math.max(0, Math.round((gameExpiresAt - height) * 60 / 60));
+        tournamentInfo += mins < 120
+            ? ` | Ends in ~${mins} min`
+            : ` | Ends in ~${Math.round(mins / 60)}h`;
+    }
 
     let confirmingHtml = '';
     if (fuddleState.isConfirming) {
@@ -1665,9 +1681,14 @@ function renderFuddleGame() {
     }
 
     // Submit button state
-    const canSubmit = fuddleState.currentGuess.length === diff && !fuddleState.isConfirming && fuddleState.playerStatus === 0;
+    // An expired game cannot be won, so nothing here should take another 0.181
+    // BEAM for a guess against it.
+    const canSubmit = fuddleState.currentGuess.length === diff && !fuddleState.isConfirming
+                      && fuddleState.playerStatus === 0 && !gameExpired;
     const guessLetters = fuddleState.currentGuess.length;
-    const submitLabel = fuddleState.isConfirming ? 'Confirming...' : (guessLetters === diff ? 'Submit Guess' : `${guessLetters}/${diff} letters`);
+    const submitLabel = gameExpired ? 'This game has ended'
+        : fuddleState.isConfirming ? 'Confirming...'
+        : (guessLetters === diff ? 'Submit Guess' : `${guessLetters}/${diff} letters`);
     const submitClass = canSubmit ? 'fuddle-submit-btn ready' : 'fuddle-submit-btn';
 
     root.innerHTML = `
@@ -1763,7 +1784,12 @@ function fuddleShowShop() {
                 <div class="fuddle-lootbox" role="button" tabindex="0" onkeydown="fuddleKeyActivate(event)" onclick="fuddleBuyLootbox(0)">
                     <div class="fuddle-lootbox-emoji">&#128230;</div>
                     <div class="fuddle-lootbox-name">Small Box</div>
-                    <div class="fuddle-lootbox-desc">24 unique random letters</div>
+                    <!-- Said "24 unique random letters". The contract draws each one
+                         independently (rnd % 26 in contract.cpp), so duplicates are not
+                         merely possible but expected: 24 draws over 26 letters yield about
+                         16 distinct ones. Promising uniqueness on something people pay for
+                         is the kind of claim that has to match the code. -->
+                    <div class="fuddle-lootbox-desc">24 random letters &middot; duplicates likely</div>
                     <div class="fuddle-lootbox-price">${lbSmallPrice} BEAM</div>
                 </div>
                 <div class="fuddle-lootbox" role="button" tabindex="0" onkeydown="fuddleKeyActivate(event)" onclick="fuddleBuyLootbox(1)">
@@ -2048,7 +2074,19 @@ function fuddleShowHowToPlay() {
                     <span class="fuddle-htp-tier tier-fomo">FOMO</span>
                     <span class="fuddle-htp-tier tier-beamx">BEAMX</span>
                 </div>
-                <p>Each tournament has its own prize pool funded by entry fees in that token. Click "Play Now" to enter, then <strong>choose your word difficulty</strong> (4, 5, or 6 letters).</p>
+                <!-- Said entry fees are paid "in that token". Since v7 every tier is
+                     paid in BEAM and swapped to the tier's token on the DEX, so a
+                     player was told they needed FOMO or BEAMX to enter those
+                     tournaments when they never did - and might have gone and bought
+                     some. -->
+                <p><strong>You always pay in BEAM</strong>, whichever tournament you enter.
+                   For the FOMO and BEAMX tournaments your BEAM is swapped automatically,
+                   so you never need to hold those tokens. Each tournament keeps its own
+                   prize pool in its own token. Click "Play Now" to enter, then
+                   <strong>choose your word difficulty</strong> (4, 5, or 6 letters).</p>
+                <p style="color:var(--text-muted);font-size:12px;">Entering costs the entry
+                   fee plus a network fee, and each guess costs a network fee too. The exact
+                   amounts are shown before you commit.</p>
             </div>
 
             <div class="fuddle-htp-section">
