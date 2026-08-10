@@ -1380,8 +1380,20 @@ def export_owner_key(wallet_name, password):
     was_running = wallet_api_process is not None or is_wallet_api_running()
     if was_running:
         stop_wallet_api()
-        # Windows needs more time to release SQLite file locks
-        time.sleep(3 if PLATFORM == "windows" else 1)
+        # Wait for the process to actually be gone, rather than guessing.
+        #
+        # This used to be a flat one-second sleep (three on Windows). beam-wallet
+        # then opened the same wallet.db that wallet-api might still be holding,
+        # and when the lock had not been released yet the CLI produced no key and
+        # no clear error - just its startup log. The caller reported that log
+        # back as "Could not extract owner key: Reading config from ...", which
+        # tells the user nothing about what went wrong or what to do.
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            if not is_wallet_api_running():
+                break
+            time.sleep(0.3)
+        time.sleep(1.5 if PLATFORM == "windows" else 0.5)  # let the OS release the file lock
 
     cfg = write_secret_cfg({"pass": password}, tag="ownerkey")
     cmd = [
@@ -1419,7 +1431,17 @@ def export_owner_key(wallet_name, password):
         if "invalid password" in output.lower() or "file is not a database" in output.lower():
             return {"error": "Invalid password"}
 
-        return {"error": f"Could not extract owner key: {output[:500]}"}
+        # Say what actually happened. Dumping the CLI's startup log here is how
+        # this surfaced as "Could not extract owner key: Reading config from
+        # /Users/.../.ownerkey-xxxx.cfg I 2026-... removing old log file ...".
+        low = output.lower()
+        if "database" in low and ("lock" in low or "busy" in low or "cannot open" in low):
+            return {"error": "The wallet file is still in use. Wait a few seconds and try again."}
+        if "no such file" in low or "not found" in low:
+            return {"error": "The wallet file could not be opened. Check the wallet still exists."}
+        print(f"[export_owner_key] no key in output; first 500 chars:\n{output[:500]}")
+        return {"error": "Could not read the owner key from the wallet. "
+                         "The terminal running serve.py has the full output."}
 
     except Exception as e:
         # Try to restart wallet-api even on error

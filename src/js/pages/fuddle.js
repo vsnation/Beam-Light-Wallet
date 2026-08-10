@@ -728,7 +728,16 @@ async function loadAllTournaments() {
     return fuddleState.tournaments;
 }
 
-async function loadMyTournament(contractTier, round) {
+async function loadMyTournament(contractTier, round, forceRefresh) {
+    // Cached per (tier, round), as loadPastTournament already is. Without this
+    // the lobby asked the contract for the same past rounds twice: once from
+    // loadRoundHistory and again from loadUnclaimedRewards, which walk the same
+    // 3 tiers x 5 rounds. Fifteen identical contract calls, each shipping the
+    // 27 KB shader, before the page could show anything.
+    const cacheKey = `${contractTier}_${round}`;
+    if (round && !forceRefresh && fuddleState.pastMyTournaments[cacheKey]) {
+        return fuddleState.pastMyTournaments[cacheKey];
+    }
     const roundArg = round ? `,round=${round}` : '';
     const result = await fuddleCall('view_my_tournament', 'user', `tier=${contractTier}${roundArg}`);
     if (result && result.my_tournament) {
@@ -1113,8 +1122,11 @@ function initFuddle() {
     // No .catch() here meant a rejected load never reached renderFuddleLobby,
     // so the screen stayed on "Loading tournament data..." forever - no error,
     // no retry, and nothing to distinguish it from a slow network.
+    // Draw as soon as the essentials are in, then fill the past rounds in behind
+    // it. This is the path showPage('fuddle') takes, and it is the one that
+    // matters for how long a click feels.
     loadFuddleData()
-        .then(() => renderFuddleLobby())
+        .then(() => { renderFuddleLobby(); loadFuddleHistoryInBackground(); })
         .catch(err => {
             console.error('Fuddle load failed:', err);
             const root = document.getElementById('fuddle-root') ||
@@ -1141,11 +1153,32 @@ async function loadFuddleData() {
     ]);
     // Update tier names AFTER both settings and tournaments are loaded
     fuddleUpdateTierNames();
-    // Check past rounds for unclaimed rewards + load round history
-    await Promise.all([
-        loadUnclaimedRewards(),
-        loadRoundHistory(5),
-    ]);
+}
+
+/**
+ * The past rounds, fetched after the lobby is already on screen.
+ *
+ * These used to be awaited inside loadFuddleData, so opening Fuddle waited on
+ * every one of them before drawing anything. Measured: 23 contract calls for one
+ * lobby, the slowest 1.3 seconds, and 18 of them were past-round history that
+ * nobody had asked to see - five rounds across three tiers, whether or not the
+ * player ever scrolls to them. The tournaments, the player's games and their
+ * letters are five calls; that is what the first paint needs.
+ *
+ * Failures here are deliberately swallowed: the lobby is already usable, and an
+ * empty history section is better than replacing a working screen with an error.
+ */
+async function loadFuddleHistoryInBackground() {
+    try {
+        await Promise.all([
+            loadUnclaimedRewards(),
+            loadRoundHistory(5),
+        ]);
+        // Only redraw if the player is still looking at the lobby.
+        if (fuddleState.view === 'lobby') renderFuddleLobby();
+    } catch (e) {
+        console.log('Fuddle history unavailable:', e && e.message);
+    }
 }
 
 // =========================================================================
@@ -2497,7 +2530,9 @@ function fuddleBackToLobby() {
     fuddleStopTxPolling();
     fuddleHideTxProgress();
     fuddleDetachKeyboard();
-    loadFuddleData().then(() => renderFuddleLobby());
+    // Draw as soon as the essentials are in, then fill the history in behind it.
+    loadFuddleData()
+        .then(() => { renderFuddleLobby(); loadFuddleHistoryInBackground(); });
 }
 
 function fuddleBackFromShop() {
