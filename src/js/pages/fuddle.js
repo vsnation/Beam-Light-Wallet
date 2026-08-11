@@ -1254,6 +1254,11 @@ function renderFuddleLobby() {
 
         if (t) {
             prizePool = fuddleFormatBeam(t.prize_pool);
+            // total_players counts WINNERS, not entrants: the contract only
+            // increments m_TotalPlayers when a player's score first reaches 1
+            // (contract.cpp:757). The labels on screen correctly say "Winners";
+            // the variable name here does not, which is worth knowing before
+            // reusing it somewhere that says "players".
             players = t.total_players || 0;
             round = t.round || 0;
             if (t.end_height && height) {
@@ -1622,7 +1627,12 @@ function fuddleRenderRoundCards() {
                 </div>
                 <div class="fuddle-round-meta-item">
                     <span class="val">${distText}</span>
-                    <span class="lbl">Distributed</span>
+                    <!-- The same card shows "Active" three lines up when the round
+                         has not finalised, and then called this figure
+                         "Distributed" regardless - claiming a payout had happened
+                         on a round still being played. The leaderboard beside it
+                         already gets this right. -->
+                    <span class="lbl">${r.finalized ? 'Distributed' : 'To distribute'}</span>
                 </div>
             </div>
             ${mySection}
