@@ -539,6 +539,19 @@ function mcRenderSwapSection() {
                     <span>You receive:</span>
                     <span class="mc-swap-quote-value ${teamClass}">~${mcFormatAmount(q.tokens_to_user)} ${teamName}</span>
                 </div>
+                <!-- feePct was computed at the top of this function and then used
+                     nowhere, so the trade fee - 5% of what you spend, which goes to
+                     the team treasury - was taken without ever appearing on the
+                     screen where you decide to spend. The .dapp shows it; this did
+                     not. The network fee is separate and also worth stating. -->
+                <div class="mc-swap-quote-row">
+                    <span>Trade fee (${feePct}%)</span>
+                    <span>goes to the ${teamName} treasury</span>
+                </div>
+                <div class="mc-swap-quote-row">
+                    <span>Network fee</span>
+                    <span>~0.011 BEAM</span>
+                </div>
             </div>
         `;
     }
