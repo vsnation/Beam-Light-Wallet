@@ -829,7 +829,7 @@ def start_beam_node(owner_key=None, password=None):
         return {"error": str(e)}
 
 
-def switch_to_local_node(password, wallet_name=None):
+def switch_to_local_node(password, wallet_name=None, restore_password=None):
     """Switch wallet-api to use local node with owner key (seamless)
 
     Args:
@@ -847,7 +847,13 @@ def switch_to_local_node(password, wallet_name=None):
 
     # Step 1: Export owner key (this stops wallet-api temporarily)
     print(f"[switch_to_local_node] === STEP 1: Exporting owner key ===")
-    owner_result = export_owner_key(target_wallet, password)
+    # restore_password must be a password KNOWN to work - the one the running
+    # wallet-api was started with. Reading active_password here was wrong: the
+    # handler assigns the caller's (possibly mistyped) password to it before
+    # calling this, so the "restore" used the same bad password and the wallet
+    # stayed down. It is threaded in from the handler instead.
+    owner_result = export_owner_key(target_wallet, password,
+                                    restore_password=restore_password or active_password)
     if not owner_result.get("success"):
         print(f"[switch_to_local_node] Failed to export owner key: {owner_result}")
         return owner_result
@@ -1365,8 +1371,20 @@ def set_swap_settings(wallet_name, password, coin, electrum_seed=None, auto_serv
             "note": "Connected through Electrum. Restart the wallet for it to take effect."}
 
 
-def export_owner_key(wallet_name, password):
-    """Export owner key for local node"""
+def export_owner_key(wallet_name, password, restore_password=None):
+    """Export owner key for local node.
+
+    restore_password is what to put wallet-api back with if the export fails.
+    Without it, a wrong password took down a WORKING wallet: this function stops
+    wallet-api to get exclusive access to the database, the export then fails
+    because the password is wrong, and the restart is attempted with that same
+    wrong password - so the wallet never comes back and the user is locked out
+    of a wallet that was running perfectly a moment earlier. Measured: a switch
+    with a deliberately wrong password left wallet_api_running false.
+
+    The caller knows a password that worked (the one the session is already
+    using), so it can hand it over for exactly this case.
+    """
     global wallet_api_process, active_wallet
 
     if not WALLET_CLI_BINARY.exists():
@@ -1421,9 +1439,10 @@ def export_owner_key(wallet_name, password):
             # Try to find any hex string that looks like a key
             key_match = re.search(r'([a-fA-F0-9]{64,})', output)
 
-        # Restart wallet-api if it was running
+        # Restart wallet-api if it was running. On failure use the password we
+        # know worked, not the one that just failed to open the wallet.
         if was_running:
-            start_wallet_api(wallet_name, password)
+            start_wallet_api(wallet_name, password if key_match else (restore_password or password))
 
         if key_match:
             return {"success": True, "owner_key": key_match.group(1)}
@@ -1444,9 +1463,9 @@ def export_owner_key(wallet_name, password):
                          "The terminal running serve.py has the full output."}
 
     except Exception as e:
-        # Try to restart wallet-api even on error
+        # Try to restart wallet-api even on error, with a password known to work.
         if was_running:
-            start_wallet_api(wallet_name, password)
+            start_wallet_api(wallet_name, restore_password or password)
         return {"error": redact(str(e), password)}
     finally:
         drop_secret_cfg(cfg)
@@ -2260,6 +2279,10 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         """Handle heartbeat from browser - kept for compatibility"""
         self.send_json({"status": "ok", "timestamp": time.time()})
 
+    # Stops and restarts wallet-api, exactly like the eight already under this
+    # lock. Left outside it when the server was threaded, so it could kill a
+    # wallet-api that a serialised unlock or rescan was still waiting on.
+    @serialised
     def handle_cleanup(self):
         """Kill stale wallet-api and beam-node for fresh start"""
         stop_wallet_api()
@@ -2389,9 +2412,19 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "No password available. Re-unlock wallet."}, 400)
                 return
 
-            # Store password if provided by client
-            if body.get("password"):
-                active_password = body["password"]
+            # Hold the caller's password aside; do NOT commit it yet.
+            #
+            # This used to assign active_password before anything had verified it,
+            # and the switch then stops a WORKING wallet-api to restart it with
+            # whatever was supplied. A typo in the password prompt therefore took
+            # down a wallet that was running fine, and the bad value stayed
+            # cached for every later operation. Committed below only if the
+            # switch actually succeeded; otherwise the previous value is put
+            # back, so a mistyped password costs nothing.
+            previous_password = active_password
+            supplied = body.get("password")
+            if supplied:
+                active_password = supplied
 
             if mode == "local" and is_node_running():
                 # Fast path: local node already running, just restart wallet-api.
@@ -2402,10 +2435,16 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 result = fast_switch_node("public", node_addr)
             else:
                 # Fallback: full switch (start node from scratch)
-                result = switch_to_local_node(password, wallet_name)
+                result = switch_to_local_node(password, wallet_name,
+                                              restore_password=previous_password)
+
+            if supplied and not result.get("success"):
+                active_password = previous_password
 
             self.send_json(result, 200 if result.get("success") else 400)
         except Exception as e:
+            if body.get("password"):
+                active_password = previous_password
             self.send_json({"error": str(e)}, 500)
 
     def handle_list_wallets(self):
@@ -2432,13 +2471,28 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "Missing password"}, 400)
                 return
 
-            # If node_mode is local and no explicit node_addr, use switch_to_local_node
-            # which properly exports owner key and starts node with it
+            # Local mode: unlock against the PUBLIC node, then bring the local
+            # one up behind it.
+            #
+            # This used to call switch_to_local_node and return whatever it said.
+            # That worked while switch_to_local_node started wallet-api itself -
+            # but it no longer does: it deliberately leaves the wallet on the
+            # public node and returns {success, pending} so the handover can
+            # happen once the local node has actually synced. The caller was not
+            # updated, so unlocking a wallet in local mode started NO wallet-api
+            # at all and still reported success. The wallet simply did not open.
             if node_mode == "local" and not node_addr:
-                print(f"[handle_unlock] Local mode detected, using switch_to_local_node...")
-                result = switch_to_local_node(password, wallet_name)
+                print("[handle_unlock] local mode: unlocking on the public node first")
+                result = start_wallet_api(wallet_name, password, DEFAULT_NODE)
                 if result.get("success"):
                     active_password = password
+                    # Now start the local node in the background. If it fails the
+                    # wallet is still open and usable, which is the point.
+                    try:
+                        sw = switch_to_local_node(password, wallet_name)
+                        result["local_node"] = "starting" if sw.get("success") else sw.get("error")
+                    except Exception as e:
+                        result["local_node"] = str(e)
                 status = 401 if "password" in result.get("error", "").lower() else (200 if "success" in result else 500)
                 self.send_json(result, status)
                 return
@@ -2699,6 +2753,10 @@ class WalletProxyHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)}, 500)
 
+    # Stops and restarts wallet-api, exactly like the eight already under this
+    # lock. Left outside it when the server was threaded, so it could kill a
+    # wallet-api that a serialised unlock or rescan was still waiting on.
+    @serialised
     def handle_export_owner_key(self):
         try:
             global active_password, active_owner_key

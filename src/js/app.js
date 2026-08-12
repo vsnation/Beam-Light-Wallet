@@ -4100,6 +4100,23 @@ async function switchNodeWithoutPassword(nodeAddr, mode) {
 
         const result = await response.json();
 
+        // A pending switch is NOT a completed one. The server answers
+        // {success:true, pending:true} when it has started the local node but
+        // deliberately left the wallet on the public one until that node has
+        // synced. performNodeChange was taught this; this path was not, so it
+        // took the success branch, set currentNodeType to 'local' and told the
+        // user they were on their own node while every call still went to
+        // eu-node01. Worse, startNodeSyncChecker only performs the real handover
+        // while currentNodeType !== 'local', so claiming it early stopped the
+        // handover from ever happening: the node synced forever with nothing
+        // waiting to adopt it.
+        if (result.success && result.pending) {
+            showToastAdvanced('Local node started',
+                'It is syncing now. Your wallet keeps using the public node and moves '
+                + 'across on its own once the local one is ready.', 'success');
+            startNodeSyncChecker();
+            return false;
+        }
         if (result.success) {
             currentNode = nodeAddr;
             currentNodeType = mode;
@@ -10334,7 +10351,12 @@ function setQuickAmount(amount) {
         if (asset && asset.balance > 0) {
             // Leave small amount for fees if BEAM
             const maxAmount = dexFromAsset.aid === 0
-                ? Math.max(0, asset.balance - 100000) // Leave 0.001 BEAM for fees
+                // A swap is a CONTRACT call, and those cost 0.011 BEAM here, not
+                // the 0.001 of a plain transfer. Reserving the transfer fee meant
+                // MAX filled in an amount the balance check then rejected - so
+                // pressing MAX and then Swap always failed, which is the most
+                // natural pair of clicks on the screen.
+                ? Math.max(0, asset.balance - CONTRACT_CALL_FEE_GROTH)
                 : asset.balance;
             document.getElementById('dex-from-amount').value = formatAmount(maxAmount);
         }

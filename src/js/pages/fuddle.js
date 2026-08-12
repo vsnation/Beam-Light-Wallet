@@ -2683,7 +2683,13 @@ async function fuddleClaimTournamentReward(cTier, round) {
         }
         // Poll the specific round, not just current
         const myData = isPastRound
-            ? await loadMyTournament(cTier, round)
+            // forceRefresh: this is a CONFIRMATION poll, and the per-round cache
+            // added to speed up the lobby would otherwise hand back the value
+            // read before the claim - claimed:false, fifteen times in a row. The
+            // claim then reported a false "confirming", the reward stayed in the
+            // unclaimed list, and pressing Claim again spent another 0.121 BEAM
+            // on a claim the contract had already accepted and would now reject.
+            ? await loadMyTournament(cTier, round, true)
             : (await loadAllMyTournaments(), fuddleState.myTournaments[cTier]);
         if (myData?.claimed) {
             claimed = true;
@@ -2914,6 +2920,26 @@ async function fuddleSubmitGuess() {
     const diff = fuddleState.currentDifficulty;
     const guess = fuddleState.currentGuess;
 
+    // The expiry check belongs HERE, not only on the button.
+    //
+    // It was added to canSubmit, which disables the Submit button - but the
+    // on-screen ENTER key and the physical Enter key both call this function
+    // directly, and those are how people actually play. So the guard was
+    // bypassed by the normal path, and a guess against a game that can no longer
+    // be won still cost 0.181 BEAM. A guard on a button is always bypassable.
+    {
+        const g = (fuddleState.allGames || []).find(x => x.id === fuddleState.currentGameId);
+        const h = fuddleState.currentHeight;
+        if (g && g.expires_at && h && g.expires_at <= h) {
+            showFuddleToast({
+                title: 'This game has ended',
+                message: 'Its 24 hours are up, so a guess can no longer win it.',
+                hint: 'Start a new game from the lobby - this one cannot be played further.',
+            }, 'error');
+            return;
+        }
+    }
+
     if (guess.length !== diff) {
         showFuddleToast(`Enter ${diff} letters`, 'error');
         return;
@@ -2952,7 +2978,10 @@ async function fuddleSubmitGuess() {
         fuddleState.isConfirming = false;
         fuddleState.confirmStartTime = null;
         fuddleStopConfirmTimer();
-        showFuddleToast('Guess failed: ' + result.error, 'error');
+        // The one site fuddleErrorText missed when the other fourteen were
+        // converted - and it is the failure every player actually meets, so a
+        // rejected guess said "Guess failed: [object Object]".
+        showFuddleToast('Guess failed: ' + fuddleErrorText(result.error), 'error');
         renderFuddleGame();
         return;
     }
