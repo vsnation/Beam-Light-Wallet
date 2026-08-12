@@ -72,3 +72,42 @@
 .ob-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .ob-foot { text-align: center; color: var(--text-muted); font-size: var(--text-xs);
            margin-top: var(--space-4); line-height: 1.6; }
+
+/* The Electrum seed, which is shown once and controls real coins on another
+   chain. It stays on screen until the user confirms they have written it down —
+   see onboardConnect(), where it used to be painted and destroyed in the same
+   synchronous block. */
+.ob-seed code {
+    display: block;
+    margin: 12px 0;
+    padding: 14px 16px;
+    background: var(--void);
+    border: 1px solid var(--warning);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 15px;
+    line-height: 1.7;
+    word-spacing: 4px;
+    user-select: all;
+}
+
+.ob-seed-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.ob-seed-ack {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.ob-seed-ack input { width: 17px; height: 17px; accent-color: var(--beam-cyan); }
+
+#ob-seed-continue:disabled { opacity: 0.45; cursor: not-allowed; }

@@ -697,10 +697,19 @@ function sanitizeNumericInput(input) {
     const el = typeof input === 'string' ? document.getElementById(input) : input;
     if (!el) return;
 
-    // Replace comma with dot for decimal separator
-    const value = el.value.replace(/,/g, '.');
-    // Remove any non-numeric characters except dot
-    const sanitized = value.replace(/[^\d.]/g, '');
+    // Commas are NOT silently converted to dots.
+    //
+    // This used to do exactly that, and it is a 1000x guess: "1,000" is one
+    // thousand to an American and one-point-nought to a German. Rewriting it to
+    // "1.000" quietly sent one BEAM to someone who meant a thousand - and it
+    // also meant parseUserAmount's deliberate refusal to guess could never fire,
+    // because the comma was gone before the parser ever saw it.
+    //
+    // The comma is left in the field. Submitting is where it gets refused, with
+    // a message naming the problem: type it as a plain number, like 1000.5.
+    const value = el.value;
+    // Strip what cannot be part of any decimal at all - letters, spaces, symbols.
+    const sanitized = value.replace(/[^\d.,]/g, '');
     // Ensure only one decimal point
     const parts = sanitized.split('.');
     if (parts.length > 2) {
@@ -12319,7 +12328,12 @@ async function createToken() {
         // Call Minter contract - metadata must be quoted to preserve semicolons
         const createResult = await apiCall('invoke_contract', {
             args: `action=create_token,cid=${MINTER_CID},metadata="${metadata}",limit=${limit}`,
-            createTx: true
+            // create_tx, not createTx. wallet-api reads the snake_case name and
+            // silently ignores the other, defaulting to false - so this returned
+            // invoke data and never built a transaction, while the screen said it
+            // had. The dApp bridge in this same file (see the params?.createTx
+            // translation) has always known the distinction.
+            create_tx: true
         });
 
         if (createResult.error) {
@@ -12593,7 +12607,7 @@ async function executeMintToken() {
         // Call Minter contract withdraw action (role=manager required, use "value" not "amount")
         const mintResult = await apiCall('invoke_contract', {
             args: `role=manager,action=withdraw,cid=${MINTER_CID},aid=${currentMintAsset.aid},value=${amountSmall}`,
-            createTx: true
+            create_tx: true
         });
 
         if (mintResult.error) {
@@ -12730,7 +12744,7 @@ async function executeBurnToken() {
         // Use BlackHole contract deposit to permanently lock tokens
         const burnResult = await apiCall('invoke_contract', {
             args: `role=manager,action=deposit,cid=${BLACKHOLE_CID},aid=${currentBurnAsset.aid},amount=${amountSmall}`,
-            createTx: true
+            create_tx: true
         });
 
         if (burnResult.error) {
@@ -12738,9 +12752,13 @@ async function executeBurnToken() {
         }
 
         // Check for raw_data that needs processing
-        if (burnResult.result?.raw_data) {
+        // apiCall returns data.result already unwrapped, so burnResult.result was
+        // always undefined and this branch never ran - the burn was reported as
+        // "permanently locked in BlackHole" with nothing submitted. The two
+        // sibling paths above read burnResult.raw_data correctly.
+        if (burnResult.raw_data) {
             const processResult = await apiCall('process_invoke_data', {
-                data: burnResult.result.raw_data
+                data: burnResult.raw_data
             });
             if (processResult.error) {
                 throw new Error(processResult.error.message || 'Transaction confirmation failed');

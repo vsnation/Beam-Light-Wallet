@@ -231,16 +231,46 @@ async function onboardConnect() {
         }
 
         onboardConnected = true;
+
+        // Do NOT advance while a seed is on screen.
+        //
+        // This wrote the seed into `out` and then called onboardGo(4) on the very
+        // next line, which re-renders the whole step and wipes it. The seed was
+        // painted and destroyed inside the same synchronous block, so it existed
+        // for zero frames - and it is the key to a real Bitcoin or Litecoin
+        // wallet, shown once, which serve.py's own comment calls the user's only
+        // chance to record it. Losing it loses their coins.
+        //
+        // The step now stays put until they say they have written it down, the
+        // same way the BEAM seed phrase is handled on the create-wallet screen.
+        if (r.electrum_seed) {
+            out.innerHTML = `
+                <div class="ob-connected">
+                    <strong>${escapeHtml(c.symbol)} connected.</strong>
+                    <div class="ob-seed">
+                        <p><strong>Write this down before you go any further.</strong>
+                           It is the seed for the ${escapeHtml(c.name)} wallet just created
+                           for you, it controls real ${escapeHtml(c.symbol)}, and it is shown
+                           once. Nobody can recover it for you &mdash; not us, not anyone.</p>
+                        <code id="ob-seed-value">${escapeHtml(r.electrum_seed)}</code>
+                        <div class="ob-seed-actions">
+                            <button class="quick-btn" onclick="onboardCopySeed()">Copy</button>
+                            <label class="ob-seed-ack">
+                                <input type="checkbox" id="ob-seed-ack"
+                                       onchange="document.getElementById('ob-seed-continue').disabled = !this.checked">
+                                I have written it down
+                            </label>
+                            <button class="quick-btn quick-btn-primary" id="ob-seed-continue" disabled
+                                    onclick="onboardGo(4)">Continue</button>
+                        </div>
+                    </div>
+                </div>`;
+            return;
+        }
+
         out.innerHTML = `
             <div class="ob-connected">
                 <strong>${escapeHtml(c.symbol)} connected.</strong>
-                ${r.electrum_seed ? `
-                <div class="ob-seed">
-                    <p>This is the seed for the ${escapeHtml(c.name)} wallet that was just
-                       created for you. It controls real ${escapeHtml(c.symbol)}. Write it
-                       down now — it is shown once and cannot be recovered.</p>
-                    <code>${escapeHtml(r.electrum_seed)}</code>
-                </div>` : ''}
             </div>`;
         onboardGo(4);
     } catch (e) {
@@ -248,6 +278,20 @@ async function onboardConnect() {
     } finally {
         btn.disabled = false; btn.textContent = `Connect ${c.symbol}`;
     }
+}
+
+/** Copy the Electrum seed, and say plainly if the browser refuses. */
+function onboardCopySeed() {
+    const el = document.getElementById('ob-seed-value');
+    if (!el) return;
+    const text = el.textContent.trim();
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        showToast('Copying is unavailable here — write the words down instead', 'error');
+        return;
+    }
+    navigator.clipboard.writeText(text)
+        .then(() => showToast('Seed copied. Store it somewhere only you can reach.', 'success'))
+        .catch(() => showToast('Could not copy — write the words down instead', 'error'));
 }
 
 function initOnboardPage() {
