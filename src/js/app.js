@@ -2085,7 +2085,8 @@ async function executeQuickTrade() {
         // Check for success - either txid (direct creation) or raw_data (needs processing)
         if (result?.txid) {
             // Transaction created directly
-            showToastAdvanced('Swap Successful!', `${qtFromAsset.symbol} → ${qtToAsset.symbol}`, 'success');
+            showMoneyToast('Swap complete', `${qtFromAsset.symbol} → ${qtToAsset.symbol}`,
+                       'The new balance appears once the network confirms it.');
             closeModal('quick-trade-modal');
             await loadWalletData();
             renderAssetCards();
@@ -2093,7 +2094,8 @@ async function executeQuickTrade() {
         } else if (result?.raw_data) {
             // Need to process raw_data to create transaction
             await apiCall('process_invoke_data', { data: result.raw_data });
-            showToastAdvanced('Swap Successful!', `${qtFromAsset.symbol} → ${qtToAsset.symbol}`, 'success');
+            showMoneyToast('Swap complete', `${qtFromAsset.symbol} → ${qtToAsset.symbol}`,
+                       'The new balance appears once the network confirms it.');
             closeModal('quick-trade-modal');
             await loadWalletData();
             renderAssetCards();
@@ -2222,7 +2224,8 @@ async function executeQuickWithdrawLP() {
         }
 
         if (isSuccess) {
-            showToastAdvanced('Liquidity Withdrawn!', `${percent}% from ${qwLpAsset.name}`, 'success');
+            showMoneyToast('Liquidity withdrawn', `${percent}% from ${qwLpAsset.name}`,
+                       'The tokens return to your balance once the network confirms.');
             closeModal('quick-withdraw-lp-modal');
             await loadWalletData();
             renderAssetCards();
@@ -4796,6 +4799,20 @@ function copyOwnerKey() {
 // Kept for its many callers. It used to be a second, divergent toast renderer
 // that interpolated subtitles straight into innerHTML and expired errors after
 // 3.5s; it is now just the two-line call shape of showToast.
+/**
+ * A confirmation for something that moved money.
+ *
+ * The ordinary success toast auto-dismisses in 3.2 seconds. That is right for
+ * "Copied to clipboard" and wrong for "your funds have left" - look away for a
+ * moment, or have the broadcast take a beat, and the only evidence the thing
+ * happened is gone. For a transfer that reads as failure, and the natural
+ * response to apparent failure is to do it again. Errors already persist until
+ * dismissed; so should these. Every one carries a close button.
+ */
+function showMoneyToast(title, message, hint) {
+    return showToast({ title, message, hint }, 'success', { duration: 0 });
+}
+
 function showToastAdvanced(title, subtitle, type = 'info') {
     return showToast({ title: title, message: subtitle }, type);
 }
@@ -6883,11 +6900,18 @@ async function executeSend() {
             offline: true
         });
 
-        showToastAdvanced(
-            'Transaction Sent!',
-            `${amount} ${assetInfo.symbol} sent successfully`,
-            'success'
-        );
+        // Sending money is the most consequential thing this wallet does, and its
+        // only acknowledgement used to be a toast that auto-dismissed in 3.5
+        // seconds. Look away, or have the broadcast take a moment, and you are
+        // left with no evidence it happened at all - which for a transfer reads
+        // as failure and invites sending a second time. Errors already persist
+        // until dismissed; a completed transfer deserves at least as long, and a
+        // way to go and look at it.
+        showToast({
+            title: 'Sent',
+            message: `${amount} ${assetInfo.symbol} is on its way.`,
+            hint: 'It will show as In Progress until the network confirms it, usually about a minute.',
+        }, 'success', { duration: 0 });
 
         // Reset form
         document.getElementById('send-address').value = '';
@@ -9085,7 +9109,8 @@ async function executeAddLiquidityFromPoolModal() {
         }
 
         if (isSuccess) {
-            showToastAdvanced('Liquidity Added!', `TX: ${(txid || 'pending').slice(0, 16)}...`, 'success');
+            showMoneyToast('Liquidity added', 'Your funds are now in the pool.',
+                       'It appears in Transactions once the network confirms it.');
             setTimeout(loadDexPools, 2000);
             await loadWalletData();
             renderAssetCards();
@@ -9244,7 +9269,8 @@ async function executeRemoveLiquidity() {
         }
 
         if (isSuccess) {
-            showToastAdvanced('Liquidity Removed!', `TX: ${(txid || 'pending').slice(0, 16)}...`, 'success');
+            showMoneyToast('Liquidity removed', 'Your funds are on their way back.',
+                       'It appears in Transactions once the network confirms it.');
             setTimeout(loadDexPools, 2000);
             await loadWalletData();
             renderAssetCards();
@@ -10084,7 +10110,8 @@ async function createPool() {
             await apiCall('process_invoke_data', { data: liqResult.raw_data });
         }
 
-        showToastAdvanced('Pool Created!', `${a1.symbol}/${a2.symbol} pool is now live`, 'success');
+        showMoneyToast('Pool created', `${a1.symbol}/${a2.symbol} is now live.`,
+                       'Your initial liquidity is in it.');
         closeModal('create-pool-modal');
 
         // Reload pools
