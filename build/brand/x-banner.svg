@@ -1,0 +1,148 @@
+<!--
+  BEAM Light Wallet — X / header banner (1500×500)
+
+  LAYOUT CONSTRAINTS, which drive everything here:
+
+  - X crops this differently everywhere. On mobile the left and right edges are
+    cut; only the centre ~60% is guaranteed. On desktop the profile picture sits
+    over the BOTTOM-LEFT, roughly a 200px disc centred near x=200, y=500. So
+    nothing that matters goes below y≈340 in the left 430px, and the message
+    lives between x≈430 and x≈1240.
+
+  - Read at a glance while scrolling. One idea, one line, one proof.
+
+  THE IMAGE. A beam of light enters from the left, strikes the prism, and leaves
+  as separated colour. That is the product's name and its promise in one figure:
+  what arrives as a single traceable thing leaves as something you cannot follow
+  back. It also means the illustration is the mark doing something, rather than
+  a mark parked next to text.
+
+  First draft got three things wrong and they are worth stating: the composition
+  sat high with a dead band along the bottom, the prism read as a flat triangle
+  because its walls were too thick to show the hollow, and the refraction was so
+  faint the entire metaphor was invisible. All three are corrected below.
+
+  COPY, per the brand rules:
+
+  - The headline states the reader's PAIN, not the technology. "Fully
+    decentralised desktop wallet with local binaries" says nothing to a person;
+    "Your balance is nobody's business" names what they already feel.
+  - Loss framing for the hook, not gain framing.
+  - The sub-line answers "how", once, in plain words.
+  - The proof strip uses checkable specifics rather than adjectives, because a
+    crypto reader's default assumption is that this is a scam. "No accounts, no
+    custody, open source" can be verified; "secure and fast" cannot.
+  - No coins, no rockets, no stock 3D.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 500" width="1500" height="500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#071018"/>
+      <stop offset="48%"  stop-color="#0b1a2a"/>
+      <stop offset="100%" stop-color="#050a0f"/>
+    </linearGradient>
+
+    <!-- Single white-ish ray arriving from the left -->
+    <linearGradient id="rayIn" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#7ef7dc" stop-opacity="0"/>
+      <stop offset="60%"  stop-color="#bafce9" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#eafffa" stop-opacity="0.95"/>
+    </linearGradient>
+
+    <!-- Separated light leaving to the right. Three bands, brand-side of the
+         spectrum so it stays on-palette rather than turning into a rainbow. -->
+    <linearGradient id="fanA" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#bafce9" stop-opacity="0.85"/>
+      <stop offset="55%"  stop-color="#7ef7dc" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#7ef7dc" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fanB" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#4fe3c1" stop-opacity="0.75"/>
+      <stop offset="55%"  stop-color="#25c2a0" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#25c2a0" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fanC" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#00d4ff" stop-opacity="0.60"/>
+      <stop offset="55%"  stop-color="#00a8cc" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#00a8cc" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="faceL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#6cf0d2"/>
+      <stop offset="100%" stop-color="#25c2a0"/>
+    </linearGradient>
+    <linearGradient id="faceR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1f9b81"/>
+      <stop offset="100%" stop-color="#0e5749"/>
+    </linearGradient>
+
+    <filter id="fanBlur" x="-30%" y="-60%" width="160%" height="220%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <filter id="markGlow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1500" height="500" fill="url(#bg)"/>
+
+  <!-- Faint structure, fading out before it competes with the words -->
+  <g stroke="#25c2a0" stroke-opacity="0.045" stroke-width="1">
+    <path d="M0 130h620M0 260h620M0 390h620"/>
+    <path d="M130 0v500M260 0v500M390 0v500"/>
+  </g>
+
+  <!-- Refraction: three bands leaving the prism's right face and opening out.
+       Drawn before the text so the words stay the brightest thing here. -->
+  <g filter="url(#fanBlur)">
+    <!-- Origin is the RIGHT face at the ray's height (x=438.6, computed from the
+         triangle, not eyeballed). Starting these at the apex x put the fan
+         inside the glass, so the light appeared to come from nowhere. -->
+    <polygon points="439,254 1460,150 1460,196" fill="url(#fanA)"/>
+    <polygon points="439,262 1460,254 1460,304" fill="url(#fanB)"/>
+    <polygon points="439,270 1460,376 1460,430" fill="url(#fanC)"/>
+  </g>
+
+  <!-- Incoming ray, aimed at the prism's centre of mass -->
+  <!-- Ends at the LEFT face (x=309.4), not short of it. The first version
+       stopped 59px early, so the beam floated in space beside the prism. -->
+  <polygon points="0,250 309,256 309,268 0,274" fill="url(#rayIn)"/>
+  <circle cx="309" cy="262" r="30" fill="#bafce9" opacity="0.18" filter="url(#fanBlur)"/>
+
+  <!-- The prism. Thin walls so the hollow reads at a glance; sits clear of the
+       avatar overlap. -->
+  <g filter="url(#markGlow)" transform="translate(246,150)">
+    <polygon points="128,0 256,222 0,222" fill="url(#faceL)"/>
+    <polygon points="128,0 256,222 128,222" fill="url(#faceR)"/>
+    <!-- Hollow core, generous: this is the silhouette people remember -->
+    <polygon points="128,54 212,199 44,199" fill="#081320"/>
+    <polygon points="128,54 212,199 128,199" fill="#0a1728"/>
+  </g>
+
+  <!-- ===== Message: inside the mobile-safe band, optically centred ===== -->
+  <g font-family="Outfit, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+
+    <text x="560" y="212" font-size="64" font-weight="700" fill="#f4f9fc" letter-spacing="-1.4">
+      Your balance is
+    </text>
+    <text x="560" y="286" font-size="64" font-weight="700" fill="#5ce9c6" letter-spacing="-1.4">
+      nobody&#8217;s business.
+    </text>
+
+    <text x="562" y="340" font-size="25" font-weight="400" fill="#a3b7c8" letter-spacing="0.1">
+      A BEAM wallet that runs on your machine. Your keys never leave it.
+    </text>
+
+    <g transform="translate(562,382)">
+      <rect x="-2" y="0" width="210" height="40" rx="20" fill="#25c2a0" fill-opacity="0.11" stroke="#25c2a0" stroke-opacity="0.34"/>
+      <text x="22" y="26" font-size="17" font-weight="600" fill="#7ef7dc" letter-spacing="0.2">No accounts</text>
+
+      <rect x="224" y="0" width="196" height="40" rx="20" fill="#25c2a0" fill-opacity="0.11" stroke="#25c2a0" stroke-opacity="0.34"/>
+      <text x="248" y="26" font-size="17" font-weight="600" fill="#7ef7dc" letter-spacing="0.2">No custody</text>
+
+      <rect x="434" y="0" width="204" height="40" rx="20" fill="#25c2a0" fill-opacity="0.11" stroke="#25c2a0" stroke-opacity="0.34"/>
+      <text x="458" y="26" font-size="17" font-weight="600" fill="#7ef7dc" letter-spacing="0.2">Open source</text>
+    </g>
+  </g>
+</svg>

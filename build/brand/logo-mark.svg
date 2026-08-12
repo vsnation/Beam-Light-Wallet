@@ -1,0 +1,28 @@
+<!--
+  BEAM Light Wallet — the mark alone (256×256, transparent)
+
+  Use this when there is already a container: a README badge, a docs sidebar, a
+  slide corner. For a circular avatar use x-avatar.svg, which carries its own
+  disc. For an app icon use build/macos/icon/, which carries Apple's rounded
+  square and margin ratios.
+
+  Do not add words to this file. At the sizes it gets used, they become mud -
+  which is the mistake the original app icon made, packing seven elements and a
+  28px Arial caption into one square.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="mkL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#6cf0d2"/>
+      <stop offset="100%" stop-color="#25c2a0"/>
+    </linearGradient>
+    <linearGradient id="mkR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1f9b81"/>
+      <stop offset="100%" stop-color="#0e5749"/>
+    </linearGradient>
+  </defs>
+  <polygon points="128,20 236,216 20,216" fill="url(#mkL)"/>
+  <polygon points="128,20 236,216 128,216" fill="url(#mkR)"/>
+  <polygon points="128,82 192,199 64,199" fill="#081320"/>
+  <polygon points="128,82 192,199 128,199" fill="#0a1728"/>
+</svg>

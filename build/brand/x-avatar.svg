@@ -1,0 +1,59 @@
+<!--
+  BEAM Light Wallet — X / social avatar (400×400)
+
+  The same prism as the app icon, not a second mark. A profile picture is
+  rendered as a CIRCLE everywhere it appears, and at 48px in a timeline it is
+  smaller than the Dock icon — so the frame is a disc and the mark is scaled to
+  fill it. No words: at 48px any wordmark is unreadable mud, which is exactly the
+  mistake the old app icon made.
+
+  The first version put a beam entering the apex, on the theory that the light is
+  what makes the mark mean "Beam". Rendered at 48, 64, 128 and 200px it read as
+  an ANTENNA — at 48px a stray needle that looks like a rendering artefact, not
+  light. Removed. The app icon has no external beam either and is right not to;
+  the beam belongs on the banner, where there is room for it to be a beam.
+
+  What survives to 48px, and is therefore what the mark actually is: a hollow
+  triangle with one lit face. The hollow is the whole silhouette — fill it in and
+  this becomes an anonymous delta.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="disc" cx="50%" cy="34%" r="80%">
+      <stop offset="0%"   stop-color="#16293f"/>
+      <stop offset="58%"  stop-color="#0a1420"/>
+      <stop offset="100%" stop-color="#050a0f"/>
+    </radialGradient>
+
+    <linearGradient id="faceL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#6cf0d2"/>
+      <stop offset="100%" stop-color="#25c2a0"/>
+    </linearGradient>
+
+    <linearGradient id="faceR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1f9b81"/>
+      <stop offset="100%" stop-color="#0e5749"/>
+    </linearGradient>
+
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <circle cx="200" cy="200" r="200" fill="url(#disc)"/>
+  <circle cx="200" cy="200" r="198" fill="none" stroke="#25c2a0" stroke-opacity="0.22" stroke-width="4"/>
+
+  <!-- Larger than the first draft: at 48px the mark has to own the disc, not
+       float in the middle of it. Apex and base sit on the optical centre. -->
+  <g filter="url(#glow)">
+    <polygon points="200,72 336,320 64,320" fill="url(#faceL)"/>
+    <polygon points="200,72 336,320 200,320" fill="url(#faceR)"/>
+    <!-- Hollow core: the thing that still reads at 48px -->
+    <polygon points="200,150 281,299 119,299" fill="#081320"/>
+    <polygon points="200,150 281,299 200,299" fill="#0a1728"/>
+  </g>
+</svg>

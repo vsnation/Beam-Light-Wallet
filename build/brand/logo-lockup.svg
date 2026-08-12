@@ -1,0 +1,41 @@
+<!--
+  BEAM Light Wallet — horizontal lockup (470×160)
+
+  For a README header, a docs masthead, an og:image, a slide. Transparent
+  background so it drops onto either theme.
+
+  The mark is the same prism, at the size where its hollow still reads. The
+  wordmark is set in two weights rather than two colours: "Light Wallet" is the
+  product, "BEAM" is the chain it belongs to, and making that relationship
+  visible is the job of the type, not of a second colour.
+
+  Clear space: keep at least the height of the mark's base (56px here) free on
+  every side. Below about 240px wide, drop the words and use the mark alone —
+  see x-avatar.svg, which is the same mark sized for a circle.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 160" width="470" height="160">
+  <defs>
+    <linearGradient id="lkFaceL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#6cf0d2"/>
+      <stop offset="100%" stop-color="#25c2a0"/>
+    </linearGradient>
+    <linearGradient id="lkFaceR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1f9b81"/>
+      <stop offset="100%" stop-color="#0e5749"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Mark -->
+  <g transform="translate(24,26)">
+    <polygon points="56,0 112,108 0,108" fill="url(#lkFaceL)"/>
+    <polygon points="56,0 112,108 56,108" fill="url(#lkFaceR)"/>
+    <polygon points="56,34 91,100 21,100" fill="#081320"/>
+    <polygon points="56,34 91,100 56,100" fill="#0a1728"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g font-family="Outfit, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <text x="172" y="78" font-size="44" font-weight="700" fill="#f4f9fc" letter-spacing="-0.8">Light Wallet</text>
+    <text x="174" y="112" font-size="19" font-weight="500" fill="#5ce9c6" letter-spacing="3.4">FOR BEAM</text>
+  </g>
+</svg>
